@@ -1,0 +1,786 @@
+query,label
+Tạo cho tôi 10 câu hỏi về lịch sử Việt Nam,0
+Sinh câu hỏi trắc nghiệm môn toán lớp 9,0
+Cho tôi vài câu hỏi về khoa học,0
+Làm câu hỏi kiểm tra kiến thức tiếng Anh,0
+Tạo câu hỏi phỏng vấn cho vị trí lập trình viên,0
+Sinh 5 câu hỏi về văn học Việt Nam,0
+Đưa ra câu hỏi về địa lý thế giới,0
+Tạo câu hỏi thi thử THPT quốc gia môn hóa,0
+Cho tôi câu hỏi về kinh tế vĩ mô,0
+Sinh câu hỏi ôn tập môn sinh học,0
+Đánh giá câu trả lời của học sinh,1
+Kiểm tra câu trả lời này có đúng không,1
+Chấm điểm câu trả lời,1
+Xem câu trả lời này được bao nhiêu điểm,1
+Đánh giá độ chính xác của câu trả lời,1
+Kiểm tra xem em trả lời đúng chưa,1
+Chấm bài làm của học sinh,1
+Review câu trả lời này giúp tôi,1
+Câu trả lời này có chính xác không,1
+Đánh giá mức độ hoàn thiện của câu trả lời,1
+Hôm nay thời tiết thế nào,2
+Đặt báo thức 7 giờ sáng,2
+Tìm kiếm nhà hàng gần đây,2
+Dịch câu này sang tiếng Anh,2
+Tóm tắt văn bản này,2
+Giải thích khái niệm này cho tôi,2
+Kể cho tôi nghe một câu chuyện,2
+Gợi ý món ăn cho bữa tối,2
+Tính toán kết quả của phép tính này,2
+Viết một bài văn về mùa xuân,2
+Hãy tạo câu hỏi về chiến tranh thế giới thứ 2,0
+Cho tôi một số câu hỏi liên quan đến marketing,0
+Sinh câu hỏi kiểm tra về lập trình Python,0
+Tạo câu hỏi trắc nghiệm môn vật lý,0
+Đưa ra câu hỏi phỏng vấn cho vị trí marketing,0
+Làm câu hỏi về âm nhạc cổ điển,0
+Tạo 3 câu hỏi về môi trường,0
+Sinh câu hỏi thi cuối kỳ môn triết học,0
+Cho tôi câu hỏi về nghệ thuật đương đại,0
+Tạo câu hỏi ôn thi đại học môn lý,0
+Xem câu trả lời của em đúng không,1
+Đánh giá bài làm này,1
+Kiểm tra độ chính xác,1
+Chấm câu trả lời giúp tôi,1
+Review câu trả lời xem được mấy điểm,1
+Đánh giá xem trả lời có logic không,1
+Kiểm tra câu trả lời có phù hợp không,1
+Chấm bài kiểm tra này,1
+Xem câu trả lời này có hay không,1
+Đánh giá chất lượng câu trả lời,1
+Bật đèn phòng khách,2
+Tìm kiếm video về du lịch,2
+Đặt lịch hẹn ngày mai,2
+Gửi tin nhắn cho mẹ,2
+Phát nhạc Sơn Tùng MTP,2
+Tìm đường đến sân bay,2
+Tra cứu giá vàng hôm nay,2
+Kiểm tra số dư tài khoản,2
+Đặt vé máy bay đi Đà Nẵng,2
+Tìm công thức nấu phở,2
+Hãy tạo cho tôi các câu hỏi về công nghệ blockchain,0
+Sinh câu hỏi kiểm tra về kỹ năng giao tiếp,0
+Cho tôi câu hỏi về quản trị doanh nghiệp,0
+Tạo câu hỏi trắc nghiệm môn địa lý,0
+Đưa ra câu hỏi về tâm lý học,0
+Làm câu hỏi kiểm tra tiếng Nhật,0
+Tạo câu hỏi về an ninh mạng,0
+Sinh câu hỏi thi giữa kỳ môn kinh tế,0
+Cho tôi câu hỏi về thể thao,0
+Tạo câu hỏi ôn tập về hóa hữu cơ,0
+Kiểm tra xem câu trả lời này có sai sót gì không,1
+Đánh giá câu trả lời về mặt nội dung,1
+Chấm điểm bài làm này giúp tôi,1
+Xem câu trả lời có đầy đủ không,1
+Review độ chính xác của câu trả lời,1
+Đánh giá xem trả lời có đúng trọng tâm không,1
+Kiểm tra câu trả lời có thiếu sót gì không,1
+Chấm bài tập về nhà này,1
+Xem câu trả lời này có logic không,1
+Đánh giá mức độ chi tiết của câu trả lời,1
+Mở ứng dụng Facebook,2
+Tìm kiếm khách sạn ở Hà Nội,2
+Đặt báo thức 6h30,2
+Gọi điện cho bố,2
+Phát podcast về khởi nghiệp,2
+Chỉ đường đến bệnh viện,2
+Tra cứu tỷ giá USD,2
+Kiểm tra email mới,2
+Đặt bàn nhà hàng 4 người,2
+Tìm công thức làm bánh,2
+Tạo ra câu hỏi về trí tuệ nhân tạo,0
+Sinh câu hỏi kiểm tra môn lịch sử thế giới,0
+Cho tôi câu hỏi về kiến trúc,0
+Tạo câu hỏi trắc nghiệm tiếng Trung,0
+Đưa ra câu hỏi về y học,0
+Làm câu hỏi về nhiếp ảnh,0
+Tạo câu hỏi về luật pháp Việt Nam,0
+Sinh câu hỏi thi Olympic toán,0
+Cho tôi câu hỏi về thiên văn học,0
+Tạo câu hỏi ôn tập môn sinh học 12,0
+Đánh giá câu trả lời có chuyên nghiệp không,1
+Kiểm tra câu trả lời có đạt yêu cầu không,1
+Chấm điểm và nhận xét bài làm,1
+Xem câu trả lời này được bao nhiêu phần trăm,1
+Review câu trả lời về mặt hình thức,1
+Đánh giá xem câu trả lời có sáng tạo không,1
+Kiểm tra câu trả lời có dễ hiểu không,1
+Chấm bài kiểm tra 15 phút,1
+Xem câu trả lời này có ấn tượng không,1
+Đánh giá tính thuyết phục của câu trả lời,1
+Tắt điều hòa,2
+Tìm phim hay trên Netflix,2
+Đặt hẹn gặp bác sĩ,2
+Nhắn tin cho anh,2
+Phát radio VOV,2
+Dẫn đường về nhà,2
+Tra giá Bitcoin,2
+Xem thông báo mới,2
+Đặt tour du lịch Sapa,2
+Tìm cách sửa máy tính,2
+Hãy cho tôi câu hỏi về đạo đức kinh doanh,0
+Sinh câu hỏi kiểm tra về photoshop,0
+Cho tôi câu hỏi về văn hóa Nhật Bản,0
+Tạo câu hỏi trắc nghiệm môn công nghệ,0
+Đưa ra câu hỏi về dinh dưỡng,0
+Làm câu hỏi về thiết kế đồ họa,0
+Tạo câu hỏi về chính trị quốc tế,0
+Sinh câu hỏi thi HSK tiếng Trung,0
+Cho tôi câu hỏi về điện ảnh,0
+Tạo câu hỏi ôn tập về hóa vô cơ,0
+Kiểm tra câu trả lời có phù hợp với câu hỏi không,1
+Đánh giá câu trả lời về độ dài,1
+Chấm điểm bài thi cuối kỳ,1
+Xem câu trả lời có cần bổ sung gì không,1
+Review câu trả lời về ngữ pháp,1
+Đánh giá xem câu trả lời có rõ ràng không,1
+Kiểm tra câu trả lời có trùng lặp ý không,1
+Chấm bài tập lớn này,1
+Xem câu trả lời này đạt tiêu chuẩn chưa,1
+Đánh giá tính nhất quán của câu trả lời,1
+Bật quạt,2
+Tìm tin tức hôm nay,2
+Lên lịch họp tuần sau,2
+Gửi email cho sếp,2
+Phát nhạc thư giãn,2
+Chỉ đường đến trường học,2
+Tra giá iPhone 15,2
+Kiểm tra lịch làm việc,2
+Đặt vé xem phim,2
+Tìm bài tập yoga,2
+Tạo câu hỏi về cách mạng công nghiệp 4.0,0
+Sinh câu hỏi kiểm tra về Excel,0
+Cho tôi câu hỏi về âm nhạc dân gian,0
+Tạo câu hỏi trắc nghiệm môn giáo dục công dân,0
+Đưa ra câu hỏi về khởi nghiệp,0
+Làm câu hỏi về văn học thế giới,0
+Tạo câu hỏi về bảo mật thông tin,0
+Sinh câu hỏi thi IELTS,0
+Cho tôi câu hỏi về hội họa,0
+Tạo câu hỏi ôn tập về vật lý 11,0
+Đánh giá câu trả lời có trả lời đúng trọng tâm không,1
+Kiểm tra câu trả lời có nhiều lỗi chính tả không,1
+Chấm điểm và phân loại học lực,1
+Xem câu trả lời có cần chỉnh sửa gì không,1
+Review câu trả lời về mặt ý nghĩa,1
+Đánh giá xem câu trả lời có thuyết phục không,1
+Kiểm tra câu trả lời có đủ dài không,1
+Chấm bài luận văn này,1
+Xem câu trả lời này có độc đáo không,1
+Đánh giá độ tin cậy của câu trả lời,1
+Tắt tivi,2
+Tìm bài hát theo lời,2
+Đặt lịch nhắc uống thuốc,2
+Nhắn Zalo cho chị,2
+Phát sách nói,2
+Chỉ đường đến siêu thị,2
+Tra cứu giá xăng,2
+Kiểm tra tin nhắn mới,2
+Đặt vé tàu đi Huế,2
+Tìm cách giảm cân,2
+Hãy tạo câu hỏi về marketing online,0
+Sinh câu hỏi kiểm tra về SQL,0
+Cho tôi câu hỏi về phong tục Việt Nam,0
+Tạo câu hỏi trắc nghiệm môn tư tưởng,0
+Đưa ra câu hỏi về đầu tư chứng khoán,0
+Làm câu hỏi về điêu khắc,0
+Tạo câu hỏi về biến đổi khí hậu,0
+Sinh câu hỏi thi TOEIC,0
+Cho tôi câu hỏi về âm nhạc hiện đại,0
+Tạo câu hỏi ôn tập về hóa học 10,0
+Kiểm tra xem câu trả lời có đạt điểm tối đa không,1
+Đánh giá câu trả lời về cấu trúc,1
+Chấm điểm bài thi thử,1
+Xem câu trả lời có mạch lạc không,1
+Review câu trả lời về độ chính xác khoa học,1
+Đánh giá xem câu trả lời có sáng tạo hay không,1
+Kiểm tra câu trả lời có lỗi logic không,1
+Chấm bài thực hành này,1
+Xem câu trả lời này đủ tiêu chuẩn chưa,1
+Đánh giá tính hợp lý của câu trả lời,1
+Mở Youtube,2
+Tìm nhà thuốc gần nhất,2
+Đặt lịch cắt tóc,2
+Gọi cho em,2
+Phát nhạc Kpop,2
+Dẫn đường đến công ty,2
+Tra giá vé máy bay,2
+Xem lịch sử cuộc gọi,2
+Đặt dịch vụ giặt ủi,2
+Tìm bài tập gym,2
+Tạo ra một số câu hỏi về quản lý dự án,0
+Sinh câu hỏi kiểm tra về HTML CSS,0
+Cho tôi câu hỏi về ẩm thực Ý,0
+Tạo câu hỏi trắc nghiệm môn văn học,0
+Đưa ra câu hỏi về tài chính cá nhân,0
+Làm câu hỏi về nhiếp ảnh nghệ thuật,0
+Tạo câu hỏi về năng lượng tái tạo,0
+Sinh câu hỏi thi đầu vào lớp 10,0
+Cho tôi câu hỏi về ballet,0
+Tạo câu hỏi ôn tập về sinh học 11,0
+Đánh giá câu trả lời có xuất sắc không,1
+Kiểm tra câu trả lời có sử dụng từ ngữ chính xác không,1
+Chấm điểm bài kiểm tra giữa kỳ,1
+Xem câu trả lời có đáp ứng yêu cầu đề bài không,1
+Review câu trả lời về tính thực tiễn,1
+Đánh giá xem câu trả lời có dễ nhớ không,1
+Kiểm tra câu trả lời có thiếu dữ liệu không,1
+Chấm bài báo cáo này,1
+Xem câu trả lời này có giá trị không,1
+Đánh giá độ phức tạp của câu trả lời,1
+Tắt máy sưởi,2
+Tìm cửa hàng điện thoại,2
+Đặt lịch học yoga,2
+Nhắn tin cho thầy,2
+Phát nhạc acoustic,2
+Chỉ đường đến bưu điện,2
+Tra giá đất Hà Nội,2
+Kiểm tra thông báo Facebook,2
+Đặt xe Grab về nhà,2
+Tìm cách nấu bún chả,2
+Hãy cho tôi câu hỏi về tâm lý học tội phạm,0
+Sinh câu hỏi kiểm tra về Java,0
+Cho tôi câu hỏi về phong cách thời trang,0
+Tạo câu hỏi trắc nghiệm môn lịch sử Việt Nam,0
+Đưa ra câu hỏi về logistics,0
+Làm câu hỏi về thơ ca Việt Nam,0
+Tạo câu hỏi về công nghệ 5G,0
+Sinh câu hỏi thi chứng chỉ tin học,0
+Cho tôi câu hỏi về opera,0
+Tạo câu hỏi ôn tập về toán học 12,0
+Kiểm tra câu trả lời có được điểm cao không,1
+Đánh giá câu trả lời về mặt trình bày,1
+Chấm điểm và xếp hạng,1
+Xem câu trả lời có logic chặt chẽ không,1
+Review câu trả lời về tính sáng tạo,1
+Đánh giá xem câu trả lời có phù hợp ngữ cảnh không,1
+Kiểm tra câu trả lời có dư thừa không,1
+Chấm bài seminar này,1
+Xem câu trả lời này có chất lượng không,1
+Đánh giá tính ứng dụng của câu trả lời,1
+Bật máy lạnh,2
+Tìm gym gần đây,2
+Đặt lịch khám răng,2
+Gọi cho cô,2
+Phát nhạc jazz,2
+Dẫn đường đến nhà hàng,2
+Tra giá laptop,2
+Xem tin nhắn Facebook,2
+Đặt vé concert,2
+Tìm cách làm đẹp da,2
+Tạo câu hỏi về thương mại điện tử,0
+Sinh câu hỏi kiểm tra về React,0
+Cho tôi câu hỏi về du lịch Châu Âu,0
+Tạo câu hỏi trắc nghiệm môn sinh học,0
+Đưa ra câu hỏi về bất động sản,0
+Làm câu hỏi về nghệ thuật đương đại,0
+Tạo câu hỏi về trí tuệ cảm xúc,0
+Sinh câu hỏi thi thạc sĩ,0
+Cho tôi câu hỏi về nhạc cụ dân tộc,0
+Tạo câu hỏi ôn tập về địa lý 12,0
+Đánh giá câu trả lời có toàn diện không,1
+Kiểm tra câu trả lời có đúng format không,1
+Chấm điểm bài thi Olympic,1
+Xem câu trả lời có đủ thông tin không,1
+Review câu trả lời về độ phức tạp,1
+Đánh giá xem câu trả lời có dễ hiểu hay không,1
+Kiểm tra câu trả lời có lặp lại ý không,1
+Chấm bài đồ án này,1
+Xem câu trả lời này có ý nghĩa không,1
+Đánh giá mức độ sâu sắc của câu trả lời,1
+Tắt đèn,2
+Tìm spa gần đây,2
+Lên lịch họp phụ huynh,2
+Nhắn cho bạn,2
+Phát nhạc EDM,2
+Chỉ đường đến công viên,2
+Tra giá Samsung Galaxy,2
+Kiểm tra Instagram,2
+Đặt xe đi sân bay,2
+Tìm cách chăm sóc tóc,2
+Hãy tạo câu hỏi về kỹ năng lãnh đạo,0
+Sinh câu hỏi kiểm tra về Angular,0
+Cho tôi câu hỏi về ẩm thực Nhật Bản,0
+Tạo câu hỏi trắc nghiệm môn hóa học,0
+Đưa ra câu hỏi về thị trường chứng khoán,0
+Làm câu hỏi về nhiếp ảnh phóng sự,0
+Tạo câu hỏi về phát triển bền vững,0
+Sinh câu hỏi thi tiếng Anh B1,0
+Cho tôi câu hỏi về guitar,0
+Tạo câu hỏi ôn tập về vật lý 10,0
+Kiểm tra xem câu trả lời này có hay không,1
+Đánh giá câu trả lời về mặt ngữ pháp,1
+Chấm điểm bài thi học kỳ,1
+Xem câu trả lời có cần sửa gì không,1
+Review câu trả lời về tính khoa học,1
+Đánh giá xem câu trả lời có đầy đủ hay không,1
+Kiểm tra câu trả lời có rõ ràng không,1
+Chấm bài tiểu luận này,1
+Xem câu trả lời này có đúng không,1
+Đánh giá tính chính xác của câu trả lời,1
+Mở Spotify,2
+Tìm phòng tập gần đây,2
+Đặt lịch massage,2
+Gọi cho người yêu,2
+Phát podcast kinh tế,2
+Dẫn đường về quê,2
+Tra giá nhà Sài Gòn,2
+Xem thông báo Zalo,2
+Đặt tour Phú Quốc,2
+Tìm bài tập cardio,2
+Tạo ra câu hỏi về đạo đức nghề nghiệp,0
+Sinh câu hỏi kiểm tra về Node.js,0
+Cho tôi câu hỏi về văn hóa Hàn Quốc,0
+Tạo câu hỏi trắc nghiệm môn lý thuyết trò chơi,0
+Đưa ra câu hỏi về quản trị nhân sự,0
+Làm câu hỏi về điện ảnh Việt Nam,0
+Tạo câu hỏi về Internet of Things,0
+Sinh câu hỏi thi Cambridge,0
+Cho tôi câu hỏi về piano,0
+Tạo câu hỏi ôn tập về hóa học 11,0
+Đánh giá câu trả lời có chuyên sâu không,1
+Kiểm tra câu trả lời có lỗi sai nào không,1
+Chấm điểm bài kiểm tra 45 phút,1
+Xem câu trả lời có hợp lý không,1
+Review câu trả lời về độ chi tiết,1
+Đánh giá xem câu trả lời có logic hay không,1
+Kiểm tra câu trả lời có sai lệch không,1
+Chấm bài nghiên cứu này,1
+Xem câu trả lời này có tốt không,1
+Đánh giá chất lượng tổng thể của câu trả lời,1
+Tắt máy giặt,2
+Tìm salon tóc gần nhất,2
+Đặt lịch làm móng,2
+Nhắn tin cho đồng nghiệp,2
+Phát radio BBC,2
+Chỉ đường đến bảo tàng,2
+Tra giá vàng 9999,2
+Kiểm tra Messenger,2
+Đặt vé máy bay đi Bangkok,2
+Tìm công thức làm bánh flan,2
+Hãy cho tôi câu hỏi về kỹ năng thuyết trình,0
+Sinh câu hỏi kiểm tra về MongoDB,0
+Cho tôi câu hỏi về du lịch Đông Nam Á,0
+Tạo câu hỏi trắc nghiệm môn triết học,0
+Đưa ra câu hỏi về tiếp thị số,0
+Làm câu hỏi về nhiếp ảnh cưới,0
+Tạo câu hỏi về trí tuệ nhân tạo trong y tế,0
+Sinh câu hỏi thi TOPIK tiếng Hàn,0
+Cho tôi câu hỏi về trống dân gian,0
+Tạo câu hỏi ôn tập về sinh học 10,0
+Kiểm tra câu trả lời có đạt chuẩn không,1
+Đánh giá câu trả lời về tính nhất quán,1
+Chấm điểm bài thi tuyển sinh,1
+Xem câu trả lời có đủ ví dụ không,1
+Review câu trả lời về độ sâu,1
+Đánh giá xem câu trả lời có cấu trúc tốt không,1
+Kiểm tra câu trả lời có mâu thuẫn không,1
+Chấm bài khóa luận này,1
+Xem câu trả lời này có xuất sắc không,1
+Đánh giá độ hoàn chỉnh của câu trả lời,1
+Bật máy hút ẩm,2
+Tìm tiệm nail gần đây,2
+Đặt lịch tư vấn tâm lý,2
+Gửi email cho đối tác,2
+Phát nhạc bolero,2
+Dẫn đường đến thư viện,2
+Tra giá xe máy Honda,2
+Xem cuộc gọi nhớ,2
+Đặt khách sạn Nha Trang,2
+Tìm cách trị mụn,2
+Tạo câu hỏi về phân tích dữ liệu,0
+Sinh câu hỏi kiểm tra về Docker,0
+Cho tôi câu hỏi về ẩm thực Thái Lan,0
+Tạo câu hỏi trắc nghiệm môn tâm lý học,0
+Đưa ra câu hỏi về quản trị thương hiệu,0
+Làm câu hỏi về thiết kế nội thất,0
+Tạo câu hỏi về machine learning,0
+Sinh câu hỏi thi JLPT tiếng Nhật,0
+Cho tôi câu hỏi về sáo trúc,0
+Tạo câu hỏi ôn tập về toán học 11,0
+Đánh giá câu trả lời có ấn tượng hay không,1
+Kiểm tra câu trả lời có thiếu ví dụ không,1
+Chấm điểm và viết nhận xét,1
+Xem câu trả lời có rõ ràng mạch lạc không,1
+Review câu trả lời về tính thuyết phục,1
+Tạo cho tôi 10 câu hỏi về lập trình Pascal,0
+Sinh câu hỏi trắc nghiệm về mảng trong Pascal,0
+Cho tôi vài câu hỏi về thuật toán sắp xếp,0
+Làm câu hỏi kiểm tra về vòng lặp for,0
+Tạo câu hỏi về cấu trúc dữ liệu ngăn xếp,0
+Sinh 5 câu hỏi về hàm trong Python,0
+Đưa ra câu hỏi về thuật toán tìm kiếm nhị phân,0
+Tạo câu hỏi thi học kỳ môn tin học 11,0
+Cho tôi câu hỏi về mạng máy tính,0
+Sinh câu hỏi ôn tập về đệ quy,0
+Đánh giá câu trả lời của học sinh,1
+Kiểm tra câu trả lời này có đúng không,1
+Chấm điểm câu trả lời,1
+Xem câu trả lời này được bao nhiêu điểm,1
+Đánh giá độ chính xác của câu trả lời,1
+Kiểm tra xem em trả lời đúng chưa,1
+Chấm bài làm tin học của học sinh,1
+Review câu trả lời này giúp tôi,1
+Câu trả lời này có chính xác không,1
+Đánh giá mức độ hoàn thiện của câu trả lời,1
+Viết chương trình tính giai thừa bằng Pascal,2
+Giải thích thuật toán Bubble Sort cho tôi,2
+Code Pascal tìm số nguyên tố,2
+Hướng dẫn cách sử dụng hàm trong Python,2
+Tạo file Excel quản lý điểm học sinh,2
+Giải bài toán này bằng Pascal,2
+Kể cho tôi nghe về lịch sử máy tính,2
+Làm bài tập về mảng 2 chiều,2
+Tính độ phức tạp của thuật toán này,2
+Viết một bài văn về công nghệ thông tin,2
+Hãy tạo câu hỏi về câu lệnh if-else trong Pascal,0
+Cho tôi một số câu hỏi liên quan đến SQL cơ bản,0
+Sinh câu hỏi kiểm tra về biến và kiểu dữ liệu,0
+Tạo câu hỏi trắc nghiệm về thuật toán tìm kiếm,0
+Đưa ra câu hỏi về cấu trúc mảng,0
+Làm câu hỏi về giao thức TCP/IP,0
+Tạo 3 câu hỏi về Excel cơ bản,0
+Sinh câu hỏi thi cuối kỳ tin học 10,0
+Cho tôi câu hỏi về thuật toán đệ quy,0
+Tạo câu hỏi ôn thi đại học môn tin,0
+Xem câu trả lời của em đúng không,1
+Đánh giá bài làm tin học này,1
+Kiểm tra độ chính xác code Pascal,1
+Chấm câu trả lời giúp tôi,1
+Review câu trả lời xem được mấy điểm,1
+Đánh giá xem code có chạy đúng không,1
+Kiểm tra câu trả lời có phù hợp không,1
+Chấm bài kiểm tra tin học này,1
+Xem câu trả lời này có hay không,1
+Đánh giá chất lượng code Pascal,1
+Debug đoạn code Pascal này,2
+Tìm lỗi trong chương trình Python,2
+Giải thích sự khác biệt giữa while và for,2
+Chuyển code Pascal sang Python,2
+Tạo sơ đồ khối cho thuật toán này,2
+Viết hàm tìm ƯCLN trong Pascal,2
+Hướng dẫn cách dùng hàm IF trong Excel,2
+Tạo slide PowerPoint về lịch sử tin học,2
+Viết chương trình nhập xuất mảng,2
+Giải thích con trỏ trong Pascal,2
+Hãy tạo cho tôi các câu hỏi về thuật toán QuickSort,0
+Sinh câu hỏi kiểm tra về chuỗi trong Pascal,0
+Cho tôi câu hỏi về cơ sở dữ liệu Access,0
+Tạo câu hỏi trắc nghiệm về địa chỉ IP,0
+Đưa ra câu hỏi về hàm và thủ tục trong Pascal,0
+Làm câu hỏi kiểm tra về Python list,0
+Tạo câu hỏi về thuật toán tham lam,0
+Sinh câu hỏi thi giữa kỳ tin học 12,0
+Cho tôi câu hỏi về mô hình OSI,0
+Tạo câu hỏi ôn tập về file trong Pascal,0
+Kiểm tra xem câu trả lời này có sai sót gì không,1
+Đánh giá câu trả lời về thuật toán,1
+Chấm điểm bài làm tin học này giúp tôi,1
+Xem câu trả lời có đầy đủ không,1
+Review độ chính xác của code,1
+Đánh giá xem code có tối ưu không,1
+Kiểm tra câu trả lời có thiếu bước nào không,1
+Chấm bài tập Pascal về nhà này,1
+Xem câu trả lời này có logic không,1
+Đánh giá mức độ chi tiết của lời giải,1
+Viết chương trình sắp xếp mảng tăng dần,2
+Giải thích cách hoạt động của bộ nhớ cache,2
+Tạo database quản lý thư viện trong Access,2
+Code thuật toán Dijkstra bằng Pascal,2
+Hướng dẫn cách dùng hàm VLOOKUP trong Excel,2
+Vẽ sơ đồ mạng LAN cho trường học,2
+Viết chương trình kiểm tra số hoàn hảo,2
+Giải thích khái niệm lập trình hướng đối tượng,2
+Tạo bài thuyết trình PowerPoint về AI,2
+Code chương trình giải phương trình bậc 2,2
+Tạo ra câu hỏi về cấu trúc rẽ nhánh,0
+Sinh câu hỏi kiểm tra về dictionary trong Python,0
+Cho tôi câu hỏi về subnet mask,0
+Tạo câu hỏi trắc nghiệm về thuật toán Merge Sort,0
+Đưa ra câu hỏi về record trong Pascal,0
+Làm câu hỏi về bảng pivot trong Excel,0
+Tạo câu hỏi về giao thức HTTP,0
+Sinh câu hỏi thi Olympic tin học,0
+Cho tôi câu hỏi về thuật toán quy hoạch động,0
+Tạo câu hỏi ôn tập về pointer,0
+Đánh giá câu trả lời có logic chặt chẽ không,1
+Kiểm tra câu trả lời về thuật toán có đạt yêu cầu không,1
+Chấm điểm và nhận xét bài code,1
+Xem code này được bao nhiêu phần trăm,1
+Review câu trả lời về mặt thuật toán,1
+Đánh giá xem code có tối ưu bộ nhớ không,1
+Kiểm tra code có dễ đọc không,1
+Chấm bài kiểm tra 15 phút tin học,1
+Xem câu trả lời này có ấn tượng không,1
+Đánh giá tính đúng đắn của thuật toán,1
+Giải bài toán dãy Fibonacci bằng đệ quy,2
+Viết chương trình quản lý sinh viên,2
+Tạo biểu đồ trong Excel từ dữ liệu,2
+Code thuật toán tìm đường đi ngắn nhất,2
+Giải thích sự khác biệt Pascal và Python,2
+Viết hàm kiểm tra chuỗi palindrome,2
+Hướng dẫn cách tạo form trong Access,2
+Tạo macro trong Excel tự động tính điểm,2
+Viết chương trình chơi game đoán số,2
+Giải thích cách thức hoạt động của router,2
+Hãy cho tôi câu hỏi về mảng động trong Pascal,0
+Sinh câu hỏi kiểm tra về tuple trong Python,0
+Cho tôi câu hỏi về mô hình client-server,0
+Tạo câu hỏi trắc nghiệm về thuật toán BFS,0
+Đưa ra câu hỏi về xử lý file text,0
+Làm câu hỏi về hàm COUNT trong Excel,0
+Tạo câu hỏi về mạng không dây WiFi,0
+Sinh câu hỏi thi HSG tin học cấp tỉnh,0
+Cho tôi câu hỏi về cây nhị phân,0
+Tạo câu hỏi ôn tập về con trỏ trong Pascal,0
+Kiểm tra code Pascal có chạy đúng không,1
+Đánh giá câu trả lời về độ phức tạp thuật toán,1
+Chấm điểm bài thi cuối kỳ tin học,1
+Xem code có cần tối ưu gì không,1
+Review câu trả lời về syntax,1
+Đánh giá xem thuật toán có hiệu quả không,1
+Kiểm tra code có lỗi runtime không,1
+Chấm bài tập lớn tin học này,1
+Xem giải thuật này đạt tiêu chuẩn chưa,1
+Đánh giá tính đúng đắn của code,1
+Viết chương trình tính tổng các số nguyên tố,2
+Tạo cơ sở dữ liệu quản lý bán hàng,2
+Code thuật toán tháp Hà Nội,2
+Giải thích sự khác biệt giữa stack và queue,2
+Viết hàm tìm số lớn nhất trong mảng,2
+Hướng dẫn mail merge trong Word,2
+Tạo biểu đồ tròn trong PowerPoint,2
+Viết chương trình đếm từ trong chuỗi,2
+Giải thích cách thức mã hóa dữ liệu,2
+Code game rắn săn mồi đơn giản,2
+Tạo câu hỏi về vòng lặp while trong Pascal,0
+Sinh câu hỏi kiểm tra về set trong Python,0
+Cho tôi câu hỏi về địa chỉ MAC,0
+Tạo câu hỏi trắc nghiệm về thuật toán DFS,0
+Đưa ra câu hỏi về string trong Pascal,0
+Làm câu hỏi về hàm SUM trong Excel,0
+Tạo câu hỏi về giao thức FTP,0
+Sinh câu hỏi thi học sinh giỏi tin học,0
+Cho tôi câu hỏi về đồ thị có hướng,0
+Tạo câu hỏi ôn tập về kiểu dữ liệu trong Pascal,0
+Đánh giá code có tuân thủ coding convention không,1
+Kiểm tra câu trả lời về cấu trúc dữ liệu đúng chưa,1
+Chấm điểm và phân loại bài làm,1
+Xem code có cần refactor không,1
+Review câu trả lời về độ phức tạp thời gian,1
+Đánh giá xem thuật toán có đúng không,1
+Kiểm tra code có lỗi logic không,1
+Chấm bài seminar tin học này,1
+Xem code này có chất lượng không,1
+Đánh giá độ tối ưu của giải thuật,1
+Viết chương trình chuyển đổi số sang nhị phân,2
+Giải thích cách hoạt động của DNS,2
+Tạo query SELECT trong SQL,2
+Code thuật toán tìm kiếm tuyến tính,2
+Hướng dẫn format văn bản trong Word,2
+Viết hàm tính lũy thừa bằng đệ quy,2
+Tạo animation trong PowerPoint,2
+Viết chương trình sắp xếp chèn,2
+Giải thích khái niệm big O notation,2
+Code chương trình tính diện tích hình học,2
+Hãy tạo câu hỏi về procedure trong Pascal,0
+Sinh câu hỏi kiểm tra về class trong Python,0
+Cho tôi câu hỏi về phân lớp mạng,0
+Tạo câu hỏi trắc nghiệm về cây AVL,0
+Đưa ra câu hỏi về array 2D trong Pascal,0
+Làm câu hỏi về hàm IF lồng nhau trong Excel,0
+Tạo câu hỏi về email và SMTP,0
+Sinh câu hỏi thi vào lớp 10 chuyên tin,0
+Cho tôi câu hỏi về thuật toán Kruskal,0
+Tạo câu hỏi ôn tập về boolean trong Pascal,0
+Kiểm tra xem code có chạy đúng thuật toán không,1
+Đánh giá câu trả lời về độ hiệu quả,1
+Chấm điểm bài thi thử tin học,1
+Xem code có handle edge case không,1
+Review câu trả lời về tính đúng đắn,1
+Đánh giá xem code có bug không,1
+Kiểm tra câu trả lời có đầy đủ test case không,1
+Chấm bài thực hành lập trình này,1
+Xem code này đủ tiêu chuẩn chưa,1
+Đánh giá tính chính xác của thuật toán,1
+Viết chương trình đảo ngược chuỗi,2
+Tạo bảng tính lương trong Excel,2
+Code thuật toán sàng Eratosthenes,2
+Giải thích cách thức hoạt động của firewall,2
+Viết hàm kiểm tra năm nhuận,2
+Hướng dẫn tạo mục lục tự động trong Word,2
+Tạo template slide PowerPoint,2
+Viết chương trình tính tổ hợp chập k,2
+Giải thích sự khác biệt LAN và WAN,2
+Code chương trình mô phỏng ATM,2
+Tạo ra một số câu hỏi về sort algorithm,0
+Sinh câu hỏi kiểm tra về for loop Python,0
+Cho tôi câu hỏi về gateway mạng,0
+Tạo câu hỏi trắc nghiệm về linked list,0
+Đưa ra câu hỏi về record type Pascal,0
+Làm câu hỏi về conditional formatting Excel,0
+Tạo câu hỏi về SSL và HTTPS,0
+Sinh câu hỏi thi đầu vào lớp 10 tin học,0
+Cho tôi câu hỏi về hash table,0
+Tạo câu hỏi ôn tập về function Pascal,0
+Đánh giá code có clean code không,1
+Kiểm tra câu trả lời về database normalization đúng không,1
+Chấm điểm bài kiểm tra giữa kỳ tin,1
+Xem code có memory leak không,1
+Review câu trả lời về space complexity,1
+Đánh giá xem SQL query có tối ưu không,1
+Kiểm tra code có xử lý exception không,1
+Chấm bài báo cáo tin học này,1
+Xem thuật toán này có giá trị không,1
+Đánh giá độ phức tạp không gian,1
+Viết chương trình tìm BCNN của hai số,2
+Tạo form đăng ký trong Access,2
+Code thuật toán Floyd-Warshall,2
+Giải thích cách thức hoạt động của VPN,2
+Viết hàm đệ quy tính Fibonacci,2
+Hướng dẫn tracking changes trong Word,2
+Tạo interactive quiz trong PowerPoint,2
+Viết chương trình kiểm tra số Armstrong,2
+Giải thích khái niệm bandwidth,2
+Code chương trình quản lý thư viện,2
+Hãy cho tôi câu hỏi về array passing Pascal,0
+Sinh câu hỏi kiểm tra về lambda Python,0
+Cho tôi câu hỏi về DHCP server,0
+Tạo câu hỏi trắc nghiệm về binary search tree,0
+Đưa ra câu hỏi về text file handling Pascal,0
+Làm câu hỏi về data validation Excel,0
+Tạo câu hỏi về cloud computing cơ bản,0
+Sinh câu hỏi thi chọn HSG quốc gia tin,0
+Cho tôi câu hỏi về graph traversal,0
+Tạo câu hỏi ôn tập về enumeration Pascal,0
+Kiểm tra code có follow DRY principle không,1
+Đánh giá câu trả lời về normalization đúng không,1
+Chấm điểm và xếp hạng bài code,1
+Xem code có scalable không,1
+Review câu trả lời về worst case scenario,1
+Đánh giá xem code có maintainable không,1
+Kiểm tra code có security issues không,1
+Chấm bài đồ án tin học này,1
+Xem code này có professional không,1
+Đánh giá tính robust của code,1
+Viết chương trình tìm phần tử lặp lại,2
+Tạo dashboard trong Excel với chart,2
+Code thuật toán Bellman-Ford,2
+Giải thích sự khác biệt TCP và UDP,2
+Viết hàm tính giai thừa có memoization,2
+Hướng dẫn compare documents trong Word,2
+Tạo master slide trong PowerPoint,2
+Viết chương trình kiểm tra dãy con tăng,2
+Giải thích cách thức NAT hoạt động,2
+Code game tic-tac-toe console,2
+Tạo câu hỏi về scope variable Pascal,0
+Sinh câu hỏi kiểm tra về list comprehension Python,0
+Cho tôi câu hỏi về DNS resolution,0
+Tạo câu hỏi trắc nghiệm về heap data structure,0
+Đưa ra câu hỏi về type casting Pascal,0
+Làm câu hỏi về array formula Excel,0
+Tạo câu hỏi về IoT và sensors,0
+Sinh câu hỏi Olympic tin học Châu Á,0
+Cho tôi câu hỏi về minimum spanning tree,0
+Tạo câu hỏi ôn tập về set type Pascal,0
+Đánh giá code có readable không,1
+Kiểm tra câu trả lời về indexing database đúng chưa,1
+Chấm điểm bài thi Olympic tin,1
+Xem code có handle concurrency không,1
+Review câu trả lời về best case performance,1
+Đánh giá xem query có avoid N+1 problem không,1
+Kiểm tra code có proper naming convention không,1
+Chấm bài nghiên cứu thuật toán này,1
+Xem code này có enterprise-ready không,1
+Đánh giá performance bottleneck của code,1
+Viết chương trình tìm chuỗi con chung dài nhất,2
+Tạo macro VBA trong Excel,2
+Code thuật toán A* pathfinding,2
+Giải thích cách thức packet switching,2
+Viết hàm binary search đệ quy,2
+Hướng dẫn mail merge với Excel data,2
+Tạo transition effects trong PowerPoint,2
+Viết chương trình giải bài toán ba lô,2
+Giải thích khái niệm latency và throughput,2
+Code chương trình quản lý kho hàng,2
+Hãy tạo câu hỏi về operator precedence Pascal,0
+Sinh câu hỏi kiểm tra về decorator Python,0
+Cho tôi câu hỏi về routing protocol,0
+Tạo câu hỏi trắc nghiệm về red-black tree,0
+Đưa ra câu hỏi về unit Pascal programming,0
+Làm câu hỏi về power query Excel,0
+Tạo câu hỏi về cybersecurity basics,0
+Sinh câu hỏi thi ACM ICPC regional,0
+Cho tôi câu hỏi về topological sort,0
+Tạo câu hỏi ôn tập về dynamic array Pascal,0
+Kiểm tra xem code có memory efficient không,1
+Đánh giá câu trả lời về query optimization đúng không,1
+Chấm điểm bài thi học kỳ tin học,1
+Xem code có thread-safe không,1
+Review câu trả lời về average case complexity,1
+Đánh giá xem code có testable không,1
+Kiểm tra code có proper error handling không,1
+Chấm bài tiểu luận thuật toán này,1
+Xem code này có production-ready không,1
+Đánh giá code smell và anti-patterns,1
+Viết chương trình đếm số lần xuất hiện phần tử,2
+Tạo pivot table trong Excel,2
+Code thuật toán Prim's algorithm,2
+Giải thích cách thức load balancing,2
+Viết hàm merge hai mảng đã sắp xếp,2
+Hướng dẫn create table of contents Word,2
+Tạo embedded video trong PowerPoint,2
+Viết chương trình tìm đường đi Euler,2
+Giải thích khái niệm CDN hoạt động,2
+Code chương trình mô phỏng bãi đỗ xe,2
+Tạo ra câu hỏi về exception handling Pascal,0
+Sinh câu hỏi kiểm tra về generator Python,0
+Cho tôi câu hỏi về VLAN configuration,0
+Tạo câu hỏi trắc nghiệm về trie data structure,0
+Đưa ra câu hỏi về generic types Pascal,0
+Làm câu hỏi về what-if analysis Excel,0
+Tạo câu hỏi về machine learning basics,0
+Sinh câu hỏi thi Codeforces style,0
+Cho tôi câu hỏi về network flow algorithms,0
+Tạo câu hỏi ôn tập về interface Pascal,0
+Đánh giá code có follow SOLID principles không,1
+Kiểm tra câu trả lời về transaction isolation đúng không,1
+Chấm điểm bài thi thử Olympic tin,1
+Xem code có avoid race condition không,1
+Review câu trả lời về amortized complexity,1
+Đánh giá xem architecture có scalable không,1
+Kiểm tra code có proper documentation không,1
+Chấm bài khóa luận tin học này,1
+Xem code này có industry standard không,1
+Đánh giá technical debt trong code,1
+Viết chương trình kiểm tra biểu thức ngoặc,2
+Tạo conditional formatting rules Excel,2
+Code thuật toán Huffman encoding,2
+Giải thích cách thức content delivery network,2
+Viết hàm quick select algorithm,2
+Hướng dẫn cross-reference trong Word,2
+Tạo custom animation timeline PowerPoint,2
+Viết chương trình tìm chu trình Hamilton,2
+Giải thích khái niệm QoS networking,2
+Code chương trình đặt phòng khách sạn,2
+Hãy cho tôi câu hỏi về inline assembly Pascal,0
+Sinh câu hỏi kiểm tra về asyncio Python,0
+Cho tôi câu hỏi về BGP protocol,0
+Tạo câu hỏi trắc nghiệm về B-tree structure,0
+Đưa ra câu hỏi về object Pascal OOP,0
+Làm câu hỏi về solver add-in Excel,0
+Tạo câu hỏi về blockchain technology,0
+Sinh câu hỏi thi Google Code Jam,0
+Cho tôi câu hỏi về strongly connected components,0
+Tạo câu hỏi ôn tập về multithreading Pascal,0
+Kiểm tra code có low coupling high cohesion không,1
+Đánh giá câu trả lời về ACID properties đúng không,1
+Chấm điểm bài thi chọn đội tuyển tin,1
+Xem code có proper separation of concerns không,1
+Review câu trả lời về cache complexity,1
+Đánh giá xem design pattern có appropriate không,1
+Kiểm tra code có code coverage adequate không,1
+Chấm bài nghiên cứu khoa học tin học này,1
+Xem code này có enterprise architecture không,1
+Đánh giá maintainability index của code,1
