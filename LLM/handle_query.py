@@ -402,6 +402,7 @@ def generate_answer(utility_result: str) -> str:
                        - correct_answer
                        - explanation
                        - is_correct
+                       - question_index (bắt đầu từ 0)
     
     Returns:
         String feedback cho user (không JSON)
@@ -419,12 +420,22 @@ def generate_answer(utility_result: str) -> str:
     
     === OUTPUT ===
     Chỉ trả về text phản hồi (KHÔNG JSON):
-    Luôn trả về câu hỏi đang được trả lời. Ví dụ : "Với câu (question index + 1) bạn trả lời là ..."
+    
+    QUAN TRỌNG: Khi hiển thị câu hỏi, PHẢI cộng thêm 1 vào question_index từ dữ liệu JSON
+    - Trích xuất giá trị "question_index" từ JSON input (bắt đầu từ 0)
+    - Tính toán số câu = question_index + 1 (để hiển thị từ 1)
+    Ví dụ: nếu JSON có "question_index": 0 → hiển thị "câu 1"
+           nếu JSON có "question_index": 1 → hiển thị "câu 2"
+           nếu JSON có "question_index": 2 → hiển thị "câu 3"
+    
+    Format output:
+    "Với câu [số tính được] bạn trả lời là [user_answer]..."
+    
     <Nếu đúng>:
-    "Chính xác! Bạn đã hiểu đúng về [chủ đề].... [nhấn mạnh điểm học] và có thể giải thích ngắn gọn tại sao đúng"
+    "Với câu [số]: Chính xác! Bạn đã hiểu đúng về [chủ đề].... [nhấn mạnh điểm học] và có thể giải thích ngắn gọn tại sao đúng"
     
     <Nếu sai>:
-    "Bạn chọn [user_answer] nhưng đáp án đúng là [correct_answer]. 
+    "Với câu [số]: Bạn chọn [user_answer] nhưng đáp án đúng là [correct_answer]. 
     Lý do: [explanation]. 
     Gợi ý để nhớ lâu: ..."
     
@@ -434,6 +445,7 @@ def generate_answer(utility_result: str) -> str:
     3. Khuyến khích và tích cực
     4. KHÔNG dùng JSON format
     5. KHÔNG thêm text trước/sau feedback
+    6. LUÔN hiển thị số câu ở đầu feedback (tính từ question_index + 1)
     """
     
     response = client.models.generate_content(
