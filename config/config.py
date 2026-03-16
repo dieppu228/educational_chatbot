@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     SCORING_TEMPERATURE: float = 0.0
     
     # ===== Model Names =====
-    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
-    RERANKER_MODEL: str = "dangvantuan/vietnamese-document-embedding"
+    EMBEDDING_MODEL: str = "dangvantuan/vietnamese-document-embedding"
+    RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
     
     # ===== File Paths =====
     DATA_DIR: str = "data"

@@ -1,3 +1,36 @@
+# === PDF sách gốc (quá nặng) ===
 CanhDieu/
+KNTT/
+
+# === Temp ===
 temp_images/
-test.ipynb/
+__pycache__/
+*.pyc
+
+# === Env ===
+.env
+
+# === IDE ===
+.vscode/
+.gradio/
+
+# === Data lớn ===
+*.npy
+triplets_output*.json
+
+# === Notebook outputs ===
+.ipynb_checkpoints/
+
+# === Test files ===
+*TEST*
+test.ipynb
+
+# === Plan/Refactor docs (nội bộ) ===
+plan.md
+REFACTOR_PLAN.md
+REFACTOR_SUMMARY.md
+REPO_STRUCTURE.md
+test_refactor.md
+
+test_pipeline.ipynb
+test_chatbot.py

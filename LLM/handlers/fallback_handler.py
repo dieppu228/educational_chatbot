@@ -1,6 +1,5 @@
 """Fallback handler for off-topic and chitchat queries"""
 
-import logging
 from typing import Optional
 from .base_handler import BaseHandler
 from LLM.prompts import FALLBACK_PROMPT
@@ -20,8 +19,6 @@ class FallbackHandler(BaseHandler):
         Returns:
             str: Friendly response guiding user back to learning
         """
-        self.logger.info(f"Fallback handler: {query[:100]}...")
-        
         try:
             prompt = FALLBACK_PROMPT.format(query=query)
             
@@ -31,11 +28,9 @@ class FallbackHandler(BaseHandler):
                 response_mime='text/plain'
             )
             
-            self.logger.debug("Fallback response generated")
             return response
         
         except Exception as e:
-            self.logger.error(f"Fallback handling failed: {e}")
             # Return default friendly response
             return (
                 "Xin chào! Tôi là trợ lý hỗ trợ học tập. "

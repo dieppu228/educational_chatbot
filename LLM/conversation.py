@@ -39,6 +39,15 @@ class ChatBot:
         # Session handling
         self.sessions: List[SessionState] = []
         self.current_session: Optional[SessionState] = None
+        
+        # Initialize handlers
+        self.question_gen = QuestionGenerator(
+            retriever=retriever,
+            reranker=reranker_mod
+        )
+        self.response_formatter = ResponseFormatter()
+        self.answer_scorer = AnswerScorer()
+        self.fallback = FallbackHandler()
 
     # Format chat history theo session (CHO LLM)
     def _format_chat_history(self, messages):
@@ -149,60 +158,85 @@ class ChatBot:
             # luôn mở session mới
             self._start_new_session()
 
-            # sinh MCQ JSON
-            response_json = generate_question(query, self.retriever, self.reranker)
+            try:
+                # sinh MCQ JSON using handler
+                response_json = self.question_gen.handle(query)
+                
+                # lưu hội thoại vào session
+                self.current_session.messages.append(HumanMessage(content=query))
+                self.current_session.messages.append(AIMessage(content=response_json))
 
-            # lưu hội thoại vào session
-            self.current_session.messages.append(HumanMessage(content=query))
-            self.current_session.messages.append(AIMessage(content=response_json))
+                # parse JSON thành list QuestionItem
+                mcq_items = self._parse_mcq_from_response(response_json)
 
-            # parse JSON thành list QuestionItem
-            mcq_items = self._parse_mcq_from_response(response_json)
-
-            # lưu vào state
-            self._save_questions_to_session(
-                original_query=query,
-                questions=mcq_items
-            )
-            max_index = max(q.index for q in self.current_session.questions) if self.current_session.questions else 0
-
-            formatted_questions = generate_response(response_json, max_index)
-
-            # stream ra formatted questions
-            if stream:
-                yield formatted_questions
-                return
-            else:
-                return formatted_questions
+                # lưu vào state
+                self._save_questions_to_session(
+                    original_query=query,
+                    questions=mcq_items
+                )
+                
+                # Format and stream response
+                if stream:
+                    yield response_json
+                    return
+                else:
+                    return response_json
+                    
+            except Exception as e:
+                error_msg = f"❌ Lỗi tạo câu hỏi: {str(e)[:50]}"
+                if stream:
+                    yield error_msg
+                else:
+                    return error_msg
 
         # LABEL 1 → CHECK ANSWER USING SAVED STATE
         if label == 1:
 
             # không có câu hỏi trước đó
             if (not self.current_session) or (not self.current_session.questions):
-                yield "Hiện tại chưa có câu hỏi nào để chấm đáp án."
-                return
+                msg = "Hiện tại chưa có câu hỏi nào để chấm đáp án."
+                if stream:
+                    yield msg
+                    return
+                else:
+                    return msg
 
-            # dùng state + query user để check đáp án
-            checker_result = utility_node(query, state_text=self.current_session.questions)
-            result = generate_answer(utility_result=checker_result)
-            # stream hoặc trả thẳng
-            if stream:
-                yield result
-                return
-            else:
-                return result
+            try:
+                # Use answer scorer handler
+                scorer_result = self.answer_scorer.handle(
+                    user_answer=query,
+                    questions=self.current_session.questions
+                )
+                if stream:
+                    yield scorer_result
+                    return
+                else:
+                    return scorer_result
+            except Exception as e:
+                error_msg = f"❌ Lỗi chấm điểm: {str(e)[:50]}"
+                if stream:
+                    yield error_msg
+                    return
+                else:
+                    return error_msg
 
         # LABEL 2 → FALLBACK NORMAL CHAT
         if label == 2:
 
-            fallback_answer = fall_back(query)
-
-            if stream:
-                yield fallback_answer
-                return
-            else:
-                return fallback_answer
+            try:
+                fallback_answer = self.fallback.handle(query)
+                if stream:
+                    yield fallback_answer
+                    return
+                else:
+                    return fallback_answer
+            except Exception as e:
+                error_msg = f"❌ Lỗi: {str(e)[:50]}"
+                if stream:
+                    yield error_msg
+                    return
+                else:
+                    return error_msg
 
     
     def get_current_session(self) -> Optional[SessionState]:

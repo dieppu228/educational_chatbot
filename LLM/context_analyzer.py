@@ -1,8 +1,6 @@
 """Context analyzer for intelligent query contextualization"""
 
-import logging
 from typing import Set, Optional
-from utils import setup_logger
 
 
 class ContextAnalyzer:
@@ -36,14 +34,9 @@ class ContextAnalyzer:
         "hãy", "vui lòng", "làm ơn",
     }
     
-    def __init__(self, logger: Optional[logging.Logger] = None):
-        """
-        Initialize context analyzer.
-        
-        Args:
-            logger: Logger instance
-        """
-        self.logger = logger or setup_logger(__name__)
+    def __init__(self):
+        """Initialize context analyzer."""
+        pass
     
     def needs_contextualization(self, query: str, history: str) -> bool:
         """
@@ -68,22 +61,18 @@ class ContextAnalyzer:
         
         # Check for pronouns referencing previous context
         if self._has_pronouns(query_lower):
-            self.logger.debug("Query contains pronouns suggesting context dependency")
             return True
         
         # Check for comparative words
         if self._has_comparative(query_lower):
-            self.logger.debug("Query contains comparative words")
             return True
         
         # Check if query starts with ellipsis marker
         if self._starts_with_ellipsis(query_lower):
-            self.logger.debug("Query starts with ellipsis marker")
             return True
         
         # Check for modal verbs suggesting implicit context
         if self._has_modals(query_lower):
-            self.logger.debug("Query contains modal verbs suggesting context")
             return True
         
         # Very short queries often depend on context

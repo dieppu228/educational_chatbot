@@ -5,7 +5,7 @@ from LLM.format_context import format_context
 
 
 class RerankerModule:
-    def __init__(self, model_name="dangvantuan/vietnamese-document-embedding", use_fp16=True, trust_remote_code=True):
+    def __init__(self, model_name="BAAI/bge-reranker-v2-m3", use_fp16=True, trust_remote_code=True):
         self.reranker = FlagReranker(model_name_or_path=model_name, use_fp16=use_fp16, trust_remote_code=trust_remote_code)
 
     def rerank(self, query, results, top_n=10):

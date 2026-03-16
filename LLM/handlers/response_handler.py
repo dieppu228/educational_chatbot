@@ -1,7 +1,6 @@
 """Response handling and answer scoring"""
 
 import json
-import logging
 from typing import Optional, Dict, Any
 from .base_handler import BaseHandler
 from LLM.prompts import RESPONSE_FORMATTING_PROMPT, UTILITY_SCORING_PROMPT
@@ -25,8 +24,6 @@ class ResponseFormatter(BaseHandler):
         Returns:
             str: Formatted readable text
         """
-        self.logger.info(f"Formatting {max_index} questions")
-        
         try:
             # Validate input JSON
             if not validate_json_response(json_string):
@@ -43,11 +40,9 @@ class ResponseFormatter(BaseHandler):
                 response_mime='text/plain'
             )
             
-            self.logger.debug("Response formatting successful")
             return response
         
         except Exception as e:
-            self.logger.error(f"Response formatting failed: {e}")
             self._handle_error(e)
 
 
@@ -65,8 +60,6 @@ class AnswerScorer(BaseHandler):
         Returns:
             Dict: Scoring result with status, correctness, explanation
         """
-        self.logger.info(f"Scoring answer: {query[:100]}...")
-        
         try:
             # Build prompt
             prompt = UTILITY_SCORING_PROMPT.format(
@@ -83,21 +76,16 @@ class AnswerScorer(BaseHandler):
             
             # Validate and parse response
             if not self._validate_json_response(response):
-                self.logger.warning("API returned invalid scoring JSON")
                 # Return default result
                 return self._default_scoring_result("ambiguous")
             
             result = json.loads(response)
-            
-            self.logger.debug(f"Scoring result: {result.get('status')}")
             return result
         
         except json.JSONDecodeError as e:
-            self.logger.error(f"Failed to parse scoring response: {e}")
             return self._default_scoring_result("ambiguous")
         
         except Exception as e:
-            self.logger.error(f"Answer scoring failed: {e}")
             return self._default_scoring_result("ambiguous")
     
     def _default_scoring_result(self, status: str = "not_found") -> Dict[str, Any]:

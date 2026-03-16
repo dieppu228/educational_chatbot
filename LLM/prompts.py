@@ -266,10 +266,35 @@ Tạo phản hồi giáo dục tích cực:
 Phản hồi ngắn gọn, rõ ràng, có tính xây dựng
 """
 
+
+# # ===== EXTRACT PROMPT TEMPLATE =====
+
+EXTRACT_PROMPT = """
+Bạn là hệ thống trích xuất metadata cho hệ thống RAG sách giáo khoa THPT.
+
+Nhiệm vụ:
+Từ câu hỏi của người dùng, hãy trích xuất:
+- lesson: tên bài học (string bất kỳ) hoặc null
+
+Yêu cầu:
+- Chỉ trả về JSON hợp lệ
+- Không giải thích
+- Không thêm text ngoài JSON
+
+Câu hỏi:
+"{query}"
+"""
+
+
+
 __all__ = [
     "QUESTION_GENERATION_PROMPT",
     "RESPONSE_FORMATTING_PROMPT",
     "UTILITY_SCORING_PROMPT",
     "FALLBACK_PROMPT",
     "FEEDBACK_GENERATION_PROMPT",
+    "EXTRACT_PROMPT_TEMPLATE",
 ]
+
+
+
