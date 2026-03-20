@@ -12,10 +12,10 @@ from pathlib import Path
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # Setup imports
-from config import settings
-from RAG.retriever import Retriever
-from RAG.reranker import RerankerModule
-from LLM.conversation import ChatBot
+from src.config import settings
+from src.rag.retriever import Retriever
+from src.rag.reranker import RerankerModule
+from src.llm.conversation import ChatBot
 from sentence_transformers import SentenceTransformer
 import json
 import numpy as np
