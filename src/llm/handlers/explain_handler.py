@@ -7,7 +7,7 @@ kèm ví dụ minh họa từ SGK.
 TODO: Implement.
 """
 
-from .base_handler import BaseHandler
+from src.llm.handlers.base_handler import BaseHandler
 
 
 class ExplainHandler(BaseHandler):

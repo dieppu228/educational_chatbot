@@ -1,9 +1,9 @@
 """Fallback handler for off-topic and chitchat queries"""
 
 from typing import Optional
-from .base_handler import BaseHandler
-from src.llm.prompts import FALLBACK_PROMPT
-from src.config import settings
+from src.llm.handlers.base_handler import BaseHandler
+from src.prompts.fallback_prompts import FALLBACK_PROMPT
+from src.config.config import settings
 
 
 class FallbackHandler(BaseHandler):

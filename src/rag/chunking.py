@@ -1,13 +1,3 @@
-"""
-📦 Hierarchical Chunking Pipeline cho SGK Tin học THPT
-
-Pipeline chia document Markdown thành các chunk theo cấu trúc phân cấp (hierarchical).
-Mỗi chunk mang đầy đủ metadata: bộ sách, lớp, chủ đề, bài, mục, loại nội dung.
-
-Author: KhacDiep
-Không dùng thư viện bên thứ 3 — chỉ Python built-in (re, json, os, pathlib).
-"""
-
 import re
 import json
 import os

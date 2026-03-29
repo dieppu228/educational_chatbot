@@ -110,17 +110,23 @@ class ScoringOutput(BaseModel):
         None, 
         description="Original question text"
     )
-    user_answer: Optional[Literal["A", "B", "C", "D"]] = Field(
+    user_answer: Optional[Any] = Field(
         None, 
-        description="User's answer letter"
+        description="Normalized user answer (can be A/B/C/D, bool, or string)"
     )
-    correct_answer: Optional[Literal["A", "B", "C", "D"]] = Field(
+    correct_answer: Optional[Any] = Field(
         None, 
-        description="Correct answer letter"
+        description="Correct answer from session"
     )
     is_correct: Optional[bool] = Field(
         None, 
         description="Whether user's answer is correct"
+    )
+    score: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=10.0,
+        description="Score for essay (0-10)"
     )
     explanation: Optional[str] = Field(
         None, 
@@ -219,6 +225,214 @@ class ExtractMetadataOutput(BaseModel):
             raise ValueError(f"Invalid JSON: {e}")
 
 
+
+# ============================================================
+# Essay Generation Output Schemas
+# ============================================================
+
+class EssayQuestion(BaseModel):
+    """Schema for a single essay question."""
+    index: int = Field(..., ge=1, description="Question number (1-indexed)")
+    question: str = Field(..., min_length=10, description="Essay question text")
+    sample_answer: str = Field(..., min_length=10, description="Sample answer for reference")
+    rubric: str = Field(..., description="Scoring rubric / evaluation criteria")
+    difficulty: Literal["easy", "medium", "hard"] = Field(
+        default="medium", description="Difficulty level"
+    )
+
+
+class EssayGenerationOutput(BaseModel):
+    """Schema for Essay Generator output."""
+    essays: List[EssayQuestion] = Field(..., min_length=1, description="List of essay questions")
+
+    @classmethod
+    def from_json_string(cls, json_str: str) -> "EssayGenerationOutput":
+        try:
+            data = json.loads(json_str)
+            return cls(**data)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}")
+
+    def to_display_format(self) -> str:
+        lines = []
+        for q in self.essays:
+            lines.append(f"📝 Câu hỏi {q.index} ({q.difficulty}):")
+            lines.append(q.question)
+            lines.append("")
+            lines.append("_" * 40)
+            lines.append("")
+        return "\n".join(lines)
+
+
+# ============================================================
+# Fill-in-the-Blank Generation Output Schemas
+# ============================================================
+
+class FillBlankQuestion(BaseModel):
+    """Schema for a single fill-in-the-blank question."""
+    index: int = Field(..., ge=1, description="Question number (1-indexed)")
+    text_with_blanks: str = Field(
+        ..., min_length=10,
+        description="Text with ___ marking blanks"
+    )
+    answers: List[str] = Field(
+        ..., min_length=1,
+        description="Correct answers for each blank, in order"
+    )
+    explanation: str = Field(default="", description="Explanation for the answers")
+
+
+class FillBlankGenerationOutput(BaseModel):
+    """Schema for Fill-in-the-Blank Generator output."""
+    fill_blanks: List[FillBlankQuestion] = Field(
+        ..., min_length=1, description="List of fill-blank questions"
+    )
+
+    @classmethod
+    def from_json_string(cls, json_str: str) -> "FillBlankGenerationOutput":
+        try:
+            data = json.loads(json_str)
+            return cls(**data)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}")
+
+    def to_display_format(self) -> str:
+        lines = []
+        for q in self.fill_blanks:
+            lines.append(f"✏️ Câu {q.index}:")
+            lines.append(q.text_with_blanks)
+            lines.append("")
+            lines.append("_" * 40)
+            lines.append("")
+        return "\n".join(lines)
+
+
+# ============================================================
+# True/False Generation Output Schemas
+# ============================================================
+
+class TrueFalseQuestion(BaseModel):
+    """Schema for a single true/false question."""
+    index: int = Field(..., ge=1, description="Question number (1-indexed)")
+    statement: str = Field(..., min_length=10, description="Statement to evaluate")
+    correct_answer: bool = Field(..., description="True or False")
+    explanation: str = Field(..., min_length=5, description="Why the statement is true/false")
+
+
+class TrueFalseGenerationOutput(BaseModel):
+    """Schema for True/False Generator output."""
+    true_false: List[TrueFalseQuestion] = Field(
+        ..., min_length=1, description="List of true/false questions"
+    )
+
+    @classmethod
+    def from_json_string(cls, json_str: str) -> "TrueFalseGenerationOutput":
+        try:
+            data = json.loads(json_str)
+            return cls(**data)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}")
+
+    def to_display_format(self) -> str:
+        lines = []
+        for q in self.true_false:
+            lines.append(f"❓ Câu {q.index}:")
+            lines.append(f"   {q.statement}")
+            lines.append("   → Đúng hay Sai?")
+            lines.append("")
+            lines.append("_" * 40)
+            lines.append("")
+        return "\n".join(lines)
+
+
+# ============================================================
+# Question Validation Schemas (LLM #2 — Kiểm tra chất lượng)
+# ============================================================
+
+class QuestionValidation(BaseModel):
+    """Kết quả validate 1 câu hỏi."""
+    index: int = Field(..., description="Question index being validated")
+    is_valid: bool = Field(..., description="Whether this question passes validation")
+    issues: List[str] = Field(
+        default_factory=list,
+        description="List of issues found, e.g. ['Đáp án sai', 'Kiến thức không có trong context']"
+    )
+    fixed_question: Optional[Dict[str, Any]] = Field(
+        None, description="Auto-fixed question if validator could fix it"
+    )
+
+
+class ValidationResult(BaseModel):
+    """Kết quả validate toàn bộ batch câu hỏi."""
+    all_valid: bool = Field(..., description="True if all questions passed")
+    validations: List[QuestionValidation] = Field(
+        ..., description="Validation result per question"
+    )
+    approved_questions: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Questions that passed validation"
+    )
+
+    @classmethod
+    def from_json_string(cls, json_str: str) -> "ValidationResult":
+        try:
+            data = json.loads(json_str)
+            return cls(**data)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}")
+
+
+# ============================================================
+# Slide Generation Output Schemas
+# ============================================================
+
+class SlideItem(BaseModel):
+    """Schema for a single slide."""
+    slide_type: Literal["title", "content", "exercise", "image", "summary"] = Field(
+        ..., description="Type of slide"
+    )
+    title: str = Field(..., description="Slide title")
+    bullets: List[str] = Field(default_factory=list, description="Content bullet points")
+    notes: Optional[str] = Field(None, description="Speaker notes")
+    questions: Optional[List[Dict[str, Any]]] = Field(
+        None, description="Exercise questions (for exercise slides)"
+    )
+    related_lessons: Optional[List[str]] = Field(
+        None, description="Related lesson references (for summary slides)"
+    )
+
+
+class SlideGenerationOutput(BaseModel):
+    """Schema for Slide Generator output."""
+    lesson_title: str = Field(..., description="Lesson title")
+    lesson_metadata: Dict[str, str] = Field(
+        ..., description="Metadata: {book, grade, lesson}"
+    )
+    slides: List[SlideItem] = Field(..., min_length=1, description="List of slides")
+    total_slides: int = Field(..., ge=1, description="Total number of slides")
+
+    @classmethod
+    def from_json_string(cls, json_str: str) -> "SlideGenerationOutput":
+        try:
+            data = json.loads(json_str)
+            return cls(**data)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON: {e}")
+
+    def to_display_format(self) -> str:
+        lines = [f"📊 {self.lesson_title} ({self.total_slides} slides)", "=" * 50, ""]
+        for i, slide in enumerate(self.slides, 1):
+            icon = {"title": "🎯", "content": "📖", "exercise": "✏️",
+                    "image": "🖼️", "summary": "📋"}.get(slide.slide_type, "📄")
+            lines.append(f"--- Slide {i} [{icon} {slide.slide_type}] ---")
+            lines.append(f"  {slide.title}")
+            for b in slide.bullets:
+                lines.append(f"  • {b}")
+            if slide.questions:
+                lines.append(f"  📝 {len(slide.questions)} câu hỏi bài tập")
+            lines.append("")
+        return "\n".join(lines)
+
+
 __all__ = [
     "MCQOption",
     "MCQQuestion",
@@ -227,4 +441,17 @@ __all__ = [
     "FallbackOutput",
     "FeedbackOutput",
     "ExtractMetadataOutput",
+    # Phase 2 — Question types
+    "EssayQuestion",
+    "EssayGenerationOutput",
+    "FillBlankQuestion",
+    "FillBlankGenerationOutput",
+    "TrueFalseQuestion",
+    "TrueFalseGenerationOutput",
+    # Phase 2 — Validation
+    "QuestionValidation",
+    "ValidationResult",
+    # Phase 2 — Slide
+    "SlideItem",
+    "SlideGenerationOutput",
 ]

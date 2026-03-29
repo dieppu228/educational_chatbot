@@ -2,7 +2,7 @@
 Answer scoring prompts for grading user responses.
 """
 
-from .base import PromptTemplate
+from src.prompts.base import PromptTemplate
 
 # ============================================================
 # UTILITY/SCORING PROMPT

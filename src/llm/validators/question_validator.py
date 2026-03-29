@@ -1,0 +1,59 @@
+from typing import Optional, List, Dict, Any
+import json
+from src.llm.handlers.base_handler import BaseHandler
+from src.prompts.validator_prompts import QUESTION_VALIDATION_TEMPLATE
+from src.schemas.llm_outputs import ValidationResult
+from src.config.config import settings
+
+class QuestionValidator(BaseHandler):
+    """
+    LLM Node #2 — Kiểm duyệt chất lượng câu hỏi.
+    
+    Nhiệm vụ:
+    - Đối chiếu câu hỏi với context (kiểm tra tính chính xác).
+    - Kiểm tra đáp án và giải thích.
+    - Sửa lỗi nhỏ (nếu có thể) hoặc đánh dấu không đạt.
+    """
+    
+    def validate(
+        self, 
+        question_type: str, 
+        context: str, 
+        questions_json: str
+    ) -> ValidationResult:
+        """
+        Kiểm duyệt một batch câu hỏi.
+        
+        Args:
+            question_type: Loại câu hỏi (mcq, essay, fill_blank, true_false)
+            context: Nội dung bài học gốc
+            questions_json: JSON string chứa các câu hỏi cần kiểm tra
+            
+        Returns:
+            ValidationResult: Kết quả kiểm duyệt (all_valid, validations, approved_questions)
+        """
+        # 1. Build prompt
+        prompt = QUESTION_VALIDATION_TEMPLATE.format(
+            question_type=question_type,
+            context=context,
+            questions_json=questions_json
+        )
+        
+        # 2. Call API (sử dụng temperature thấp để đảm bảo tính khách quan)
+        response = self._call_api(
+            prompt,
+            temperature=0.1,  # Rất thấp để tránh LLM "sáng tạo" thêm
+            response_mime="application/json"
+        )
+        
+        # 3. Parse & Validate
+        try:
+            return ValidationResult.from_json_string(response)
+        except Exception as e:
+            # Fallback nếu validator lỗi JSON: coi như không pass để đảm bảo an toàn
+            self._handle_error(f"Lỗi parse Validation JSON: {e}")
+            return ValidationResult(all_valid=False, validations=[], approved_questions=[])
+            
+    def handle(self, query: str, **kwargs):
+        """QuestionValidator không dùng handle trực tiếp như các handler thông thường."""
+        pass

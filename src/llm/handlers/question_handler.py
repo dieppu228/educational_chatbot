@@ -2,11 +2,11 @@
 
 from typing import List, Optional, Dict
 import json
-from .base_handler import BaseHandler
-from src.llm.prompts import QUESTION_GENERATION_PROMPT
-from src.llm.validators import validate_num_questions, validate_json_response
+from src.llm.handlers.base_handler import BaseHandler
+from src.prompts.question_prompts import QUESTION_GENERATION_PROMPT
+from src.llm.validation_utils import validate_num_questions, validate_json_response
 from src.llm.utils import extract_num_questions, calculate_adaptive_questions, format_contexts
-from src.config import settings
+from src.config.config import settings
 from core import MCQResponse
 
 

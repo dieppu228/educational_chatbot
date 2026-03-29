@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
-from src.config import settings
+from src.config.config import settings
 
 
 class BaseHandler(ABC):

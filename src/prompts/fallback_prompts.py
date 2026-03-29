@@ -2,7 +2,7 @@
 Fallback prompts for handling off-topic queries.
 """
 
-from .base import PromptTemplate
+from src.prompts.base import PromptTemplate
 
 # ============================================================
 # FALLBACK/CHITCHAT PROMPT

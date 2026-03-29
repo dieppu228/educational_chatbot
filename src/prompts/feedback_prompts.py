@@ -2,7 +2,7 @@
 Feedback generation prompts for educational responses.
 """
 
-from .base import PromptTemplate
+from src.prompts.base import PromptTemplate
 
 # ============================================================
 # FEEDBACK GENERATION PROMPT

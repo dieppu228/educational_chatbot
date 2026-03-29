@@ -2,7 +2,7 @@
 Metadata extraction prompts for filtering RAG results.
 """
 
-from .base import PromptTemplate
+from src.prompts.base import PromptTemplate
 
 # ============================================================
 # EXTRACT METADATA PROMPT

@@ -6,7 +6,7 @@ Sử dụng RAG context để trả lời câu hỏi về SGK Tin học THPT.
 TODO: Migrate logic từ fallback_handler.py cũ + cải tiến.
 """
 
-from .base_handler import BaseHandler
+from src.llm.handlers.base_handler import BaseHandler
 
 
 class ChatHandler(BaseHandler):

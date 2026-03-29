@@ -7,7 +7,7 @@ Output: Giáo án (mục tiêu, hoạt động, đánh giá)
 TODO: Implement logic sinh giáo án dùng Gemini API.
 """
 
-from ..base_handler import BaseHandler
+from src.llm.handlers.base_handler import BaseHandler
 
 
 class LessonPlanHandler(BaseHandler):

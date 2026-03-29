@@ -1,11 +1,11 @@
 from typing import Optional, List, Dict, Any
 from src.llm.handlers.base_handler import BaseHandler
-from src.prompts.question_prompts import QUESTION_GENERATION_TEMPLATE
-from src.schemas.llm_outputs import MCQGenerationOutput
+from src.prompts.question_prompts import TRUE_FALSE_GENERATION_TEMPLATE
+from src.schemas.llm_outputs import TrueFalseGenerationOutput
 from src.config.config import settings
 
-class MCQHandler(BaseHandler):
-    """Sinh câu hỏi trắc nghiệm ABCD từ context."""
+class TrueFalseHandler(BaseHandler):
+    """Sinh câu hỏi Đúng/Sai từ nội dung bài học."""
     
     def handle(
         self, 
@@ -13,20 +13,20 @@ class MCQHandler(BaseHandler):
         context: str, 
         num_questions: int = 3,
         **kwargs
-    ) -> MCQGenerationOutput:
+    ) -> TrueFalseGenerationOutput:
         """
-        Sinh câu hỏi trắc nghiệm.
+        Sinh câu hỏi Đúng/Sai.
         
         Args:
-            query: Yêu cầu của user (VD: "Sinh 5 câu về mạng LAN")
+            query: Yêu cầu của user
             context: Nội dung bài học từ RAG
             num_questions: Số câu cần sinh
             
         Returns:
-            MCQGenerationOutput: Object chứa danh sách câu hỏi
+            TrueFalseGenerationOutput: Object chứa danh sách câu Đúng/Sai
         """
         # 1. Build prompt
-        prompt = QUESTION_GENERATION_TEMPLATE.format(
+        prompt = TRUE_FALSE_GENERATION_TEMPLATE.format(
             query=query,
             context=context,
             num_questions=num_questions
@@ -41,6 +41,6 @@ class MCQHandler(BaseHandler):
         
         # 3. Parse & Validate
         try:
-            return MCQGenerationOutput.from_json_string(response)
+            return TrueFalseGenerationOutput.from_json_string(response)
         except Exception as e:
-            self._handle_error(f"Lỗi parse MCQ JSON: {e}")
+            self._handle_error(f"Lỗi parse TrueFalse JSON: {e}")

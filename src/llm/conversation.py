@@ -1,249 +1,181 @@
-from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Union
 import json
-from json import JSONDecodeError
-from langchain_core.messages import HumanMessage, AIMessage
+from typing import List, Optional, Dict, Any, Union, Generator
 
-from src.llm.router import routing_query
-from src.llm.handlers import (
-    QuestionGenerator, ResponseFormatter, AnswerScorer, FallbackHandler
-)
-
-
-
-@dataclass
-class QuestionItem:
-    index: int
-    original_query: str
-    generated_question: str
-    options: Dict[str, str]   # {"A": "...", "B": "...", "C": "...", "D": "..."}
-    correct_answer: str       # "A" | "B" | "C" | "D"
-    explanation: str
-
-
-
-@dataclass
-class SessionState:
-    session_id: int
-    questions: List[QuestionItem] = field(default_factory=list)
-    messages: List[Union[HumanMessage, AIMessage]] = field(default_factory=list)
-
-
-
+from src.llm.intent_detector import IntentDetector
+from src.llm.memory import MemoryManager, SessionState, TaskItem, Message
+from src.llm.handlers.question.mcq_handler import MCQHandler
+from src.llm.handlers.question.essay_handler import EssayHandler
+from src.llm.handlers.question.fill_handler import FillHandler
+from src.llm.handlers.question.true_false_handler import TrueFalseHandler
+from src.llm.handlers.question.scorer import QuestionScorer
+from src.llm.handlers.content.slide_handler import SlideHandler
+from src.llm.handlers.content.slide_template import SlideTemplate
+from src.llm.validators.question_validator import QuestionValidator
+from src.llm.student_tracker import StudentTracker
+from src.llm.knowledge_map import KnowledgeMap
+from src.llm.utils import extract_num_questions, format_contexts
+from src.config.config import settings
 
 class ChatBot:
-    def __init__(self, retriever, reranker_mod):
+    """
+    Orchestrator chính cho Phase 2.
+    Điều phối Intent Detection -> RAG -> Generation -> Validation -> Tracking.
+    """
+    
+    def __init__(self, retriever, reranker):
         self.retriever = retriever
-        self.reranker = reranker_mod
-
-        # Session handling
-        self.sessions: List[SessionState] = []
-        self.current_session: Optional[SessionState] = None
+        self.reranker = reranker
         
-        # Initialize handlers
-        self.question_gen = QuestionGenerator(
-            retriever=retriever,
-            reranker=reranker_mod
-        )
-        self.response_formatter = ResponseFormatter()
-        self.answer_scorer = AnswerScorer()
-        self.fallback = FallbackHandler()
-
-    # Format chat history theo session (CHO LLM)
-    def _format_chat_history(self, messages):
-        """
-        Only include messages from the current session.
-        """
-        if not self.current_session:
-            return ""
+        # Core Components
+        self.intent_detector = IntentDetector()
+        self.memory = MemoryManager()
         
-        session_messages = self.current_session.messages
-        formatted = []
+        # Handlers
+        self.question_handlers = {
+            "mcq": MCQHandler(),
+            "essay": EssayHandler(),
+            "fill_blank": FillHandler(),
+            "true_false": TrueFalseHandler()
+        }
+        self.scorer = QuestionScorer()
+        self.slide_handler = SlideHandler()
+        self.validator = QuestionValidator()
+        self.knowledge_map = KnowledgeMap()
+        self.student_tracker = StudentTracker()
 
-        for msg in session_messages:
-            if isinstance(msg, HumanMessage):
-                formatted.append(f"User: {msg.content}")
-            elif isinstance(msg, AIMessage):
-                formatted.append(f"Assistant: {msg.content}")
+    def ask(self, query: str, session_id: Optional[int] = None) -> Generator[str, None, None]:
+        """Luồng xử lý chính."""
+        # 1. Get/Create Session
+        session = self.memory.get_session(session_id) if session_id else self.memory.create_session()
+        session_id = session.session_id
+        
+        # 2. Detect Intent
+        intent_result = self.intent_detector.detect(query)
+        session.intent = intent_result.get("intent", "chat")
+        session.task_type = intent_result.get("task_type")
+        
+        # 3. Handle Intents
+        if session.intent == "generate_question":
+            yield from self._handle_generate_question(query, session)
+        elif session.intent == "check_answer":
+            yield from self._handle_check_answer(query, session)
+        elif session.intent == "generate_slide":
+            yield from self._handle_generate_slide(query, session)
+        else:
+            # Fallback chat
+            yield "Chào bạn! Mình có thể giúp bạn tạo câu hỏi ôn tập, chấm bài hoặc tạo slide bài giảng. Bạn đang quan tâm đến nội dung nào?"
 
-        return "\n".join(formatted)
-    
-
-
-    def _parse_mcq_from_response(self, response: str) -> List[dict]:
-        """
-        Extract MCQ list from JSON string generated by LLM.
-        Expected format:
-        { "mcq": [ {...}, {...} ] }
-        """
-        if not response:
-            return []
-
-        try:
-            data = json.loads(response)
-        except JSONDecodeError:
-            return []
-
-        mcq_list = data.get("mcq", [])
-        if not isinstance(mcq_list, list):
-            return []
-
-        return mcq_list
-
-    # Start new session
-    def _start_new_session(self):
-        session = SessionState(
-            session_id=len(self.sessions)
-        )
-        self.sessions.append(session)
-        self.current_session = session
-
-    
-    # Save questions to current session
-    def _is_valid_mcq(self, q: dict) -> bool:
-        """
-        Validate câu hỏi trắc nghiệm ABCD
-        """
-        if "question" not in q:
-            return False
-
-        options = q.get("options")
-        if not isinstance(options, dict):
-            return False
-
-        required_keys = {"A", "B", "C", "D"}
-        if set(options.keys()) != required_keys:
-            return False
-
-        correct = q.get("correct_answer")
-        if correct not in required_keys:
-            return False
-
-        return True
-    
-    def _save_questions_to_session(self, original_query: str, questions: List[dict]):
-        if not self.current_session:
+    def _handle_generate_question(self, query: str, session: SessionState) -> Generator[str, None, None]:
+        yield " đang tìm kiếm tài liệu liên quan..."
+        
+        # RAG Search
+        contexts = self._get_rag_context(query)
+        if not contexts:
+            yield "Xin lỗi, mình không tìm thấy tài liệu phù hợp trong kho SGK để tạo câu hỏi."
             return
-
-        for q in questions:
-            if not self._is_valid_mcq(q):
-                # Skip câu lỗi format
-                continue
-
-            item = QuestionItem(
-                index=len(self.current_session.questions),
-                original_query=original_query,
-                generated_question=q["question"],
-                options=q["options"],          # dict A-D
-                correct_answer=q["correct_answer"],
-                explanation=q.get("explanation", "")
+            
+        context_text = format_contexts(contexts)
+        task_type = session.task_type or "mcq"
+        handler = self.question_handlers.get(task_type, self.question_handlers["mcq"])
+        num_q = extract_num_questions(query) or 3
+        
+        yield f" đang soạn {num_q} câu hỏi {task_type.upper()}..."
+        
+        # Loop để retry nếu validation fail (tối đa 2 lần)
+        max_retries = 2
+        for attempt in range(max_retries):
+            # Generate
+            raw_questions = handler.handle(query, context_text, num_questions=num_q)
+            
+            # Validate (Node #2)
+            yield " đang kiểm duyệt chất lượng..."
+            validation_result = self.validator.validate(
+                question_type=task_type,
+                context=context_text,
+                questions_json=json.dumps(raw_questions.model_dump())
             )
+            
+            if validation_result.all_valid or validation_result.approved_questions:
+                # Lưu vào session
+                for q in validation_result.approved_questions:
+                    session.items.append(TaskItem(type=task_type, content=q, index=len(session.items)))
+                
+                # Hiển thị
+                yield "\n\n" + raw_questions.to_display_format()
+                
+                # Knowledge relation (optional)
+                relations = self.knowledge_map.find_relations(context_text)
+                if relations:
+                    yield "\n\n💡 *Kiến thức liên quan:* " + ", ".join([r['topic'] for r in relations[:2]])
+                break
+            else:
+                if attempt == max_retries - 1:
+                    yield "Hệ thống đang gặp chút khó khăn khi tạo câu hỏi chính xác. Bạn thử hỏi cụ thể hơn nhé!"
 
-            self.current_session.questions.append(item)
-
-
-    def ask(self, query: str, stream: bool = True):
-        if not isinstance(query, str) or not query.strip():
-            yield "Please provide a valid question."
+    def _handle_check_answer(self, query: str, session: SessionState) -> Generator[str, None, None]:
+        if not session.items:
+            yield "Bạn chưa có câu hỏi nào để trả lời. Hãy yêu cầu mình tạo câu hỏi trước nhé!"
             return
+            
+        yield " đang chấm điểm..."
+        
+        # Scorer
+        result = self.scorer.handle(query, session.items)
+        
+        if result.status == "found":
+            # Track progress (in-memory)
+            self.student_tracker.update_stats(
+                session=session,
+                topic=session.topic or "Chung",
+                question_type=session.items[result.question_index].type if result.question_index is not None else "unknown",
+                is_correct=result.is_correct
+            )
+            
+            # Response message
+            icon = "✅" if result.is_correct else "❌"
+            yield f"\n\n{icon} **{result.explanation}**"
+            if result.score is not None:
+                yield f"\n📊 Điểm số: {result.score}/10"
+            
+            # Show overall summary periodically
+            if session.quiz_stats.total_questions % 3 == 0:
+                yield "\n\n---\n" + self.student_tracker.get_summary(session)
+        else:
+            yield f"\n\n🤔 {result.explanation}"
 
-        query = query.strip()
+    def _handle_generate_slide(self, query: str, session: SessionState) -> Generator[str, None, None]:
+        yield " đang phân tích nội dung để thiết kế bài giảng..."
+        
+        # RAG Search
+        contexts = self._get_rag_context(query)
+        if not contexts:
+            yield "Không tìm thấy nội dung bài học phù hợp để tạo slide."
+            return
+            
+        context_text = format_contexts(contexts)
+        
+        # Sinh slide
+        # Giả định metadata lấy từ query hoặc context (simple version)
+        slide_output = self.slide_handler.handle(
+            book="Kết nối tri thức", grade="10", lesson="Bài học", 
+            context=context_text
+        )
+        
+        # Render HTML
+        html_output = SlideTemplate.render_to_html(slide_output)
+        
+        # Trả về link hoặc nội dung (Trong Gradio/Web sẽ render HTML này)
+        yield f"\n\n📊 Đã tạo xong {slide_output.total_slides} slides bài giảng cho '{slide_output.lesson_title}'."
+        yield "\n\n" + slide_output.to_display_format()
+        
+        # Metadata chứa HTML để UI render
+        session.metadata["last_slide_html"] = html_output
 
-        # Routing query
-        label = routing_query(query)
-
-        # LABEL 0 → GENERATE NEW MCQ QUESTIONS + SAVE TO STATE
-        if label == 0:
-
-            # luôn mở session mới
-            self._start_new_session()
-
-            try:
-                # sinh MCQ JSON using handler
-                response_json = self.question_gen.handle(query)
-                
-                # lưu hội thoại vào session
-                self.current_session.messages.append(HumanMessage(content=query))
-                self.current_session.messages.append(AIMessage(content=response_json))
-
-                # parse JSON thành list QuestionItem
-                mcq_items = self._parse_mcq_from_response(response_json)
-
-                # lưu vào state
-                self._save_questions_to_session(
-                    original_query=query,
-                    questions=mcq_items
-                )
-                
-                # Format and stream response
-                if stream:
-                    yield response_json
-                    return
-                else:
-                    return response_json
-                    
-            except Exception as e:
-                error_msg = f"❌ Lỗi tạo câu hỏi: {str(e)[:50]}"
-                if stream:
-                    yield error_msg
-                else:
-                    return error_msg
-
-        # LABEL 1 → CHECK ANSWER USING SAVED STATE
-        if label == 1:
-
-            # không có câu hỏi trước đó
-            if (not self.current_session) or (not self.current_session.questions):
-                msg = "Hiện tại chưa có câu hỏi nào để chấm đáp án."
-                if stream:
-                    yield msg
-                    return
-                else:
-                    return msg
-
-            try:
-                # Use answer scorer handler
-                scorer_result = self.answer_scorer.handle(
-                    user_answer=query,
-                    questions=self.current_session.questions
-                )
-                if stream:
-                    yield scorer_result
-                    return
-                else:
-                    return scorer_result
-            except Exception as e:
-                error_msg = f"❌ Lỗi chấm điểm: {str(e)[:50]}"
-                if stream:
-                    yield error_msg
-                    return
-                else:
-                    return error_msg
-
-        # LABEL 2 → FALLBACK NORMAL CHAT
-        if label == 2:
-
-            try:
-                fallback_answer = self.fallback.handle(query)
-                if stream:
-                    yield fallback_answer
-                    return
-                else:
-                    return fallback_answer
-            except Exception as e:
-                error_msg = f"❌ Lỗi: {str(e)[:50]}"
-                if stream:
-                    yield error_msg
-                    return
-                else:
-                    return error_msg
-
-    
-    def get_current_session(self) -> Optional[SessionState]:
-        return self.current_session
-
-    def get_all_sessions(self) -> List[SessionState]:
-        return self.sessions
+    def _get_rag_context(self, query: str) -> List[Dict]:
+        """BM25 + FAISS + Rerank."""
+        results = self.retriever.hybrid_search_RRF(query, top_k=settings.RETRIEVER_TOP_K)
+        if not results: return []
+        return self.reranker.rerank(query, results, top_n=settings.RERANKER_TOP_N)
     
 
 

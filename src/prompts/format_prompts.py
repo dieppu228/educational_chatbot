@@ -2,7 +2,7 @@
 Response formatting prompts for displaying MCQ questions.
 """
 
-from .base import PromptTemplate
+from src.prompts.base import PromptTemplate
 
 # ============================================================
 # RESPONSE FORMATTING PROMPT

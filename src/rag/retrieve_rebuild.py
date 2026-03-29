@@ -54,7 +54,7 @@ class CustomSearch:
         # === Embedding model (lazy load) ===
         self._model = None
         
-        print(f"✅ CustomSearch initialized: {self.corpus_size} docs, "
+        print(f" CustomSearch initialized: {self.corpus_size} docs, "
               f"vocab={len(self.df)}, avgdl={self.avgdl:.1f}")
     
     @property
@@ -224,42 +224,3 @@ class CustomSearch:
             }
             for doc_id, score in combined
         ]
-
-
-# ============================================================
-# TEST
-# ============================================================
-
-if __name__ == "__main__":
-    PROJECT_DIR = Path(__file__).resolve().parent.parent
-    
-    CHUNKS_PATH = str(PROJECT_DIR / "data" / "rag_chunks_v2.json")
-    EMBEDDINGS_PATH = str(PROJECT_DIR / "data" / "embeddings.npy")
-    
-    print("=" * 60)
-    print("TEST CUSTOM SEARCH (BM25 + Semantic + RRF)")
-    print("=" * 60)
-    
-    searcher = CustomSearch(
-        chunks_path=CHUNKS_PATH,
-        embeddings_path=EMBEDDINGS_PATH,
-    )
-    
-    test_queries = [
-        "mạng máy tính là gì",
-        "hệ điều hành có chức năng gì",
-        "cách biểu diễn số nguyên trong máy tính",
-    ]
-    
-    for q in test_queries:
-        print(f"\n🔍 Query: '{q}'")
-        results = searcher.search(q, top_k=5)
-        
-        for i, r in enumerate(results):
-            meta = r["metadata"]
-            preview = r["content"][:80].replace('\n', ' ')
-            print(f"  [{i+1}] score={r['score']:.4f} | "
-                  f"{meta.get('book','')}-{meta.get('grade','')} {meta.get('lesson','')} | "
-                  f"{preview}...")
-    
-    print("\n✅ Test hoàn tất!")

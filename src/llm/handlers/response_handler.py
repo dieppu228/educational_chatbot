@@ -2,11 +2,12 @@
 
 import json
 from typing import Optional, Dict, Any
-from .base_handler import BaseHandler
-from src.llm.prompts import RESPONSE_FORMATTING_PROMPT, UTILITY_SCORING_PROMPT
-from src.llm.validators import validate_json_response, extract_answer_from_query
+from src.llm.handlers.base_handler import BaseHandler
+from src.prompts.format_prompts import RESPONSE_FORMATTING_PROMPT
+from src.prompts.scoring_prompts import UTILITY_SCORING_PROMPT
+from src.llm.validation_utils import validate_json_response, extract_answer_from_query
 from src.llm.utils import extract_question_index_from_query, fuzzy_match_option
-from src.config import settings
+from src.config.config import settings
 from core import ScoringResult
 
 
