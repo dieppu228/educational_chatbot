@@ -1,299 +1,156 @@
-# 📚 Educational Chatbot — Vietnamese RAG System
+# Hệ Thống Trợ Lý Học Tập Thông Minh (Educational Chatbot)
 
-Hệ thống chatbot giáo dục thông minh phục vụ dạy-học **Tin học THPT** (lớp 10-12), xây dựng trên kiến trúc **RAG (Retrieval-Augmented Generation)** kết hợp LLM.
+Dự án Đồ án Tốt nghiệp thiết kế và xây dựng một hệ thống Trợ lý ảo hỗ trợ dạy và học chuyên môn Tin học cấp THPT (Lớp 10-12). Hệ thống được phát triển dựa trên kiến trúc RAG (Retrieval-Augmented Generation) kết hợp với mô hình LLM theo hướng tiếp cận Multi-Agent, nhằm khắc phục các hạn chế về ảo giác thông tin (Hallucination) và nâng cao độ chính xác theo sát sách giáo khoa.
 
-Hỗ trợ đa tác vụ: hỏi đáp kiến thức, sinh câu hỏi (trắc nghiệm, tự luận, đục lỗ), sinh slide bài giảng, sinh giáo án.
+## 1. Giới thiệu chung
 
----
+Mục tiêu của hệ thống là cung cấp một công cụ tự động hóa các tác vụ học thuật phức tạp, phục vụ cả học sinh và giáo viên.
 
-## 🏗️ Kiến trúc tổng quan
+**Các chức năng cốt lõi:**
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    User Interface (Gradio)                   │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │  Intent     │  Gemini Flash Lite
-                    │  Detector   │  → {intent, task_type, topic}
-                    └──────┬──────┘
-                           │
-          ┌────────────────┼─────────────────────────┐
-          │                │                         │
-   ┌──────▼──────┐  ┌─────▼──────┐          ┌──────▼──────┐
-   │  Question   │  │  Content   │          │  Knowledge  │
-   │  Handlers   │  │  Handlers  │          │  Handlers   │
-   │             │  │            │          │             │
-   │ • MCQ       │  │ • Slide    │          │ • Chat      │
-   │ • Essay     │  │ • Lesson   │          │ • Explain   │
-   │ • Fill      │  │   Plan     │          │ • Scorer    │
-   └──────┬──────┘  └─────┬──────┘          └──────┬──────┘
-          │                │                       │
-          └────────────────┼───────────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │  RAG Core   │
-                    │             │
-                    │ Query       │
-                    │ Rewriter    │──→ Gemini Flash Lite
-                    │    ↓        │
-                    │ Hybrid      │
-                    │ Search      │──→ BM25 + Semantic + RRF
-                    │    ↓        │
-                    │ Reranker    │──→ Vietnamese_Reranker
-                    └──────┬──────┘
-                           │
-                    ┌──────▼──────┐
-                    │ Memory      │
-                    │ Manager     │──→ Session, TaskItems
-                    └─────────────┘
-```
+- **Truy vấn kiến thức chuyên môn (QA):** Trả lời các câu hỏi dựa trên kho ngữ liệu sách giáo khoa chuẩn (Cánh Diều và Kết Nối Tri Thức).
+- **Trích xuất và Sinh câu hỏi (Quiz Generation):** Tự động khởi tạo hệ thống bài tập theo nhiều định dạng (Trắc nghiệm nhiều lựa chọn, Điền khuyết, Đúng/Sai, Tự luận) với số lượng và độ khó tùy chỉnh.
+- **Đánh giá và Chấm điểm (Answer Scoring):** Chấm điểm tự động và cung cấp lập luận sửa ý sai dựa trên context thực tế thay vì chỉ đối chiếu từ khóa.
+- **Sinh cấu trúc bài giảng (Slide/Lesson Plan Generation):** Chuyển đổi nội dung văn bản thành cấu trúc tóm tắt phục vụ cho việc tạo trình chiếu hoặc giáo án.
 
 ---
 
-## 🔄 End-to-End Flow
+## 2. Pipeline hệ thống chi tiết
 
-### Phase 0: Data Preparation (Offline — chạy 1 lần)
-
-```
-SGK PDF (6 sách: CD + KNTT, lớp 10-12)
-    │
-    ▼  OCR + Clean
-rawdata/*.md (6 file markdown)
-    │
-    ▼  Hierarchical Chunking (src/rag/chunking.py)
-data/rag_chunks_v2.json (2348 chunks)
-    │   Mỗi chunk có: content, context (breadcrumb), metadata (book, grade, lesson, topic, type)
-    │
-    ▼  Embedding (src/rag/embedding.py)
-data/embeddings.npy (2348 × 768 vectors, L2-normalized)
-    │   Model: dangvantuan/vietnamese-document-embedding
-    │
-    ▼  BM25 Index (build on-the-fly)
-    Tokenize → TF/DF/IDF → vocab 17139 terms
-```
-
-### Phase 1: User Query → Intent Detection
-
-```
-User: "Tạo 5 câu trắc nghiệm về mạng LAN"
-    │
-    ▼  IntentDetector (Gemini Flash Lite, ~0.3s)
-{
-    "intent": "generate_question",
-    "task_type": "mcq",
-    "topic": "mạng LAN"
-}
-    │
-    ▼  Dispatch → MCQHandler
-```
-
-Các intents hỗ trợ:
-
-| Intent | Mô tả | Task Types |
-|---|---|---|
-| `generate_question` | Sinh câu hỏi | `mcq`, `essay`, `fill_blank`, `true_false` |
-| `check_answer` | Chấm đáp án | — |
-| `generate_slide` | Sinh slide bài giảng | — |
-| `generate_lesson_plan` | Sinh giáo án | — |
-| `explain` | Giải thích chuyên sâu | — |
-| `chat` | Hỏi đáp chung | — |
-
-### Phase 2: RAG Retrieval
-
-```
-Topic: "mạng LAN"
-    │
-    ▼  Query Rewriter (Gemini Flash Lite, ~1s)
-    Sinh 2-3 truy vấn bổ sung:
-      [0] "mạng LAN"
-      [1] "khái niệm mạng cục bộ LAN, kết nối thiết bị phạm vi nhỏ"
-      [2] "phân loại mạng máy tính LAN WAN Internet"
-    │
-    ▼  Hybrid Search per query (CustomSearch, ~0.2s)
-    ┌────────────────────────────────────┐
-    │  BM25 Search (keyword matching)    │
-    │  • Tokenize query → TF-IDF score   │
-    │  • k1=1.2, b=0.75                  │
-    │                                    │
-    │  Semantic Search (vector matching)  │
-    │  • Encode query → 768-dim          │
-    │  • Cosine similarity (numpy dot)   │
-    │                                    │
-    │  RRF Fusion (k=60)                 │
-    │  • Merge BM25 + Semantic ranks     │
-    │  • score = Σ 1/(k + rank_i)        │
-    └──────────────┬─────────────────────┘
-                   │
-                   ▼  Merge unique docs từ tất cả queries
-              ~15-30 candidate docs
-    │
-    ▼  Reranker (AITeamVN/Vietnamese_Reranker, ~20s CPU)
-    Cross-encoder scoring: (query, doc) → relevance score
-    │
-    ▼  Filter & Top-K
-    Bỏ trùng lặp, quá ngắn → top 5 docs
+Hệ thống được thiết kế theo luồng xử lý Multi-Agent kết hợp với cơ chế RAG chuyên sâu. Quy trình (End-to-End Workflow) đi qua các giai đoạn độc lập:
+```text
+┌────────────────────────────────────────────────────────┐
+│                   User Message / Query                 │
+└───────────────────────────┬────────────────────────────┘
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│               1. Intent Detector Agent                 │
+│  (Extracts: Intent, Task Type, Topic, Specific Info)   │
+└───────────────────────────┬────────────────────────────┘
+                            ▼
+                    [ Dispatcher ] ────────────┐
+                            │                  │
+                      (Match Task)             │
+                            ▼                  ▼
+┌──────────────────────────────────┐   ┌───────────────┐
+│        Specialist Handlers       │   │ General Chat  │
+│  (Question / Explain / Slide...) │   │   Handler     │
+└─────────────────┬────────────────┘   └───────────────┘
+                  │
+                  ▼
+┌────────────────────────────────────────────────────────┐
+│            2. Advanced RAG Pipeline Core               │
+│                                                        │
+│  a. Query Rewriting (Expands query context)            │
+│          │                                             │
+│  b. Hybrid Search ──▶ Lexical (Custom BM25)            │
+│                   ──▶ Semantic (Vector Embedding)      │
+│          │                                             │
+│  c. RRF (Reciprocal Rank Fusion - Score merging)       │
+│          │                                             │
+│  d. Reranking (Cross-Encoder threshold filtering)      │
+└─────────────────────────┬──────────────────────────────┘
+                          │      ┌───────────────────────┐
+                          ├──────┤  Document Datastore   │
+                          │      │  (Text Chunks / JSON) │
+                          ▼      └───────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│          3. Generation & Validator (Reflection)        │
+│                                                        │
+│   ┌───────────────────┐        ┌───────────────────┐   │
+│   │   Generator LLM   │───────▶│  Validator Agent  │   │
+│   │ (Drafts Content)  │◀───────│ (Check & Reflect) │   │
+│   └───────────────────┘        └───────────────────┘   │
+└───────────────────────────┬────────────────────────────┘
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                 Final Response / UI Output             │
+└────────────────────────────────────────────────────────┘
 ```
 
-### Phase 3: LLM Generation
+### 2.1. Phân loại Ý định (Intent Detection)
 
-```
-Top 5 docs (context) + User query + Prompt
-    │
-    ▼  Handler tương ứng (Gemini API)
-    ┌────────────────────────────────────┐
-    │  MCQHandler:                       │
-    │    Context + "Sinh 5 câu trắc      │
-    │    nghiệm ABCD" → JSON response   │
-    │                                    │
-    │  EssayHandler:                     │
-    │    Context + "Sinh câu tự luận"    │
-    │    → câu hỏi + đáp án mẫu         │
-    │                                    │
-    │  SlideHandler:                     │
-    │    All chunks of lesson → danh     │
-    │    sách slides (title + bullets)   │
-    │                                    │
-    │  ChatHandler:                      │
-    │    Context + query → trả lời tự    │
-    │    nhiên bằng tiếng Việt           │
-    └──────────────┬─────────────────────┘
-                   │
-                   ▼
-              Response
-```
+Khi hệ thống tiếp nhận truy vấn ngôn ngữ tự nhiên từ người dùng, `IntentDetector Agent` sẽ phân tích ngữ nghĩa để trích xuất 3 thực thể tham số (Entities):
 
-### Phase 4: Memory & Response
+- `intent`: Mục đích thực thụ của câu lenh (Chat, Generate Question, Explain, v.v).
+- `task_type`: Định dạng đầu ra mong muốn (Ví dụ: `mcq`, `essay`).
+- `topic`: Chủ đề kiến thức người dùng đang muốn nhắm tới.
 
-```
-Response
-    │
-    ▼  MemoryManager
-    Lưu vào SessionState:
-    • intent, task_type, topic
-    • items: List[TaskItem] (linh hoạt theo type)
-    • messages: List[Message] (conversation history)
-    │
-    ▼  Return to User (Gradio UI)
-```
+Lệnh trích xuất sau đó được bộ Dispatcher định tuyến tới Specialist Handler (Tác tử chuyên môn) tương ứng.
+
+### 2.2. Xử lý Truy xuất Hệ thống RAG (Advanced RAG Pipeline)
+
+Để đảm bảo LLM nhận được tập tài liệu (Context) chính xác nhất, hệ thống triển khai pipeline Retrieval với 4 bước tối ưu độ trễ và độ chụm:
+
+1. **Query Rewriting:** LLM Agent phân tách và viết lại câu hỏi gốc thành các biến thể (queries) nhằm bao quát không gian ngữ nghĩa, tăng chỉ số Recall.
+2. **Hybrid Search:** Thực hiện tìm kiếm song song trên không gian Vector:
+   - **Lexical Search:** Sử dụng module `Custom BM25` độc lập (TF-IDF cải tiến) để truy vết chính xác từ khóa đặc thù ngành.
+   - **Semantic Search:** Sử dụng Cosine Similarity trên mô hình Embedding để tìm sự tương đồng về ngữ nghĩa.
+3. **Reciprocal Rank Fusion (RRF):** Thuật toán chuẩn hóa và hòa trộn (Merge) kết quả xếp hạng từ hai bộ máy tìm kiếm ở bước 2.
+4. **Cross-Encoder Reranking:** Sử dụng mô hình `Vietnamese_Reranker` để tính toán khoảng cách vector tuyến tính giữa Query và Top N Document. Lọc bỏ các chunk bị nhiễu do trùng lặp hoặc chứa điểm số liên quan (`rerank_score`) dưới ngưỡng.
+
+### 2.3. Sinh nội dung và Vùng Phản Biện (Generation & Self-Reflection)
+
+Tài liệu sau khi lọc được đóng gói cùng Query và nạp vào LLM để sinh kết quả (JSON Formatting).
+Tại pha này, hệ thống áp dụng cơ chế Self-Reflection thông qua một `Validator Agent`. Kết quả sau khi sinh sẽ được Agent này trích xuất ngược để đối soát chéo với Context ban đầu nhằm đảm bảo các yêu cầu cấu trúc và không vi phạm điều kiện logic. Nếu xác thực thất bại, tiến trình Generation sẽ được gọi đệ quy để thực thi lại đến khi đạt quy chuẩn.
+
+### 2.4. Đo lường độc lập (RAGAS Evaluation Pipeline)
+
+Để đánh giá định lượng hiệu năng hệ thống RAG, dự án tích hợp một pipeline đánh giá độc lập tự động:
+
+- **Testset Generator:** Tự động tổng hợp 50-100 Samples (Query, Ground Truth Answer) ngẫu nhiên từ kho JSON chunks SGK.
+- **RAGAS Evaluator:** Sử dụng framework chuẩn đo lường 4 hệ số: _Answer Relevancy_, _Faithfulness_, _Context Precision_, và _Context Recall_.
 
 ---
 
-## 🛠️ Tech Stack
+## 3. Tech Stack (Công nghệ triển khai)
 
-| Component | Technology | Ghi chú |
-|---|---|---|
-| **LLM API** | Gemini 2.5 Flash Lite | Intent detection, query rewrite, generation |
-| **Embedding** | dangvantuan/vietnamese-document-embedding | 768-dim, SentenceTransformer |
-| **Reranker** | AITeamVN/Vietnamese_Reranker | CrossEncoder, tiếng Việt |
-| **Search** | Custom BM25 + Semantic + RRF | Tự build, không dùng FAISS/rank_bm25 |
-| **UI** | Gradio | Web interface |
-| **Config** | Pydantic Settings + dotenv | Quản lý API keys, paths |
+Hệ thống được phát triển tách biệt thành các modules để đảm bảo tính mở rộng cao (Scalability).
 
----
+**1. Core LLM & Orchestration:**
 
-## 📊 Baseline Performance
+- **Mô hình ngôn ngữ:** Google Gemini (`gemini-2.5-pro` & `gemini-2.5-flash`) thông qua `google-genai` SDK.
+- **Quản lý Agent:** Python hướng đối tượng (OOP) xây dựng kiến trúc State Machine nội bộ thay cho các framework nặng.
 
-| Metric | Giá trị |
-|---|---|
-| Corpus | 2348 chunks (6 sách THPT) |
-| Embedding | 768-dim, L2-normalized |
-| BM25 vocab | 17139 terms |
-| Latency tổng | ~21s (CPU) |
-| Rewrite | ~1s |
-| Search | ~0.2s |
-| Rerank | ~20s (bottleneck — CPU cross-encoder) |
-| Top-1 accuracy (manual) | Cao — "mạng máy tính" → đúng chunk CD-12 Bài 1 (score=0.999) |
+**2. Retrieval & Vector Core:**
+
+- **Mô hình Nhúng (Embedding):** `dangvantuan/vietnamese-document-embedding` (Dựa trên kiến trúc `HuggingFaceEmbeddings` / `SentenceTransformer`, không gian 768 chiều).
+- **Mô hình Xếp hạng lại (Reranker):** `AITeamVN/Vietnamese_Reranker` (Kiến trúc Cross-Encoder chạy trên torch/CUDA).
+- **Search Engine:** Vector không gian được thực toán hóa bằng `Numpy` Thuần + Thuật toán `BM25 TF-IDF Analyzer` tự lập trình để tránh hao tổn tài nguyên và dependency thư viện native (như FAISS).
+
+**3. Infrastructure & UI:**
+
+- **Giao diện Người dùng:** `Gradio` Web Framework.
+- **Hệ thống Đo lường (Evaluation):** `ragas==0.4.3` chạy qua CLI Argument Parser (`run_eval.py`).
+- **Data Engineering:** Regular Expression (Regex) kết hợp Chunking phân cấp (Hierarchical Document Splitting) xử lý văn bản phi cấu trúc (Markdown).
 
 ---
 
-## 🚀 Cài đặt & Chạy
+## 4. Hướng dẫn Local Setup
 
-### 1. Clone & Install
+Quá trình triển khai Local Requirement yêu cầu môi trường Python >= 3.12:
 
 ```bash
+# 1. Clone Source Code
 git clone https://github.com/KhacDiep08/Educational-Chatbot.git
 cd Educational-Chatbot
+
+# 2. Cài đặt Dependencies
 pip install -r requirements.txt
-```
 
-### 2. Setup API Key
-
-```bash
-# Tạo file .env
+# 3. Phân bổ API Keys
 echo GENAI_API_KEY=your_key_here > .env
-```
 
-### 3. Chạy RAG Pipeline (test)
-
-```bash
-# Chạy notebook baseline
-jupyter notebook src/rag/pipeline_baseline.ipynb
-```
-
-### 4. Chạy Gradio UI
-
-```bash
+# 4. Khởi chạy Ứng dụng Server UI
 python app_gradio.py
-# Mở http://127.0.0.1:7860
+```
+
+Khởi chạy tập lệnh đo lường Metric RAGAS Report (Option):
+
+```bash
+python -m src.evaluation.run_eval --step all
 ```
 
 ---
 
-## 📦 Cấu trúc project
-
-> Chi tiết xem [REPO_STRUCTURE.md](REPO_STRUCTURE.md)
-
-```
-ĐATN/
-├── src/                    Source code chính
-│   ├── rag/                RAG Pipeline (search, rerank, embed, eval)
-│   ├── llm/                LLM Generation (handlers, intents, memory)
-│   ├── config/             Cấu hình (API keys, constants)
-│   ├── schemas/            Pydantic schemas
-│   └── prompts/            Prompt templates
-├── data/                   Chunks + Embeddings
-├── rawdata/                SGK raw markdown
-├── CD/, KNTT/              PDF gốc
-├── app_gradio.py           Entry point
-├── plan.md                 Roadmap
-└── requirements.txt
-```
-
----
-
-## 📋 Dữ liệu đầu vào
-
-| Bộ SGK | Lớp | Số chunks |
-|---|---|---|
-| Cánh Diều (CD) | 10, 11, 12 | ~1200 |
-| Kết Nối Tri Thức (KNTT) | 10, 11, 12 | ~1100 |
-| **Tổng** | | **2348** |
-
-Mỗi chunk bao gồm:
-- `content`: Nội dung văn bản
-- `context`: Breadcrumb (Topic → Lesson → Section → Title)
-- `metadata`: book, grade, topic, lesson, section, type (theory/exercise/summary)
-
----
-
-## 📈 Roadmap
-
-> Chi tiết xem [plan.md](plan.md)
-
-- [x] **Phase 1**: RAG Pipeline (BM25 + Semantic + RRF + Reranker + Query Rewrite)
-- [ ] **Phase 1.5**: RAG Evaluation (benchmark 50 câu, Recall@k, MRR)
-- [ ] **Phase 2**: Gemini API features (Slide + Giáo án)
-- [ ] **Phase 3**: LLM Self-host + Fine-tune (7B model, QLoRA)
-
----
-
-## 👨‍💼 Thông tin
-
-- **Sinh viên**: Khắc Diệp
-- **Trường**: Đại học Bách khoa Hà Nội (HUST)
-- **Đồ án tốt nghiệp**: 2025-2026
-
----
-
-**Last Updated**: March 21, 2026 | **Version**: 2.0.0
+_Thông tin sinh viên thực hiện: Khắc Diệp (Đại học Bách Khoa Hà Nội)._
