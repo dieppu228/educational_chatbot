@@ -1,4 +1,5 @@
 from typing import List, Dict, Optional, Any
+import json
 from src.llm.handlers.base_handler import BaseHandler
 from src.prompts.base import PromptTemplate
 
@@ -66,4 +67,3 @@ class KnowledgeMap(BaseHandler):
         """KnowledgeMap không dùng handle trực tiếp."""
         pass
 
-import json

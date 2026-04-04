@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gemini-2.5-flash-lite"
     
     # ===== Retrieval Configuration =====
-    RETRIEVER_TOP_K: int = 60
-    RERANKER_TOP_N: int = 10
+    RETRIEVER_TOP_K: int = 25
+    RERANKER_TOP_N: int = 5
     RRF_K_WEIGHT: int = 60
     
     # ===== Question Generation =====
@@ -29,17 +29,23 @@ class Settings(BaseSettings):
     
     # ===== Model Names =====
     EMBEDDING_MODEL: str = "dangvantuan/vietnamese-document-embedding"
-    RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    RERANKER_MODEL: str = "AITeamVN/Vietnamese_Reranker"
     
     # ===== File Paths =====
     DATA_DIR: str = "data"
-    CHUNKS_FILE: str = "rag_chunks.json"
+    CHUNKS_FILE: str = "rag_chunks_v2.json"
     EMBEDDINGS_FILE: str = "embeddings.npy"
     
     # ===== Logging =====
     LOG_DIR: str = "logs"
     LOG_FILE: str = "app.log"
     LOG_LEVEL: str = "INFO"
+    
+    # ===== Evaluation (RAGAS) =====
+    EVAL_NUM_SAMPLES: int = 50
+    EVAL_LLM_MODEL: str = "gemini-2.5-flash"
+    EVAL_EMBEDDING_MODEL: str = "dangvantuan/vietnamese-document-embedding"
+    EVAL_OUTPUT_DIR: str = "eval_output"
     
     class Config:
         env_file = ".env"

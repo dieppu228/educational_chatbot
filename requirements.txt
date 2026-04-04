@@ -25,3 +25,8 @@ seaborn>=0.13
 # Optional LLM / API
 openai>=2.3.0
 gradio>=5.46.1
+
+# Evaluation (RAGAS)
+ragas>=0.2
+datasets>=3.0
+langchain-google-genai>=2.1.0

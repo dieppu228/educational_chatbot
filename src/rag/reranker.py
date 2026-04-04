@@ -3,6 +3,8 @@ from typing import List, Dict, Tuple, Optional
 from sentence_transformers import CrossEncoder
 
 
+import torch
+
 class Reranker:
     """
     Reranker dùng Cross-Encoder model AITeamVN/Vietnamese_Reranker.
@@ -11,14 +13,14 @@ class Reranker:
     Chính xác hơn bi-encoder nhưng chậm hơn → chỉ dùng rerank top-N.
     """
     
-    def __init__(self, model_name: str = "AITeamVN/Vietnamese_Reranker", device: str = "cpu"):
+    def __init__(self, model_name: str = "AITeamVN/Vietnamese_Reranker", device: Optional[str] = None):
         """
         Args:
             model_name: Tên model cross-encoder trên HuggingFace
             device: "cpu" hoặc "cuda"
         """
         self.model_name = model_name
-        self.device = device
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._model = None  # Lazy load
     
     def _load_model(self):
@@ -104,31 +106,3 @@ class Reranker:
         
         return filtered
 
-
-# ============================================================
-# TEST
-# ============================================================
-
-if __name__ == "__main__":
-    # Fake results để test
-    fake_results = [
-        {"content": "Mạng máy tính là một hệ thống các thiết bị số được kết nối với nhau.", "context": "test", "metadata": {}, "score": 0.9, "doc_id": 0},
-        {"content": "Hệ điều hành quản lý tài nguyên phần cứng và phần mềm.", "context": "test", "metadata": {}, "score": 0.8, "doc_id": 1},
-        {"content": "Python là ngôn ngữ lập trình bậc cao.", "context": "test", "metadata": {}, "score": 0.7, "doc_id": 2},
-        {"content": "Internet là mạng diện rộng toàn cầu kết nối hàng tỷ thiết bị.", "context": "test", "metadata": {}, "score": 0.6, "doc_id": 3},
-        {"content": "CSS dùng để tạo kiểu cho trang web.", "context": "test", "metadata": {}, "score": 0.5, "doc_id": 4},
-    ]
-    
-    reranker = Reranker()
-    
-    query = "mạng máy tính là gì"
-    print(f"🔍 Query: '{query}'")
-    print(f"📥 Input: {len(fake_results)} docs")
-    
-    reranked = reranker.rerank(query, fake_results, top_n=3)
-    
-    print(f"\n📤 Reranked top 3:")
-    for i, r in enumerate(reranked):
-        print(f"  [{i+1}] score={r['rerank_score']:.4f} | {r['content'][:80]}...")
-    
-    print("\n✅ Reranker test done!")

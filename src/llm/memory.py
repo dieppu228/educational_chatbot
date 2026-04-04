@@ -196,6 +196,18 @@ class MemoryManager:
         recent = self.current_session.messages[-self.max_context_messages:]
         return [{"role": m.role, "content": m.content} for m in recent]
     
+    def get_session(self, session_id: int) -> Optional[SessionState]:
+        """Lấy session theo ID."""
+        for s in self.sessions:
+            if s.session_id == session_id:
+                self.current_session = s
+                return s
+        return None
+
+    def create_session(self, intent: str = "chat", **kwargs) -> SessionState:
+        """Tạo session mới (alias cho start_session)."""
+        return self.start_session(intent=intent, **kwargs)
+
     def get_items(self, item_type: str = None) -> List[TaskItem]:
         """Lấy items trong session, filter theo type nếu cần."""
         if not self.current_session:

@@ -40,6 +40,9 @@ CHỈ trả về JSON, KHÔNG giải thích:
 {{"intent": "...", "task_type": "..." hoặc null, "topic": "chủ đề chính nếu có" hoặc null}}"""
 
 
+from src.config.config import settings
+
+
 # ============================================================
 # INTENT DETECTOR CLASS
 # ============================================================
@@ -51,12 +54,12 @@ class IntentDetector:
     Output: dict {"intent": str, "task_type": str|None, "topic": str|None}
     """
     
-    def __init__(self, api_key: str = None, model_name: str = "models/gemini-2.5-flash-lite"):
-        self.api_key = api_key or os.getenv("GENAI_API_KEY", "")
+    def __init__(self, api_key: str = None, model_name: str = None):
+        self.api_key = api_key or settings.GENAI_API_KEY or os.getenv("GENAI_API_KEY", "")
         if not self.api_key:
-            raise ValueError("GENAI_API_KEY chưa được set")
+            raise ValueError("GENAI_API_KEY chưa được set. Vui lòng kiểm tra file .env hoặc settings.")
         
-        self.model_name = model_name
+        self.model_name = model_name or settings.LLM_MODEL or "models/gemini-2.5-flash-lite"
         self.client = genai.Client(api_key=self.api_key)
     
     def detect(self, query: str, memory_state: Optional[list] = None) -> dict:

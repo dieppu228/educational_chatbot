@@ -1,0 +1,119 @@
+"""
+CLI Runner — Script chính để chạy trọn bộ đánh giá RAG hoặc từng bước riêng biệt.
+
+Cách chạy:
+    python -m src.evaluation.run_eval --help
+    python -m src.evaluation.run_eval --step all
+    python -m src.evaluation.run_eval --step collect
+    python -m src.evaluation.run_eval --step evaluate
+"""
+
+import argparse
+import logging
+import sys
+
+# Thiết lập logging cho module chạy này
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+logger = logging.getLogger("eval_runner")
+
+from src.evaluation.testset_generator import TestsetGenerator
+from src.evaluation.data_collector import DataCollector
+from src.evaluation.ragas_eval import RAGASEvaluator
+from src.evaluation.report import EvalReporter
+
+# Gọi import các component xử lý Retrieve/Rerank nếu có 
+# (Dựa trên runtime pipeline của bạn, giả sử cấu trúc như sau)
+# Nếu runtime RAG pipeline bị lỗi import, bạn cần sửa đường dẫn ở đây nhé.
+try:
+    from src.rag.retrieve_rebuild import CustomSearch
+    from src.rag.reranker import Reranker
+except ImportError as e:
+    logger.warning(f"Chưa import được rag elements: {e}. Vui lòng kiểm tra lại nếu chạy '--step collect'!")
+    CustomSearch = None
+    Reranker = None
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Chạy bộ đánh giá hệ thống RAG (Ragas Evaluation).")
+    parser.add_argument(
+        "--step",
+        choices=["testset", "collect", "evaluate", "report", "all"],
+        default="all",
+        help="Bước cần thực thi theo trình tự: testset -> collect -> evaluate -> report",
+    )
+    parser.add_argument(
+        "--num_samples",
+        type=int,
+        default=50,
+        help="Số lượng mẫu sẽ tạo khi sinh Testset (Mặc định 50).",
+    )
+    
+    args = parser.parse_args()
+    logger.info(f"Khởi động Eval Runner, chế độ: {args.step.upper()}")
+
+    # 1. Sinh Testset
+    if args.step in ["all", "testset"]:
+        logger.info("\n--- BƯỚC 1: SINH TESTSET ---")
+        gen = TestsetGenerator()
+        gen.generate(num_samples=args.num_samples)
+    
+    # 2. Thu thập dữ liệu
+    if args.step in ["all", "collect"]:
+        logger.info("\n--- BƯỚC 2: CHẠY DATA COLLECTION ---")
+        if CustomSearch is None or Reranker is None:
+            logger.error("Thiết lập CustomSearch/Reranker không thành công. Dừng tiến trình collect.")
+            sys.exit(1)
+            
+        from pathlib import Path
+        from src.config.config import settings
+        chunks_path = str(Path(settings.DATA_DIR) / settings.CHUNKS_FILE)
+        embeddings_path = str(Path(settings.DATA_DIR) / settings.EMBEDDINGS_FILE)
+        
+        # Khởi tạo instance cho Retriever và Reranker
+        retriever = CustomSearch(chunks_path=chunks_path, embeddings_path=embeddings_path)
+        reranker = Reranker()
+        
+        gen = TestsetGenerator()
+        try:
+            testset = gen.load()
+        except FileNotFoundError:
+            logger.error("Không tìm thấy file Testset. Hãy chạy `--step testset` trước.")
+            sys.exit(1)
+            
+        collector = DataCollector(retriever=retriever, reranker=reranker)
+        collector.collect(testset)
+        
+    # 3. Đánh giá RAGAS (Compute metrics)
+    if args.step in ["all", "evaluate"]:
+        logger.info("\n--- BƯỚC 3: ĐÁNH GIÁ METRICS (RAGAS) ---")
+        collector = DataCollector(retriever=None, reranker=None)
+        
+        try:
+            results = collector.load()
+        except FileNotFoundError:
+            logger.error("Không tìm thấy file kết quả. Hãy chạy `--step collect` trước.")
+            sys.exit(1)
+            
+        evaluator = RAGASEvaluator()
+        evaluator.evaluate(results)
+        
+    # 4. Xuất báo cáo
+    if args.step in ["all", "report"]:
+        logger.info("\n--- BƯỚC 4: XUẤT BÁO CÁO ---")
+        reporter = EvalReporter()
+        try:
+            reporter.generate_report()
+            reporter.print_summary()
+        except FileNotFoundError:
+            logger.error("Không tìm thấy file metrics. Hãy chạy `--step evaluate` trước.")
+            sys.exit(1)
+            
+    logger.info("\n=== Hoàn tất chu trình đánh giá! ===")
+
+
+if __name__ == "__main__":
+    main()
