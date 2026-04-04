@@ -1,21 +1,21 @@
 # Báo Cáo Đánh Giá RAG (Post-Eval)
 
-**Số lượng mẫu (samples):** 50
+**Số lượng mẫu (samples):** 246
 
 ## Tổng Quan Điểm Số (Average)
 | Chỉ số (Metric) | Điểm trung bình |
 | :--- | :---: |
-| Faithfulness | **0.9505** |
-| Answer Relevancy | **0.7981** |
-| Llm Context Precision With Reference | **0.7055** |
-| Context Recall | **0.8900** |
+| Faithfulness | **0.9757** |
+| Answer Relevancy | **0.8571** |
+| Llm Context Precision With Reference | **0.8555** |
+| Context Recall | **0.9593** |
 
 ## Thống Kê Thời Gian Phản Hồi
 | Thành phần | Thời gian trung bình (Giây) |
 | :--- | :---: |
-| Retriever | 130.802 s |
-| Generator (LLM) | 8.133 s |
-| **Tổng thời gian pipeline** | **138.935 s** |
+| Retriever | 4.579 s |
+| Generator (LLM) | 1.979 s |
+| **Tổng thời gian pipeline** | **6.558 s** |
 
 ## Phân Tích Cơ Bản
 1. **Faithfulness** (Độ trung thực): Điểm cao có nghĩa câu trả lời không bịa thông tin ngoài ngữ cảnh (hallucinations).

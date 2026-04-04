@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     
     # ===== Evaluation (RAGAS) =====
     EVAL_NUM_SAMPLES: int = 250
-    EVAL_LLM_MODEL: str = "gemini-2.5-flash"
+    EVAL_LLM_MODEL: str = "gemini-2.5-flash-lite"
     EVAL_EMBEDDING_MODEL: str = "dangvantuan/vietnamese-document-embedding"
     EVAL_OUTPUT_DIR: str = "eval_output"
     

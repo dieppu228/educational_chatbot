@@ -1,0 +1,16 @@
+[project]
+name = "educational-chatbot"
+version = "0.1.0"
+description = "Hệ thống Chatbot hỗ trợ học tập dựa trên LLM và RAG"
+authors = [
+    { name = "Admin" }
+]
+dependencies = []
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.pyright]
+include = ["src"]
+extraPaths = ["."]
+typeCheckingMode = "basic"

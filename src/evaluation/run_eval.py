@@ -48,7 +48,7 @@ def main():
     parser.add_argument(
         "--num_samples",
         type=int,
-        default=50,
+        default=250,
         help="Số lượng mẫu sẽ tạo khi sinh Testset (Mặc định 50).",
     )
     

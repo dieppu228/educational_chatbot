@@ -18,6 +18,7 @@ Mục tiêu của hệ thống là cung cấp một công cụ tự động hóa
 ## 2. Pipeline hệ thống chi tiết
 
 Hệ thống được thiết kế theo luồng xử lý Multi-Agent kết hợp với cơ chế RAG chuyên sâu. Quy trình (End-to-End Workflow) đi qua các giai đoạn độc lập:
+
 ```text
 ┌────────────────────────────────────────────────────────┐
 │                   User Message / Query                 │
