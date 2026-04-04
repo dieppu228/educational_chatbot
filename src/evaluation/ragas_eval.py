@@ -67,7 +67,7 @@ class RAGASEvaluator:
 
     def _init_ragas_models(self):
         """Khởi tạo wrappers cho Language models dành cho RAGAS."""
-        logger.info(f"🔧 Khởi tạo model cho RAGAS: LLM={self.llm_model}, Embeddings={self.embedding_model}")
+        logger.info(f"Initializing models for RAGAS: LLM={self.llm_model}, Embeddings={self.embedding_model}")
         
         llm = ChatGoogleGenerativeAI(
             model=self.llm_model,
@@ -98,10 +98,10 @@ class RAGASEvaluator:
         Returns:
             List[Dict]: dữ liệu đánh giá chi tiết với các cột điểm mới.
         """
-        logger.info(f"🚀 Bắt đầu đánh giá RAGAS cho {len(dataset)} câu hỏi...")
+        logger.info(f"Starting RAGAS evaluation for {len(dataset)} samples...")
         
         if not dataset:
-            logger.warning("Dataset rỗng, bỏ qua đánh giá.")
+            logger.warning("Dataset is empty, skipping evaluation.")
             return []
             
         # 1. Build EvaluationDataset (ragas 0.4.x format)
@@ -145,7 +145,7 @@ class RAGASEvaluator:
                 run_config=run_config,
             )
         except Exception as e:
-            logger.error(f"Lỗi khi chạy RAGAS evaluate: {e}")
+            logger.error(f"Error running RAGAS evaluate: {e}")
             raise
 
         # 4. Save results
@@ -165,7 +165,7 @@ class RAGASEvaluator:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(results_list, f, ensure_ascii=False, indent=2)
             
-        logger.info(f"💾 Đã lưu kết quả ({len(results_list)} mẫu) vào {output_path}")
+        logger.info(f"Saved results ({len(results_list)} samples) to {output_path}")
         return results_list
         
     def load(self) -> List[Dict]:
@@ -177,5 +177,5 @@ class RAGASEvaluator:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
             
-        logger.info(f"📂 Đã tải {len(data)} kết quả evaluate từ {path}")
+        logger.info(f"Loaded {len(data)} evaluation results from {path}")
         return data

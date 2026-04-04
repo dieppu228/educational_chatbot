@@ -91,7 +91,7 @@ class QueryRewriter:
             return queries if queries else self._fallback(query)
             
         except Exception as e:
-            print(f"⚠️ QueryRewriter error: {e}")
+            print(f"QueryRewriter error: {e}")
             return self._fallback(query)
     
     def _format_memory(self, memory_state: Optional[List[dict]]) -> str:
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     ]
     
     for q in test_queries:
-        print(f"\n🔍 Query gốc: '{q}'")
+        print(f"\nOriginal query: '{q}'")
         results = rewriter.rewrite(q, memory_state=[])
         for i, r in enumerate(results, 1):
             print(f"  [{i}] {r}")

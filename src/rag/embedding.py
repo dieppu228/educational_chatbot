@@ -41,13 +41,13 @@ class EmbeddingModel:
     def _load_model(self):
         """Load model lần đầu khi cần (lazy loading để tiết kiệm RAM)."""
         if self.model is None:
-            print(f"🔄 Loading embedding model: {self.model_name}...")
+            print(f"Loading embedding model: {self.model_name}...")
             self.model = SentenceTransformer(
                 self.model_name, 
                 trust_remote_code=True, 
                 device=self.device
             )
-            print(f"✅ Model loaded on {self.device}")
+            print(f"Model loaded on {self.device}")
     
     def encode(self, texts: List[str], show_progress: bool = True) -> np.ndarray:
         """
@@ -90,7 +90,7 @@ def load_chunks(chunks_path: str) -> list:
     """Load chunks từ file JSON."""
     with open(chunks_path, 'r', encoding='utf-8') as f:
         chunks = json.load(f)
-    print(f"📦 Loaded {len(chunks)} chunks từ {chunks_path}")
+    print(f"Loaded {len(chunks)} chunks from {chunks_path}")
     return chunks
 
 
@@ -144,7 +144,7 @@ def embed_and_save(
         use_context: Ghép context vào text trước khi embed
     """
     print("=" * 60)
-    print("🚀 EMBEDDING CHUNKS PIPELINE")
+    print("EMBEDDING CHUNKS PIPELINE")
     print("=" * 60)
     
     # 1. Load chunks
@@ -152,12 +152,12 @@ def embed_and_save(
     
     # 2. Chuẩn bị texts
     texts = prepare_texts(chunks, use_context=use_context)
-    print(f"📝 Prepared {len(texts)} texts (use_context={use_context})")
+    print(f"Prepared {len(texts)} texts (use_context={use_context})")
     
     # 3. Embed
     model = EmbeddingModel(model_name=model_name, device=device, batch_size=batch_size)
     embeddings = model.encode(texts)
-    print(f"📐 Embeddings shape: {embeddings.shape}")
+    print(f"Embeddings shape: {embeddings.shape}")
     
     # 4. Save
     output_path = Path(embeddings_path)
@@ -168,7 +168,7 @@ def embed_and_save(
     loaded = np.load(output_path)
     assert loaded.shape == embeddings.shape, "Verification failed!"
     
-    print(f"\n✅ Đã lưu embeddings → {embeddings_path}")
+    print(f"\nSaved embeddings -> {embeddings_path}")
     print(f"   Shape: {loaded.shape} | Dtype: {loaded.dtype}")
     print(f"   Size: {output_path.stat().st_size / 1024 / 1024:.1f} MB")
     print("=" * 60)

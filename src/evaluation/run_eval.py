@@ -32,7 +32,7 @@ try:
     from src.rag.retrieve_rebuild import CustomSearch
     from src.rag.reranker import Reranker
 except ImportError as e:
-    logger.warning(f"Chưa import được rag elements: {e}. Vui lòng kiểm tra lại nếu chạy '--step collect'!")
+    logger.warning(f"Could not import rag elements: {e}. Please check if running '--step collect'!")
     CustomSearch = None
     Reranker = None
 
@@ -53,19 +53,19 @@ def main():
     )
     
     args = parser.parse_args()
-    logger.info(f"Khởi động Eval Runner, chế độ: {args.step.upper()}")
+    logger.info(f"Starting Eval Runner, mode: {args.step.upper()}")
 
     # 1. Sinh Testset
     if args.step in ["all", "testset"]:
-        logger.info("\n--- BƯỚC 1: SINH TESTSET ---")
+        logger.info("\n--- STEP 1: TESTSET GENERATION ---")
         gen = TestsetGenerator()
         gen.generate(num_samples=args.num_samples)
     
     # 2. Thu thập dữ liệu
     if args.step in ["all", "collect"]:
-        logger.info("\n--- BƯỚC 2: CHẠY DATA COLLECTION ---")
+        logger.info("\n--- STEP 2: DATA COLLECTION ---")
         if CustomSearch is None or Reranker is None:
-            logger.error("Thiết lập CustomSearch/Reranker không thành công. Dừng tiến trình collect.")
+            logger.error("Failed to initialize CustomSearch/Reranker. Stopping collect process.")
             sys.exit(1)
             
         from pathlib import Path
@@ -81,7 +81,7 @@ def main():
         try:
             testset = gen.load()
         except FileNotFoundError:
-            logger.error("Không tìm thấy file Testset. Hãy chạy `--step testset` trước.")
+            logger.error("Testset file not found. Please run `--step testset` first.")
             sys.exit(1)
             
         collector = DataCollector(retriever=retriever, reranker=reranker)
@@ -89,13 +89,13 @@ def main():
         
     # 3. Đánh giá RAGAS (Compute metrics)
     if args.step in ["all", "evaluate"]:
-        logger.info("\n--- BƯỚC 3: ĐÁNH GIÁ METRICS (RAGAS) ---")
+        logger.info("\n--- STEP 3: RAGAS METRICS EVALUATION ---")
         collector = DataCollector(retriever=None, reranker=None)
         
         try:
             results = collector.load()
         except FileNotFoundError:
-            logger.error("Không tìm thấy file kết quả. Hãy chạy `--step collect` trước.")
+            logger.error("Results file not found. Please run `--step collect` first.")
             sys.exit(1)
             
         evaluator = RAGASEvaluator()
@@ -103,16 +103,16 @@ def main():
         
     # 4. Xuất báo cáo
     if args.step in ["all", "report"]:
-        logger.info("\n--- BƯỚC 4: XUẤT BÁO CÁO ---")
+        logger.info("\n--- STEP 4: REPORT GENERATION ---")
         reporter = EvalReporter()
         try:
             reporter.generate_report()
             reporter.print_summary()
         except FileNotFoundError:
-            logger.error("Không tìm thấy file metrics. Hãy chạy `--step evaluate` trước.")
+            logger.error("Metrics file not found. Please run `--step evaluate` first.")
             sys.exit(1)
             
-    logger.info("\n=== Hoàn tất chu trình đánh giá! ===")
+    logger.info("\n=== Evaluation pipeline completed successfully! ===")
 
 
 if __name__ == "__main__":

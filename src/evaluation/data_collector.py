@@ -133,7 +133,7 @@ class DataCollector:
             List[Dict] — mỗi dict có:
                 user_input, retrieved_contexts, response, reference
         """
-        logger.info(f"🚀 Collecting data for {len(testset)} samples...")
+        logger.info(f"Collecting data for {len(testset)} samples...")
         
         results = []
         total = len(testset)
@@ -179,7 +179,7 @@ class DataCollector:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
         
-        logger.info(f"💾 Saved {len(results)} results to {output_path}")
+        logger.info(f"Saved {len(results)} results to {output_path}")
         return results
     
     def load(self) -> List[Dict]:
@@ -193,5 +193,5 @@ class DataCollector:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         
-        logger.info(f"📂 Loaded {len(data)} results from {path}")
+        logger.info(f"Loaded {len(data)} results from {path}")
         return data

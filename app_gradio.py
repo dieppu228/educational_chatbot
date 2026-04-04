@@ -61,26 +61,26 @@ def init_components():
     EMBEDDINGS_PATH = str(DATA_DIR / 'embeddings.npy')
 
     print("=" * 60)
-    print("🚀 Khởi tạo ứng dụng Gradio...")
+    print("Initializing Gradio Application...")
     print("=" * 60, flush=True)
 
     # 1. CustomSearch (BM25 + Semantic + RRF)
-    print("📦 Đang tải CustomSearch (BM25 + Semantic)...", flush=True)
+    print("Loading CustomSearch (BM25 + Semantic)...", flush=True)
     searcher = CustomSearch(
         chunks_path=CHUNKS_PATH,
         embeddings_path=EMBEDDINGS_PATH
     )
-    print(f"   ✅ CustomSearch: {searcher.corpus_size} chunks, dim={searcher.embeddings.shape[1]}", flush=True)
+    print(f"   CustomSearch: {searcher.corpus_size} chunks, dim={searcher.embeddings.shape[1]}", flush=True)
 
     # 2. Reranker (CrossEncoder — lazy load)
-    print("📦 Đang khởi tạo Reranker...", flush=True)
+    print("Initializing Reranker...", flush=True)
     reranker = Reranker()
-    print("   ✅ Reranker ready (lazy load)", flush=True)
+    print("   Reranker ready (lazy load)", flush=True)
 
     # 3. ChatBot orchestrator
-    print("📦 Đang khởi tạo ChatBot...", flush=True)
+    print("Initializing ChatBot...", flush=True)
     chatbot = ChatBot(retriever=searcher, reranker=reranker)
-    print("   ✅ ChatBot ready", flush=True)
+    print("   ChatBot ready", flush=True)
 
     # 4. Standalone handlers
     question_handlers.update({
@@ -90,10 +90,10 @@ def init_components():
         "true_false": TrueFalseHandler(),
     })
     slide_handler = SlideHandler()
-    print("   ✅ Handlers ready", flush=True)
+    print("   Handlers ready", flush=True)
 
     print("=" * 60)
-    print("✅ Tất cả components đã sẵn sàng!")
+    print("All components are ready!")
     print("=" * 60, flush=True)
 
 
@@ -513,11 +513,11 @@ if __name__ == "__main__":
     init_components()
 
     # 2. Build UI
-    print("\n🌐 Building Gradio UI...", flush=True)
+    print("\nBuilding Gradio UI...", flush=True)
     demo = build_ui()
 
     # 3. Launch
-    print("🌐 Starting server on http://127.0.0.1:7860", flush=True)
+    print("Starting server on http://127.0.0.1:7860", flush=True)
     demo.launch(
         server_name="127.0.0.1",
         server_port=7860,

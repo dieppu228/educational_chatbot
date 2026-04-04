@@ -26,13 +26,13 @@ class Reranker:
     def _load_model(self):
         """Load model lần đầu khi cần."""
         if self._model is None:
-            print(f"🔄 Loading reranker: {self.model_name}...")
+            print(f"Loading reranker: {self.model_name}...")
             self._model = CrossEncoder(
                 self.model_name,
                 device=self.device,
                 trust_remote_code=True
             )
-            print(f"✅ Reranker loaded on {self.device}")
+            print(f"Reranker loaded on {self.device}")
     
     def rerank(self, query: str, results: List[Dict], top_n: int = 10) -> List[Dict]:
         """

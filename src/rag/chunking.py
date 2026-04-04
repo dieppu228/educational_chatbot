@@ -542,14 +542,14 @@ class HierarchicalChunker:
         
         all_chunks = []
         
-        print(f"📂 Thư mục: {data_dir}")
-        print(f"📄 Tìm thấy {len(files)} file matching '{pattern}'")
+        print(f"Directory: {data_dir}")
+        print(f"Found {len(files)} files matching '{pattern}'")
         print("=" * 60)
         
         for filepath in files:
             # Bỏ qua file TEST
             if 'TEST' in filepath.name:
-                print(f"  ⏭️  Bỏ qua: {filepath.name}")
+                print(f"  Skipping: {filepath.name}")
                 continue
             
             chunks = self.chunk_file(str(filepath))
@@ -557,12 +557,12 @@ class HierarchicalChunker:
             
             # Thống kê
             type_counts = Counter(c.metadata.type for c in chunks)
-            print(f"  ✅ {filepath.name}: {len(chunks)} chunks")
+            print(f"  {filepath.name}: {len(chunks)} chunks")
             for t, cnt in sorted(type_counts.items()):
                 print(f"      {t}: {cnt}")
         
         print("=" * 60)
-        print(f"📊 TỔNG: {len(all_chunks)} chunks từ {len(files)} file")
+        print(f"TOTAL: {len(all_chunks)} chunks from {len(files)} files")
         
         return all_chunks
 
@@ -598,7 +598,7 @@ def save_chunks(chunks: List[Chunk], output_path: str):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    print(f"💾 Đã lưu {len(data)} chunks → {output_path}")
+    print(f"Saved {len(data)} chunks to {output_path}")
 
 
 # ============================================================
@@ -608,38 +608,38 @@ def save_chunks(chunks: List[Chunk], output_path: str):
 def print_stats(chunks: List[Chunk]):
     """In thống kê chi tiết về kết quả chunking."""
     print("\n" + "=" * 60)
-    print("📊 THỐNG KÊ CHUNKS")
+    print("CHUNK STATISTICS")
     print("=" * 60)
     
     # Tổng quan
-    print(f"\n{'Tổng số chunks:':<30} {len(chunks)}")
+    print(f"\n{'Total chunks:':<30} {len(chunks)}")
     
     content_lengths = [len(c.content) for c in chunks]
     if content_lengths:
-        print(f"{'Độ dài trung bình:':<30} {sum(content_lengths)/len(content_lengths):.0f} chars")
-        print(f"{'Chunk ngắn nhất:':<30} {min(content_lengths)} chars")
-        print(f"{'Chunk dài nhất:':<30} {max(content_lengths)} chars")
+        print(f"{'Average length:':<30} {sum(content_lengths)/len(content_lengths):.0f} chars")
+        print(f"{'Shortest chunk:':<30} {min(content_lengths)} chars")
+        print(f"{'Longest chunk:':<30} {max(content_lengths)} chars")
     
     # Phân bố theo type
-    print(f"\n--- Theo loại nội dung ---")
+    print(f"\n--- By content type ---")
     type_counts = Counter(c.metadata.type for c in chunks)
     for t, cnt in sorted(type_counts.items(), key=lambda x: -x[1]):
         print(f"  {t:<20} {cnt:>5} ({cnt/len(chunks)*100:.1f}%)")
     
     # Phân bố theo sách
-    print(f"\n--- Theo bộ sách ---")
+    print(f"\n--- By book ---")
     book_counts = Counter(c.metadata.book for c in chunks)
     for b, cnt in sorted(book_counts.items()):
         print(f"  {b:<20} {cnt:>5}")
     
     # Phân bố theo lớp
-    print(f"\n--- Theo lớp ---")
+    print(f"\n--- By grade ---")
     grade_counts = Counter(c.metadata.grade for c in chunks)
     for g, cnt in sorted(grade_counts.items()):
-        print(f"  Lớp {g:<16} {cnt:>5}")
+        print(f"  Grade {g:<16} {cnt:>5}")
     
     # Phân bố theo chủ đề
-    print(f"\n--- Theo chủ đề (top 10) ---")
+    print(f"\n--- By topic (top 10) ---")
     topic_counts = Counter(
         f"{c.metadata.book} {c.metadata.grade} - {c.metadata.topic}: {c.metadata.topic_name[:30]}" 
         for c in chunks if c.metadata.topic
@@ -657,7 +657,7 @@ def spot_check(chunks: List[Chunk], n: int = 5):
     import random
     
     print("\n" + "=" * 60)
-    print(f"🔍 SPOT CHECK ({n} chunks ngẫu nhiên)")
+    print(f"SPOT CHECK ({n} random chunks)")
     print("=" * 60)
     
     samples = random.sample(chunks, min(n, len(chunks)))
@@ -665,12 +665,12 @@ def spot_check(chunks: List[Chunk], n: int = 5):
     for i, chunk in enumerate(samples, 1):
         meta = chunk.metadata
         print(f"\n--- Chunk {i} ---")
-        print(f"  📍 Context: {chunk.context}")
-        print(f"  📚 {meta.book} lớp {meta.grade} | Chủ đề: {meta.topic} | {meta.lesson}")
-        print(f"  🏷️  Type: {meta.type} | Title: {meta.title}")
-        print(f"  📏 Length: {len(chunk.content)} chars")
+        print(f"  Context: {chunk.context}")
+        print(f"  {meta.book} grade {meta.grade} | Topic: {meta.topic} | {meta.lesson}")
+        print(f"  Type: {meta.type} | Title: {meta.title}")
+        print(f"  Length: {len(chunk.content)} chars")
         preview = chunk.content[:150].replace('\n', ' ')
-        print(f"  📝 Preview: {preview}...")
+        print(f"  Preview: {preview}...")
 
 
 # ============================================================
@@ -702,4 +702,4 @@ if __name__ == "__main__":
     # === Lưu file ===
     save_chunks(all_chunks, OUTPUT_PATH)
     
-    print("\n✅ Pipeline hoàn tất!")
+    print("\nPipeline completed successfully!")

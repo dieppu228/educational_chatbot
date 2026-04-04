@@ -93,7 +93,7 @@ class ChatBot:
         """Luồng xử lý chính."""
         t0 = time.time()
         logger.info("="*60)
-        logger.info(f"📩 QUERY: '{query[:80]}...'" if len(query) > 80 else f"📩 QUERY: '{query}'")
+        logger.info(f"QUERY: '{query[:80]}...'" if len(query) > 80 else f"QUERY: '{query}'")
         
         # 1. Get/Create Session
         session = None
@@ -113,9 +113,9 @@ class ChatBot:
         if needs_ctx:
             context_snippet = self.context_analyzer.extract_context_from_history(history_text)
             enriched_query = f"Ngữ cảnh trước đó:\n{context_snippet}\n\nCâu hỏi hiện tại: {query}"
-            logger.info(f"🔗 ContextAnalyzer: cần contextualize (history={len(session.messages)} msgs)")
+            logger.info(f"ContextAnalyzer: needs contextualization (history={len(session.messages)} msgs)")
         else:
-            logger.debug("🔗 ContextAnalyzer: không cần contextualize")
+            logger.debug("ContextAnalyzer: no contextualization needed")
         
         # Lưu message user
         self.memory.add_message("user", query)
@@ -127,7 +127,7 @@ class ChatBot:
         session.intent = intent_result.get("intent", "chat")
         session.task_type = intent_result.get("task_type")
         session.topic = intent_result.get("topic")
-        logger.info(f"🎯 Intent: {session.intent} | task_type: {session.task_type} | topic: {session.topic} ({time.time()-t1:.2f}s)")
+        logger.info(f"Intent: {session.intent} | task_type: {session.task_type} | topic: {session.topic} ({time.time()-t1:.2f}s)")
         
         # 4. Handle Intents
         if session.intent == "generate_question":
@@ -141,7 +141,7 @@ class ChatBot:
         else:
             yield from self._handle_chat(enriched_query, session)
         
-        logger.info(f"✅ Tổng thời gian xử lý: {time.time()-t0:.2f}s")
+        logger.info(f"Total processing time: {time.time()-t0:.2f}s")
         logger.info("="*60)
 
     def _handle_generate_question(self, query: str, session: SessionState) -> Generator[str, None, None]:
@@ -150,9 +150,9 @@ class ChatBot:
         # RAG Search
         t0 = time.time()
         contexts = self._get_rag_context(query)
-        logger.info(f"📚 RAG Search: {len(contexts)} chunks ({time.time()-t0:.2f}s)")
+        logger.info(f"RAG Search: {len(contexts)} chunks ({time.time()-t0:.2f}s)")
         if not contexts:
-            logger.warning("RAG trả về 0 kết quả")
+            logger.warning("RAG returned 0 results")
             yield "Xin lỗi, mình không tìm thấy tài liệu phù hợp trong kho SGK để tạo câu hỏi."
             return
             
@@ -160,7 +160,7 @@ class ChatBot:
         task_type = session.task_type or "mcq"
         handler = self.question_handlers.get(task_type, self.question_handlers["mcq"])
         num_q = extract_num_questions(query) or 3
-        logger.info(f"📝 Generate: type={task_type}, num={num_q}, handler={handler.__class__.__name__}")
+        logger.info(f"Generate: type={task_type}, num={num_q}, handler={handler.__class__.__name__}")
         
         yield f"✏️ Đang soạn {num_q} câu hỏi {task_type.upper()}..."
         
@@ -171,10 +171,10 @@ class ChatBot:
                 # Generate
                 t1 = time.time()
                 raw_questions = handler.handle(query, context_text, num_questions=num_q)
-                logger.info(f"   ✏️ Handler.handle() → {time.time()-t1:.2f}s (attempt {attempt+1}/{max_retries})")
+                logger.info(f"   Handler.handle() → {time.time()-t1:.2f}s (attempt {attempt+1}/{max_retries})")
                 
                 if raw_questions is None:
-                    logger.warning(f"   Handler trả về None (attempt {attempt+1})")
+                    logger.warning(f"   Handler returned None (attempt {attempt+1})")
                     yield "⚠️ Lỗi khi sinh câu hỏi. Đang thử lại..."
                     continue
                 
@@ -186,13 +186,13 @@ class ChatBot:
                     context=context_text,
                     questions_json=json.dumps(raw_questions.model_dump())
                 )
-                logger.info(f"   🔎 Validator → all_valid={validation_result.all_valid}, approved={len(validation_result.approved_questions)} ({time.time()-t2:.2f}s)")
+                logger.info(f"   Validator → all_valid={validation_result.all_valid}, approved={len(validation_result.approved_questions)} ({time.time()-t2:.2f}s)")
                 
                 if validation_result.all_valid or validation_result.approved_questions:
                     # Lưu vào session
                     for q in validation_result.approved_questions:
                         session.items.append(TaskItem(type=task_type, content=q, index=len(session.items)))
-                    logger.info(f"   💾 Saved {len(validation_result.approved_questions)} questions to session (total items: {len(session.items)})")
+                    logger.info(f"   Saved {len(validation_result.approved_questions)} questions to session (total items: {len(session.items)})")
                     
                     # Hiển thị
                     display = raw_questions.to_display_format()
@@ -204,7 +204,7 @@ class ChatBot:
                         relations = self.knowledge_map.find_relations(context_text)
                         if relations:
                             topics = ", ".join([r.get('topic', '') for r in relations[:2]])
-                            logger.debug(f"   💡 KnowledgeMap: {topics}")
+                            logger.debug(f"   KnowledgeMap: {topics}")
                             yield f"\n\n💡 *Kiến thức liên quan:* {topics}"
                     except Exception as e:
                         logger.debug(f"   KnowledgeMap skipped: {e}")
@@ -214,14 +214,14 @@ class ChatBot:
                     if attempt == max_retries - 1:
                         yield "⚠️ Hệ thống đang gặp khó khăn khi tạo câu hỏi chính xác. Bạn thử hỏi cụ thể hơn nhé!"
             except Exception as e:
-                logger.error(f"   ❌ Exception (attempt {attempt+1}): {e}")
+                logger.error(f"   Exception (attempt {attempt+1}): {e}")
                 if attempt == max_retries - 1:
                     yield f"❌ Lỗi sinh câu hỏi: {str(e)[:100]}"
 
     def _handle_check_answer(self, query: str, session: SessionState) -> Generator[str, None, None]:
-        logger.info(f"📝 CheckAnswer: session has {len(session.items)} items")
+        logger.info(f"CheckAnswer: session has {len(session.items)} items")
         if not session.items:
-            logger.warning("Session không có items để chấm")
+            logger.warning("Session has no items to grade")
             yield "Bạn chưa có câu hỏi nào để trả lời. Hãy yêu cầu mình tạo câu hỏi trước nhé!"
             return
             

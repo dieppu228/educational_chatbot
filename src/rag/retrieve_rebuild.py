@@ -54,7 +54,7 @@ class CustomSearch:
         # === Embedding model (lazy load) ===
         self._model = None
         
-        print(f" CustomSearch initialized: {self.corpus_size} docs, "
+        print(f"CustomSearch initialized: {self.corpus_size} docs, "
               f"vocab={len(self.df)}, avgdl={self.avgdl:.1f}")
     
     @property
