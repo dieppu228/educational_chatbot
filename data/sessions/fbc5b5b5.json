@@ -1,0 +1,20 @@
+{
+  "session_id": "fbc5b5b5",
+  "topic": "",
+  "intent": "chat",
+  "created_at": "2026-04-06T21:17:26.451729",
+  "updated_at": "2026-04-06T21:18:08.833808",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hello bạn là ai và có tính năng gì vậy"
+    },
+    {
+      "role": "assistant",
+      "content": "Chào bạn! 👋 Mình là EduBot, trợ lý học tập Tin học THPT Việt Nam.\n\nMình ở đây để giúp bạn hiểu rõ hơn về các kiến thức Tin học theo chương trình sách giáo khoa THPT. Mình có thể:\n\n*   **Giải thích các khái niệm:** Như Trí tuệ nhân tạo (AI), các ứng dụng của AI (Trợ lý ảo, xe tự lái, AI tạo sinh...), các đặc trưng của AI (khả năng học, suy luận, nhận thức, hiểu ngôn ngữ, giải quyết vấn đề).\n*   **Trả lời các câu hỏi liên quan đến bài học:** Dựa trên nội dung sách giáo khoa.\n*   **Cung cấp ví dụ minh họa:** Để bạn dễ hình dung hơn về các khái niệm.\n\nBạn có câu hỏi nào về Tin học không? Hãy hỏi mình nhé! 😊"
+    }
+  ],
+  "quiz_state": null,
+  "slide_state": null,
+  "metadata": {}
+}

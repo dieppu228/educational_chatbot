@@ -2,7 +2,7 @@ import json
 from google import genai
 from google.genai.types import GenerateContentConfig
 import os, re
-from src.prompts.extract_prompts import EXTRACT_PROMPT
+from src.llm.prompts import EXTRACT_PROMPT
 
 
 GRADE_REGEX = re.compile(

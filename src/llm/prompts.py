@@ -1,6 +1,148 @@
-"""All LLM prompt templates for the application"""
+"""
+Prompt Hub — Tất cả prompt templates cho EduBot.
 
-# ===== QUESTION GENERATION PROMPT =====
+Tập trung quản lý tại 1 file duy nhất.
+
+Sections:
+    1. PromptTemplate base class
+    2. System Prompt (identity & role)
+    3. Intent Router
+    4. Question Generation (MCQ, Essay, Fill-blank, True/False)
+    5. Answer Scoring
+    6. Question Validation
+    7. Slide Generation
+    8. Chat & Explain
+    9. Utility (Extract, Fallback, Feedback, Format)
+"""
+
+from dataclasses import dataclass, field
+from typing import List, Optional
+import re
+
+
+# ============================================================
+# 1. PROMPT TEMPLATE BASE CLASS
+# ============================================================
+
+@dataclass
+class PromptTemplate:
+    """
+    Base class for managing LLM prompt templates.
+    Provides validation and formatting.
+    """
+    name: str
+    template: str
+    required_vars: List[str] = field(default_factory=list)
+    optional_vars: List[str] = field(default_factory=list)
+    version: str = "1.0"
+    description: str = ""
+
+    def __post_init__(self):
+        self._validate_template()
+
+    def _validate_template(self) -> None:
+        found_vars = set(re.findall(r'\{(\w+)\}', self.template))
+        for var in self.required_vars:
+            if var not in found_vars:
+                raise ValueError(f"Required variable '{var}' not found in template '{self.name}'")
+
+    def format(self, **kwargs) -> str:
+        missing = [var for var in self.required_vars if var not in kwargs]
+        if missing:
+            raise ValueError(f"Missing required variables for '{self.name}': {missing}")
+        try:
+            return self.template.format(**kwargs)
+        except KeyError as e:
+            raise ValueError(f"Variable {e} not found in template")
+
+    def __str__(self) -> str:
+        return f"PromptTemplate(name='{self.name}', version='{self.version}')"
+
+    def __repr__(self) -> str:
+        return f"PromptTemplate(name='{self.name}', required_vars={self.required_vars}, version='{self.version}')"
+
+
+def create_prompt(name, template, required_vars, optional_vars=None, version="1.0", description=""):
+    return PromptTemplate(name=name, template=template, required_vars=required_vars,
+                          optional_vars=optional_vars or [], version=version, description=description)
+
+
+# ============================================================
+# 2. SYSTEM PROMPT
+# ============================================================
+
+SYSTEM_PROMPT = """Bạn là EduBot — trợ lý học tập thông minh chuyên về SGK Tin học THPT Việt Nam.
+
+=== VAI TRÒ ===
+- Trợ lý giáo dục thân thiện, kiên nhẫn, chuyên nghiệp
+- Chuyên gia về nội dung SGK Tin học lớp 10, 11, 12 (bộ sách Kết nối tri thức và Cánh Diều)
+- Hỗ trợ học sinh ôn tập, luyện tập và hiểu sâu kiến thức
+
+=== TÍNH NĂNG CHÍNH ===
+1. SINH CÂU HỎI: Tạo câu hỏi trắc nghiệm, tự luận, điền khuyết, đúng/sai từ nội dung SGK
+2. CHẤM ĐIỂM: Kiểm tra đáp án, cho điểm, giải thích chi tiết
+3. ÔN TẬP: Hiển thị lại các câu sai để học sinh làm lại
+4. SINH SLIDE: Tạo bài giảng slide từ nội dung bài học
+5. GIẢI THÍCH: Giải thích chuyên sâu khái niệm Tin học
+6. THỐNG KÊ: Theo dõi tiến độ học tập, đánh giá năng lực
+7. HỎI ĐÁP: Trả lời câu hỏi chung về Tin học THPT
+
+=== PHONG CÁCH TRẢ LỜI ===
+- Ngôn ngữ: Tiếng Việt, đơn giản, dễ hiểu, phù hợp học sinh THPT
+- Tôn trọng: Gọi học sinh là "bạn", thân thiện nhưng không xuề xòa
+- Chính xác: Ưu tiên kiến thức từ SGK, nếu không có thì ghi chú rõ
+- Cấu trúc: Trả lời có tổ chức, dùng bullet points, đánh số khi cần
+- Khuyến khích: Khen khi đúng, động viên khi sai, gợi ý hướng đi tiếp
+- Ngắt gọn: Trả lời vừa đủ, không dài dòng, không lặp lại thông tin
+
+=== RANH GIỚI ===
+- CHỈ trả lời các câu hỏi liên quan đến Tin học hoặc giáo dục
+- Nếu học sinh hỏi ngoài phạm vi, nhẹ nhàng hướng dẫn quay lại chủ đề Tin học
+- KHÔNG tạo nội dung không phù hợp (bạo lực, chính trị, nội dung người lớn)
+- KHÔNG giả vờ là người thật, luôn nhận mình là trợ lý AI
+"""
+
+SYSTEM_PROMPT_SHORT = """Bạn là EduBot — trợ lý học tập Tin học THPT Việt Nam. Trả lời bằng tiếng Việt, chính xác, thân thiện, dựa trên nội dung SGK."""
+
+
+# ============================================================
+# 3. INTENT ROUTER
+# ============================================================
+
+INTENT_ROUTER_PROMPT = """Bạn là hệ thống phân loại intent cho chatbot giáo dục SGK Tin học THPT.
+
+Phân loại câu truy vấn sau:
+Query: "{query}"
+{session_context}
+CÁC INTENT hợp lệ (CHỈ chọn 1):
+- "generate": Yêu cầu SINH nội dung mới (câu hỏi, slide, giáo án)
+- "interact": TƯƠNG TÁC với nội dung ĐÃ SINH (trả lời câu hỏi, ôn lại câu sai, giải thích câu hỏi cụ thể, làm bài tập slide)
+- "analyze": YÊU CẦU thống kê, điểm số, đánh giá năng lực, tiến độ học tập
+- "explain": Giải thích kiến thức CHUNG (không liên quan câu hỏi đã sinh)
+- "chat": Hỏi đáp tự do, chào hỏi, câu không rõ ràng
+
+TASK_TYPE (chỉ áp dụng khi intent = "generate"):
+- "mcq": Trắc nghiệm ABCD
+- "essay": Tự luận
+- "fill_blank": Điền khuyết / đục lỗ
+- "true_false": Đúng/Sai
+- "slide": Tạo slide bài giảng
+- "lesson_plan": Tạo giáo án
+
+TOPIC: Xác định chủ đề CHÍNH của câu hỏi (ví dụ: "Mạng máy tính", "Hệ điều hành", "An toàn thông tin").
+
+IS_NEW_TOPIC: {topic_instruction}
+
+CHỈ trả về JSON, KHÔNG giải thích:
+{{"intent": "...", "task_type": "..." hoặc null, "topic": "..." hoặc null, "is_new_topic": true/false}}"""
+
+
+# ============================================================
+# 4. QUESTION GENERATION
+# ============================================================
+
+# ── MCQ ────────────────────────────────────────────────────
+
 QUESTION_GENERATION_PROMPT = """
 Bạn là trợ lý giáo dục chuyên tạo câu hỏi trắc nghiệm chất lượng cao.
 
@@ -23,8 +165,6 @@ Dựa trên yêu cầu của người dùng và kiến thức được cung cấ
 2. CẤU TRÚC OUTPUT:
 - CHỈ trả về JSON thuần túy
 - KHÔNG thêm markdown, KHÔNG thêm ```json
-- KHÔNG thêm lời giải thích bên ngoài JSON
-- KHÔNG thêm text mở đầu hoặc kết thúc
 
 3. ĐỊNH DẠNG JSON BẮT BUỘC:
 {{
@@ -40,106 +180,198 @@ Dựa trên yêu cầu của người dùng và kiến thức được cung cấ
     }},
     "correct_answer": "A",
     "explanation": "Giải thích chi tiết tại sao đáp án này đúng, dẫn chứng từ kiến thức đã cung cấp"
-    }},
-    {{
-    "index": 2,
-    "question": "Câu hỏi thứ hai...",
-    "options": {{
-        "A": "...",
-        "B": "...",
-        "C": "...",
-        "D": "..."
-    }},
-    "correct_answer": "B",
-    "explanation": "..."
     }}
 ]
 }}
 
 4. QUY TẮC VALIDATION:
-- "index" BẮT ĐẦU TỪ 1 và tăng dần (1, 2, 3, ..., {num_questions})
-- PHẢI CÓ ĐÚNG {num_questions} CÂU HỎI trong mảng
+- "index" BẮT ĐẦU TỪ 1 và tăng dần
+- PHẢI CÓ ĐÚNG {num_questions} CÂU HỎI
 - "correct_answer" CHỈ nhận: "A", "B", "C", hoặc "D"
 - "options" PHẢI có đúng 4 key: A, B, C, D
-- "explanation" PHẢI rõ ràng, tham chiếu đến kiến thức đã cho
-- Mỗi phương án phải khác biệt rõ ràng
-
-5. XỬ LÝ TRƯỜNG HỢP ĐẶC BIỆT:
-- Nếu kiến thức không đủ để tạo {num_questions} câu chất lượng → giảm số lượng xuống
-- Nếu yêu cầu không rõ ràng → tạo câu hỏi tổng quát về nội dung chính
-- Nếu tạo {num_questions} câu hỏi → tạo đa dạng về góc độ kiến thức
 
 === BẮT ĐẦU TẠO {num_questions} CÂU HỎI ===
 """
 
-# ===== RESPONSE FORMATTING PROMPT =====
-RESPONSE_FORMATTING_PROMPT = """
-Bạn là công cụ định dạng câu hỏi trắc nghiệm.
+QUESTION_GENERATION_TEMPLATE = PromptTemplate(
+    name="question_generation",
+    template=QUESTION_GENERATION_PROMPT,
+    required_vars=["query", "context", "num_questions"],
+    version="1.1",
+    description="Generate multiple choice questions from retrieved context"
+)
 
-=== INPUT FORMAT ===
-JSON string chứa danh sách câu hỏi:
+
+# ── Essay ──────────────────────────────────────────────────
+
+ESSAY_GENERATION_PROMPT = """Bạn là trợ lý giáo dục chuyên tạo câu hỏi tự luận cho SGK Tin học THPT.
+
+=== YÊU CẦU CỦA NGƯỜI DÙNG ===
+{query}
+
+=== KIẾN THỨC TỪ TÀI LIỆU (RAG) ===
+{context}
+
+=== NHIỆM VỤ ===
+Tạo **chính xác {num_questions} câu hỏi tự luận** với đáp án mẫu và rubric chấm điểm.
+
+QUY TẮC:
+1. Câu hỏi PHẢI dựa trên kiến thức được cung cấp
+2. Đáp án mẫu phải đầy đủ, chính xác
+3. Rubric phải rõ ràng, có tiêu chí cụ thể
+4. Độ khó đa dạng: easy, medium, hard
+5. CHỈ trả về JSON thuần túy, KHÔNG thêm markdown
+
+ĐỊNH DẠNG JSON:
 {{
-  "mcq": [
+  "essays": [
     {{
       "index": 1,
-      "question": "Nội dung câu hỏi",
-      "options": {{
-        "A": "Phương án A",
-        "B": "Phương án B",
-        "C": "Phương án C",
-        "D": "Phương án D"
-      }},
-      "correct_answer": "C",
-      "explanation": "Giải thích chi tiết"
-    }},
-    {{
-      "index": 2,
-      "question": "Câu hỏi thứ 2",
-      ...
+      "question": "Trình bày khái niệm...",
+      "sample_answer": "Đáp án mẫu chi tiết...",
+      "rubric": "- 2đ: Nêu đúng khái niệm\\n- 1đ: Cho ví dụ...",
+      "difficulty": "medium"
     }}
   ]
 }}
 
-INPUT DATA:
-{options}
+=== BẮT ĐẦU TẠO {num_questions} CÂU HỎI TỰ LUẬN ==="""
+
+ESSAY_GENERATION_TEMPLATE = PromptTemplate(
+    name="essay_generation",
+    template=ESSAY_GENERATION_PROMPT,
+    required_vars=["query", "context", "num_questions"],
+    version="1.0",
+    description="Generate essay questions with sample answers and rubrics"
+)
+
+
+# ── Fill-in-the-Blank ─────────────────────────────────────
+
+FILL_BLANK_GENERATION_PROMPT = """Bạn là trợ lý giáo dục chuyên tạo câu hỏi đục lỗ / điền khuyết cho SGK Tin học THPT.
+
+=== YÊU CẦU CỦA NGƯỜI DÙNG ===
+{query}
+
+=== KIẾN THỨC TỪ TÀI LIỆU (RAG) ===
+{context}
 
 === NHIỆM VỤ ===
-Định dạng lại các câu hỏi thành TEXT READABLE format (KHÔNG JSON).
+Tạo **chính xác {num_questions} câu đục lỗ** với đáp án đúng.
 
-=== OUTPUT FORMAT ===
+QUY TẮC:
+1. Mỗi câu phải dựa trên kiến thức được cung cấp
+2. Dùng ___ (3 gạch dưới) để đánh dấu chỗ trống
+3. Mỗi câu có thể có 1 hoặc nhiều chỗ trống
+4. Đáp án phải theo đúng thứ tự chỗ trống
+5. CHỈ trả về JSON thuần túy
 
-Câu hỏi 1:
-<Nội dung câu hỏi đầy đủ>
+ĐỊNH DẠNG JSON:
+{{
+  "fill_blanks": [
+    {{
+      "index": 1,
+      "text_with_blanks": "Mạng ___ là mạng máy tính trong phạm vi ___ như phòng học, tòa nhà.",
+      "answers": ["LAN", "nhỏ"],
+      "explanation": "LAN (Local Area Network) là mạng cục bộ, hoạt động trong phạm vi nhỏ."
+    }}
+  ]
+}}
 
-A. <Phương án A>
-B. <Phương án B>
-C. <Phương án C>
-D. <Phương án D>
+=== BẮT ĐẦU TẠO {num_questions} CÂU ĐỤC LỖ ==="""
 
-________________________________________
+FILL_BLANK_GENERATION_TEMPLATE = PromptTemplate(
+    name="fill_blank_generation",
+    template=FILL_BLANK_GENERATION_PROMPT,
+    required_vars=["query", "context", "num_questions"],
+    version="1.0",
+    description="Generate fill-in-the-blank questions"
+)
 
-Câu hỏi 2:
-<Nội dung câu hỏi>
 
-A. <Phương án A>
-B. <Phương án B>
-C. <Phương án C>
-D. <Phương án D>
+# ── True/False ─────────────────────────────────────────────
 
-________________________________________
+TRUE_FALSE_GENERATION_PROMPT = """Bạn là trợ lý giáo dục chuyên tạo câu hỏi Đúng/Sai cho SGK Tin học THPT.
 
-=== YÊU CẦU ===
-1. KHÔNG bao gồm correct_answer hoặc explanation trong output
-2. KHÔNG in đáp án đúng hoặc giải thích
-3. KHÔNG trả về JSON - chỉ text thuần
-4. Mỗi câu hỏi cách nhau bằng dòng gạch ngang
-5. Format: "Câu hỏi N:" rồi nội dung, rồi 4 options A, B, C, D
-6. Giữ nguyên nội dung câu hỏi và options từ input
-7. KHÔNG thêm text trước hoặc sau danh sách câu hỏi
-8. Đảm bảo đầy đủ tất cả câu hỏi từ input
-"""
+=== YÊU CẦU CỦA NGƯỜI DÙNG ===
+{query}
 
-# ===== UTILITY/SCORING PROMPT =====
+=== KIẾN THỨC TỪ TÀI LIỆU (RAG) ===
+{context}
+
+=== NHIỆM VỤ ===
+Tạo **chính xác {num_questions} câu hỏi Đúng/Sai** với giải thích.
+
+QUY TẮC:
+1. Mỗi câu là 1 phát biểu, người dùng phải xác định Đúng hay Sai
+2. Phát biểu PHẢI dựa trên kiến thức được cung cấp
+3. Cân bằng số câu Đúng và Sai (xấp xỉ 50/50)
+4. Câu Sai phải sai ở điểm tinh tế, không quá dễ nhận ra
+5. CHỈ trả về JSON thuần túy
+
+ĐỊNH DẠNG JSON:
+{{
+  "true_false": [
+    {{
+      "index": 1,
+      "statement": "Mạng LAN có phạm vi hoạt động trong một thành phố.",
+      "correct_answer": false,
+      "explanation": "Sai. Mạng LAN hoạt động trong phạm vi nhỏ (phòng, tòa nhà). Mạng MAN mới có phạm vi thành phố."
+    }}
+  ]
+}}
+
+=== BẮT ĐẦU TẠO {num_questions} CÂU ĐÚNG/SAI ==="""
+
+TRUE_FALSE_GENERATION_TEMPLATE = PromptTemplate(
+    name="true_false_generation",
+    template=TRUE_FALSE_GENERATION_PROMPT,
+    required_vars=["query", "context", "num_questions"],
+    version="1.0",
+    description="Generate true/false questions"
+)
+
+
+# ── Essay Scoring ──────────────────────────────────────────
+
+ESSAY_SCORING_PROMPT = """Bạn là giáo viên chấm điểm câu hỏi tự luận Tin học THPT.
+
+=== CÂU HỎI & HƯỚNG DẪN CHẤM ===
+Câu hỏi: {question}
+Đáp án mẫu: {sample_answer}
+Rubric: {rubric}
+
+=== CÂU TRẢ LỜI CỦA HỌC SINH ===
+{user_answer}
+
+=== NHIỆM VỤ ===
+Chấm điểm câu trả lời của học sinh dựa trên rubric và đáp án mẫu.
+
+ĐỊNH DẠNG JSON:
+{{
+  "is_correct": true/false,
+  "score": 0.0-10.0,
+  "explanation": "Nhận xét chi tiết...",
+  "confidence": 0.9
+}}
+
+- CHỈ trả về JSON thuần túy
+
+=== BẮT ĐẦU CHẤM ĐIỂM ==="""
+
+ESSAY_SCORING_TEMPLATE = PromptTemplate(
+    name="essay_scoring",
+    template=ESSAY_SCORING_PROMPT,
+    required_vars=["question", "sample_answer", "rubric", "user_answer"],
+    version="1.0",
+    description="Score essay answers using LLM based on rubrics"
+)
+
+
+# ============================================================
+# 5. ANSWER SCORING (MCQ)
+# ============================================================
+
 UTILITY_SCORING_PROMPT = """
 Bạn là công cụ hỗ trợ chấm trắc nghiệm thông minh.
 
@@ -175,15 +407,12 @@ Bạn phải:
 QUAN TRỌNG: User nói "câu N" nhưng question_index = N-1 (trong JSON)
 - User nói "câu 1" → question_index = 0
 - User nói "câu 2" → question_index = 1
-- User nói "câu thứ nhất" → question_index = 0
 
 === OUTPUT JSON FORMAT ===
-Luôn trả về JSON dòng đơn (không prettified) với cấu trúc CHÍNH XÁC sau:
-
 {{
   "status": "found|not_found|ambiguous",
   "question_index": <int hoặc null>,
-  "question_text": "<text của question hoặc null>",
+  "question_text": "<text hoặc null>",
   "user_answer": "<A/B/C/D hoặc null>",
   "correct_answer": "<A/B/C/D hoặc null>",
   "is_correct": <true/false hoặc null>,
@@ -191,35 +420,238 @@ Luôn trả về JSON dòng đơn (không prettified) với cấu trúc CHÍNH X
   "confidence": <0.0-1.0 hoặc null>
 }}
 
-=== QUY TẮC XỨ LÝ ===
-
-1. STATUS = "found":
-   - User rõ ràng trả lời 1 câu cụ thể
-   - question_index, question_text, user_answer, correct_answer phải set
-   - is_correct = true/false (so sánh user_answer vs correct_answer)
-   - Fuzzy matching cho nội dung: nếu user mô tả option, so khớp nội dung
-   - confidence ≈ độ chắc chắn
-
-2. STATUS = "not_found":
-   - User không nói rõ câu nào
-   - Hoặc user không đưa ra đáp án rõ ràng
-   - Ví dụ: "mình không biết", "tôi chưa trả lời"
-   - question_index, user_answer có thể null
-
-3. STATUS = "ambiguous":
-   - User nói không rõ hoặc mơ hồ
-   - Có thể user nói nhiều câu cùng lúc
-   - Hoặc user nói 1 câu nhưng không chắc
-   - confidence < 0.5
-
-=== THÊM YÊU CẦU ===
-- CHỈ trả JSON thuần, KHÔNG thêm markdown, KHÔNG thêm ```json
-- KHÔNG thêm text trước/sau JSON
-- Luôn valid JSON format
-- question_index bắt đầu từ 0 (trong JSON array index)
+- CHỈ trả JSON thuần, KHÔNG thêm markdown
+- question_index bắt đầu từ 0
 """
 
-# ===== FALLBACK/CHITCHAT PROMPT =====
+SCORING_TEMPLATE = PromptTemplate(
+    name="answer_scoring",
+    template=UTILITY_SCORING_PROMPT,
+    required_vars=["state_text", "query"],
+    version="1.0",
+    description="Score user's answer against stored questions"
+)
+
+
+# ============================================================
+# 6. QUESTION VALIDATION
+# ============================================================
+
+QUESTION_VALIDATION_PROMPT = """Bạn là hệ thống KIỂM DUYỆT câu hỏi giáo dục cho SGK Tin học THPT.
+
+Nhiệm vụ: Kiểm tra chất lượng các câu hỏi đã được sinh bởi một LLM khác.
+
+=== LOẠI CÂU HỎI ===
+{question_type}
+
+=== KIẾN THỨC GỐC (CONTEXT TỪ RAG) ===
+{context}
+
+=== CÂU HỎI CẦN KIỂM TRA ===
+{questions_json}
+
+=== TIÊU CHÍ KIỂM TRA ===
+
+Với MỖI câu hỏi, kiểm tra:
+
+1. **KIẾN THỨC** (quan trọng nhất):
+   - Nội dung câu hỏi có ĐÚNG so với context không?
+   - Có thông tin sai lệch hoặc bịa đặt không?
+
+2. **ĐÁP ÁN**:
+   - Đáp án đúng có THỰC SỰ đúng không? (đối chiếu context)
+   - Với MCQ: Có đúng 1 đáp án đúng duy nhất không?
+   - Với True/False: Giá trị boolean có khớp giải thích không?
+   - Với Fill-blank: Đáp án có khớp chỗ trống không?
+
+3. **CHẤT LƯỢNG**:
+   - Câu hỏi có rõ ràng, không mơ hồ không?
+   - Với MCQ: Phương án nhiễu có hợp lý không?
+
+=== OUTPUT FORMAT ===
+CHỈ trả về JSON thuần túy:
+{{
+  "all_valid": true/false,
+  "validations": [
+    {{
+      "index": 1,
+      "is_valid": true/false,
+      "issues": ["Mô tả vấn đề nếu có"],
+      "fixed_question": null hoặc {{câu hỏi đã sửa nếu bạn có thể fix}}
+    }}
+  ],
+  "approved_questions": [
+    // copy nguyên câu hỏi đã pass (hoặc đã fix) vào đây
+  ]
+}}
+
+=== BẮT ĐẦU KIỂM TRA ==="""
+
+QUESTION_VALIDATION_TEMPLATE = PromptTemplate(
+    name="question_validation",
+    template=QUESTION_VALIDATION_PROMPT,
+    required_vars=["question_type", "context", "questions_json"],
+    version="1.0",
+    description="LLM Node #2: Validate generated questions against source context"
+)
+
+
+# ============================================================
+# 7. SLIDE GENERATION
+# ============================================================
+
+SLIDE_GENERATION_PROMPT = """Bạn là trợ lý giáo dục chuyên tạo cấu trúc slide bài giảng cho SGK Tin học THPT.
+
+=== THÔNG TIN BÀI HỌC ===
+Bộ sách: {book}
+Lớp: {grade}
+Bài: {lesson}
+
+=== NỘI DUNG BÀI HỌC (TỪ TÀI LIỆU) ===
+{context}
+
+=== NHIỆM VỤ ===
+Tạo cấu trúc slide bài giảng hoàn chỉnh từ nội dung bài học trên.
+
+QUY TẮC:
+1. Slide 1: Tiêu đề bài + Mục tiêu bài học
+2. Slide 2-N: Nội dung chính (mỗi section = 1-2 slides)
+3. Slide sau nội dung: Ví dụ + Minh họa (nếu có)
+4. Slide bài tập: CHỪA TRỐNG (sẽ được inject bởi Question Generation)
+5. Slide cuối: Tóm tắt + Kiến thức cần nhớ
+6. Mỗi slide tối đa 5-7 bullet points
+7. Speaker notes bổ sung chi tiết cho giáo viên
+
+ĐỊNH DẠNG JSON:
+{{
+  "lesson_title": "Tên bài học",
+  "lesson_metadata": {{"book": "{book}", "grade": "{grade}", "lesson": "{lesson}"}},
+  "slides": [
+    {{
+      "slide_type": "title",
+      "title": "Tên bài học",
+      "bullets": ["Mục tiêu 1", "Mục tiêu 2"],
+      "notes": "Ghi chú cho giáo viên"
+    }},
+    {{
+      "slide_type": "content",
+      "title": "Tiêu đề phần",
+      "bullets": ["Nội dung 1", "Nội dung 2"],
+      "notes": "Chi tiết mở rộng cho giáo viên"
+    }},
+    {{
+      "slide_type": "exercise",
+      "title": "Bài tập",
+      "bullets": ["Chủ đề bài tập liên quan"],
+      "notes": "Câu hỏi sẽ được sinh tự động"
+    }},
+    {{
+      "slide_type": "summary",
+      "title": "Tóm tắt bài học",
+      "bullets": ["Kiến thức 1", "Kiến thức 2"],
+      "notes": "Nhấn mạnh các điểm quan trọng"
+    }}
+  ],
+  "total_slides": 8
+}}
+
+- CHỈ trả về JSON thuần túy
+
+=== BẮT ĐẦU TẠO SLIDE ==="""
+
+SLIDE_GENERATION_TEMPLATE = PromptTemplate(
+    name="slide_generation",
+    template=SLIDE_GENERATION_PROMPT,
+    required_vars=["book", "grade", "lesson", "context"],
+    version="1.0",
+    description="Generate slide structure from lesson content"
+)
+
+
+# ============================================================
+# 8. CHAT & EXPLAIN
+# ============================================================
+
+CHAT_PROMPT = """Bạn là trợ lý giáo dục chuyên về SGK Tin học THPT Việt Nam.
+
+=== KIẾN THỨC TỪ TÀI LIỆU ===
+{context}
+
+=== CÂU HỎI CỦA HỌC SINH ===
+{query}
+
+=== HƯỚNG DẪN TRẢ LỜI ===
+1. Trả lời ngắn gọn, chính xác, dễ hiểu
+2. Ưu tiên sử dụng kiến thức từ tài liệu được cung cấp
+3. Nếu tài liệu không đủ, dùng kiến thức chung nhưng phải ghi chú
+4. Khi phù hợp, gợi ý cho học sinh thử tạo câu hỏi ôn tập
+5. Sử dụng emoji phù hợp để tạo trải nghiệm thân thiện
+6. Nếu câu hỏi ngoài phạm vi Tin học THPT, nhẹ nhàng hướng dẫn học sinh quay lại chủ đề
+
+=== TRẢ LỜI ==="""
+
+EXPLAIN_PROMPT = """Bạn là giáo viên Tin học THPT giải thích chuyên sâu cho học sinh.
+
+=== KIẾN THỨC TỪ TÀI LIỆU ===
+{context}
+
+=== YÊU CẦU CỦA HỌC SINH ===
+{query}
+
+=== HƯỚNG DẪN GIẢI THÍCH ===
+Hãy giải thích theo cấu trúc sau:
+
+1. **Khái niệm cốt lõi**: Định nghĩa ngắn gọn, dễ hiểu
+2. **Giải thích chi tiết**: Phân tích từng khía cạnh quan trọng
+3. **Ví dụ minh họa**: Ví dụ cụ thể, gần gũi với đời sống
+4. **So sánh (nếu phù hợp)**: So sánh với khái niệm tương tự để làm rõ
+5. **Tóm tắt**: 2-3 điểm cần nhớ
+
+YÊU CẦU:
+- Sử dụng ngôn ngữ đơn giản, phù hợp học sinh THPT
+- Ưu tiên kiến thức từ tài liệu, bổ sung kiến thức chung nếu cần
+- Nếu khái niệm phức tạp, chia nhỏ thành từng bước
+
+=== BẮT ĐẦU GIẢI THÍCH ==="""
+
+
+# ============================================================
+# 9. UTILITY PROMPTS
+# ============================================================
+
+# ── Extract Metadata ───────────────────────────────────────
+
+EXTRACT_PROMPT = """
+Bạn là hệ thống trích xuất metadata cho hệ thống RAG sách giáo khoa THPT.
+
+Nhiệm vụ:
+Từ câu hỏi của người dùng, hãy trích xuất:
+- lesson: tên bài học (string bất kỳ) hoặc null
+- grade: khối lớp ("10", "11", "12") hoặc null
+- topic: chủ đề chính hoặc null
+
+Yêu cầu:
+- Chỉ trả về JSON hợp lệ
+- Không giải thích
+- Không thêm text ngoài JSON
+
+Câu hỏi:
+"{query}"
+
+Output format:
+{{"lesson": "...", "grade": "...", "topic": "..."}}
+"""
+
+EXTRACT_TEMPLATE = PromptTemplate(
+    name="extract_metadata",
+    template=EXTRACT_PROMPT,
+    required_vars=["query"],
+    version="1.0",
+    description="Extract metadata (lesson, grade, topic) from user query"
+)
+
+# ── Fallback ───────────────────────────────────────────────
+
 FALLBACK_PROMPT = """
 Bạn là trợ lý hỗ trợ học tập thân thiện.
 
@@ -233,16 +665,20 @@ User vừa hỏi:
 2. Nếu user hỏi về các tính năng của hệ thống → hướng dẫn cách sử dụng
 3. Nếu user muốn quay lại làm bài → khuyến khích họ
 
-=== GỢI Ý TRƯỢ CHUYỆN ===
-- Hỏi người dùng muốn làm bài của khối nào (10, 11, 12)
-- Hỏi họ muốn bao nhiêu câu hỏi
-- Khuyến khích tiếp tục học tập
-
 === OUTPUT ===
 Trả lời thân thiện, ngắn gọn (1-3 câu), không quá dài
 """
 
-# ===== FEEDBACK GENERATION PROMPT =====
+FALLBACK_TEMPLATE = PromptTemplate(
+    name="fallback",
+    template=FALLBACK_PROMPT,
+    required_vars=["query"],
+    version="1.0",
+    description="Handle off-topic or chitchat queries"
+)
+
+# ── Feedback ───────────────────────────────────────────────
+
 FEEDBACK_GENERATION_PROMPT = """
 Bạn là giáo viên tạo phản hồi giáo dục tích cực.
 
@@ -252,7 +688,7 @@ Câu hỏi #{question_index}:
 
 Phương án đúng: {correct_answer}
 Phương án người dùng chọn: {user_answer}
-Kết quả: {'✓ ĐÚNG' if is_correct else '✗ SAI'}
+Kết quả: {result_text}
 
 Giải thích đáp án:
 {explanation}
@@ -266,35 +702,70 @@ Tạo phản hồi giáo dục tích cực:
 Phản hồi ngắn gọn, rõ ràng, có tính xây dựng
 """
 
+# ── Response Formatting ───────────────────────────────────
 
-# # ===== EXTRACT PROMPT TEMPLATE =====
+RESPONSE_FORMATTING_PROMPT = """
+Bạn là công cụ định dạng câu hỏi trắc nghiệm.
 
-EXTRACT_PROMPT = """
-Bạn là hệ thống trích xuất metadata cho hệ thống RAG sách giáo khoa THPT.
+INPUT DATA:
+{options}
 
-Nhiệm vụ:
-Từ câu hỏi của người dùng, hãy trích xuất:
-- lesson: tên bài học (string bất kỳ) hoặc null
+=== NHIỆM VỤ ===
+Định dạng lại các câu hỏi thành TEXT READABLE format (KHÔNG JSON).
 
-Yêu cầu:
-- Chỉ trả về JSON hợp lệ
-- Không giải thích
-- Không thêm text ngoài JSON
-
-Câu hỏi:
-"{query}"
+=== YÊU CẦU ===
+1. KHÔNG bao gồm correct_answer hoặc explanation trong output
+2. KHÔNG in đáp án đúng hoặc giải thích
+3. KHÔNG trả về JSON - chỉ text thuần
+4. Mỗi câu hỏi cách nhau bằng dòng gạch ngang
+5. Format: "Câu hỏi N:" rồi nội dung, rồi 4 options A, B, C, D
 """
 
+# ── Knowledge Map ──────────────────────────────────────────
 
+KNOWLEDGE_RELATION_PROMPT = """Bạn là chuyên gia xây dựng bản đồ kiến thức Tin học THPT.
+
+Từ chủ đề: "{topic}"
+
+Hãy liệt kê các chủ đề LIÊN QUAN trong SGK Tin học THPT.
+
+CHỈ trả về JSON:
+{{
+  "related_topics": ["topic1", "topic2", ...],
+  "prerequisites": ["topic_trước_1", ...],
+  "next_topics": ["topic_sau_1", ...]
+}}"""
+
+
+# ============================================================
+# EXPORTS
+# ============================================================
 
 __all__ = [
-    "QUESTION_GENERATION_PROMPT",
-    "RESPONSE_FORMATTING_PROMPT",
-    "UTILITY_SCORING_PROMPT",
-    "FALLBACK_PROMPT",
+    # Base
+    "PromptTemplate", "create_prompt",
+    # System
+    "SYSTEM_PROMPT", "SYSTEM_PROMPT_SHORT",
+    # Intent
+    "INTENT_ROUTER_PROMPT",
+    # Question Generation
+    "QUESTION_GENERATION_PROMPT", "QUESTION_GENERATION_TEMPLATE",
+    "ESSAY_GENERATION_PROMPT", "ESSAY_GENERATION_TEMPLATE",
+    "FILL_BLANK_GENERATION_PROMPT", "FILL_BLANK_GENERATION_TEMPLATE",
+    "TRUE_FALSE_GENERATION_PROMPT", "TRUE_FALSE_GENERATION_TEMPLATE",
+    "ESSAY_SCORING_PROMPT", "ESSAY_SCORING_TEMPLATE",
+    # Scoring
+    "UTILITY_SCORING_PROMPT", "SCORING_TEMPLATE",
+    # Validation
+    "QUESTION_VALIDATION_PROMPT", "QUESTION_VALIDATION_TEMPLATE",
+    # Slide
+    "SLIDE_GENERATION_PROMPT", "SLIDE_GENERATION_TEMPLATE",
+    # Chat & Explain
+    "CHAT_PROMPT", "EXPLAIN_PROMPT",
+    # Utility
+    "EXTRACT_PROMPT", "EXTRACT_TEMPLATE",
+    "FALLBACK_PROMPT", "FALLBACK_TEMPLATE",
     "FEEDBACK_GENERATION_PROMPT",
-    "EXTRACT_PROMPT_TEMPLATE",
+    "RESPONSE_FORMATTING_PROMPT",
+    "KNOWLEDGE_RELATION_PROMPT",
 ]
-
-
-

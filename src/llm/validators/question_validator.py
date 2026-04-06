@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
 import json
 from src.llm.handlers.base_handler import BaseHandler
-from src.prompts.validator_prompts import QUESTION_VALIDATION_TEMPLATE
+from src.llm.prompts import QUESTION_VALIDATION_TEMPLATE
 from src.schemas.llm_outputs import ValidationResult
 from src.config.config import settings
 

@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional, Any
 import json
 from src.llm.handlers.base_handler import BaseHandler
-from src.prompts.base import PromptTemplate
+from src.llm.prompts import PromptTemplate
 
 KNOWLEDGE_RELATION_PROMPT = """Bạn là chuyên gia xây dựng bản đồ kiến thức Tin học THPT.
 

@@ -1,0 +1,23 @@
+[
+  {
+    "session_id": "d18808f0",
+    "topic": "Mang may tinh",
+    "intent": "chat",
+    "created_at": "2026-04-06T10:10:42.486732",
+    "updated_at": "2026-04-06T10:14:40.102220"
+  },
+  {
+    "session_id": "fbc5b5b5",
+    "topic": "",
+    "intent": "chat",
+    "created_at": "2026-04-06T21:17:26.451729",
+    "updated_at": "2026-04-06T21:18:08.833808"
+  },
+  {
+    "session_id": "0087493f",
+    "topic": "Kiến thức Tin học THPT",
+    "intent": "chat",
+    "created_at": "2026-04-06T21:35:04.259198",
+    "updated_at": "2026-04-06T21:37:26.556129"
+  }
+]

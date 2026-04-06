@@ -2,7 +2,7 @@
 
 from typing import Optional
 from src.llm.handlers.base_handler import BaseHandler
-from src.prompts.fallback_prompts import FALLBACK_PROMPT
+from src.llm.prompts import FALLBACK_PROMPT
 from src.config.config import settings
 
 

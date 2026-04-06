@@ -1,23 +1,23 @@
-# Hệ Thống Trợ Lý Học Tập Thông Minh (Educational Chatbot)
+# Intelligent Educational Assistant System (Educational Chatbot)
 
-Dự án Đồ án Tốt nghiệp thiết kế và xây dựng một hệ thống Trợ lý ảo hỗ trợ dạy và học chuyên môn Tin học cấp THPT (Lớp 10-12). Hệ thống được phát triển dựa trên kiến trúc RAG (Retrieval-Augmented Generation) kết hợp với mô hình LLM theo hướng tiếp cận Multi-Agent, nhằm khắc phục các hạn chế về ảo giác thông tin (Hallucination) và nâng cao độ chính xác theo sát sách giáo khoa.
+Graduation Thesis project to design and build an Intelligent Virtual Assistant supporting teaching and learning of Computer Science at the High School level (Grades 10-12). The system is developed based on the RAG (Retrieval-Augmented Generation) architecture combined with a Multi-Agent LLM approach to overcome information hallucination and enhance accuracy by closely following textbooks.
 
-## 1. Giới thiệu chung
+## 1. General Introduction
 
-Mục tiêu của hệ thống là cung cấp một công cụ tự động hóa các tác vụ học thuật phức tạp, phục vụ cả học sinh và giáo viên.
+The system aims to provide a tool that automates complex academic tasks, serving both students and teachers.
 
-**Các chức năng cốt lõi:**
+**Core Functions:**
 
-- **Truy vấn kiến thức chuyên môn (QA):** Trả lời các câu hỏi dựa trên kho ngữ liệu sách giáo khoa chuẩn (Cánh Diều và Kết Nối Tri Thức).
-- **Trích xuất và Sinh câu hỏi (Quiz Generation):** Tự động khởi tạo hệ thống bài tập theo nhiều định dạng (Trắc nghiệm nhiều lựa chọn, Điền khuyết, Đúng/Sai, Tự luận) với số lượng và độ khó tùy chỉnh.
-- **Đánh giá và Chấm điểm (Answer Scoring):** Chấm điểm tự động và cung cấp lập luận sửa ý sai dựa trên context thực tế thay vì chỉ đối chiếu từ khóa.
-- **Sinh cấu trúc bài giảng (Slide/Lesson Plan Generation):** Chuyển đổi nội dung văn bản thành cấu trúc tóm tắt phục vụ cho việc tạo trình chiếu hoặc giáo án.
+- **Knowledge Query (QA):** Answer questions based on a standardized textbook corpus (Canh Dieu and Ket Noi Tri Thuc).
+- **Extraction and Question Generation (Quiz Generation):** Automatically initialize exercise systems in various formats (Multiple choice, Fill-in-the-blank, True/False, Essay) with customizable quantity and difficulty.
+- **Evaluation and Scoring (Answer Scoring):** Automatically score answers and provide reasoning for corrections based on actual context instead of just keyword matching.
+- **Lecture Structure Generation (Slide/Lesson Plan Generation):** Convert text content into summary structures for creating presentations or lesson plans.
 
 ---
 
-## 2. Pipeline hệ thống chi tiết
+## 2. Detailed System Pipeline
 
-Hệ thống được thiết kế theo luồng xử lý Multi-Agent kết hợp với cơ chế RAG chuyên sâu. Quy trình (End-to-End Workflow) đi qua các giai đoạn độc lập:
+The system is designed with a Multi-Agent processing flow combined with an advanced RAG mechanism. The End-to-End Workflow goes through independent stages:
 
 ```text
 ┌────────────────────────────────────────────────────────┐
@@ -69,84 +69,84 @@ Hệ thống được thiết kế theo luồng xử lý Multi-Agent kết hợp
 └────────────────────────────────────────────────────────┘
 ```
 
-### 2.1. Phân loại Ý định (Intent Detection)
+### 2.1. Intent Detection
 
-Khi hệ thống tiếp nhận truy vấn ngôn ngữ tự nhiên từ người dùng, `IntentDetector Agent` sẽ phân tích ngữ nghĩa để trích xuất 3 thực thể tham số (Entities):
+When the system receives a natural language query from the user, the `IntentDetector Agent` performs semantic analysis to extract 3 entities (Entities):
 
-- `intent`: Mục đích thực thụ của câu lenh (Chat, Generate Question, Explain, v.v).
-- `task_type`: Định dạng đầu ra mong muốn (Ví dụ: `mcq`, `essay`).
-- `topic`: Chủ đề kiến thức người dùng đang muốn nhắm tới.
+- `intent`: The actual purpose of the command (Chat, Generate Question, Explain, etc.).
+- `task_type`: Desired output format (e.g., `mcq`, `essay`).
+- `topic`: The knowledge topic the user is targeting.
 
-Lệnh trích xuất sau đó được bộ Dispatcher định tuyến tới Specialist Handler (Tác tử chuyên môn) tương ứng.
+The extraction command is then routed by the Dispatcher to the corresponding Specialist Handler.
 
-### 2.2. Xử lý Truy xuất Hệ thống RAG (Advanced RAG Pipeline)
+### 2.2. Advanced RAG Pipeline
 
-Để đảm bảo LLM nhận được tập tài liệu (Context) chính xác nhất, hệ thống triển khai pipeline Retrieval với 4 bước tối ưu độ trễ và độ chụm:
+To ensure the LLM receives the most accurate context (Context), the system implements a Retrieval pipeline with 4 steps optimized for latency and precision:
 
-1. **Query Rewriting:** LLM Agent phân tách và viết lại câu hỏi gốc thành các biến thể (queries) nhằm bao quát không gian ngữ nghĩa, tăng chỉ số Recall.
-2. **Hybrid Search:** Thực hiện tìm kiếm song song trên không gian Vector:
-   - **Lexical Search:** Sử dụng module `Custom BM25` độc lập (TF-IDF cải tiến) để truy vết chính xác từ khóa đặc thù ngành.
-   - **Semantic Search:** Sử dụng Cosine Similarity trên mô hình Embedding để tìm sự tương đồng về ngữ nghĩa.
-3. **Reciprocal Rank Fusion (RRF):** Thuật toán chuẩn hóa và hòa trộn (Merge) kết quả xếp hạng từ hai bộ máy tìm kiếm ở bước 2.
-4. **Cross-Encoder Reranking:** Sử dụng mô hình `Vietnamese_Reranker` để tính toán khoảng cách vector tuyến tính giữa Query và Top N Document. Lọc bỏ các chunk bị nhiễu do trùng lặp hoặc chứa điểm số liên quan (`rerank_score`) dưới ngưỡng.
+1. **Query Rewriting:** The LLM Agent breaks down and rewrites the original question into variants (queries) to cover the semantic space, increasing the Recall metric.
+2. **Hybrid Search:** Performs parallel searching in Vector space:
+   - **Lexical Search:** Uses an independent `Custom BM25` module (enhanced TF-IDF) to accurately trace industry-specific keywords.
+   - **Semantic Search:** Uses Cosine Similarity on an Embedding model to find semantic similarities.
+3. **Reciprocal Rank Fusion (RRF):** An algorithm to normalize and merge ranking results from the two search engines in step 2.
+4. **Cross-Encoder Reranking:** Uses the `Vietnamese_Reranker` model to calculate linear vector distances between the Query and Top N Documents. Filters out noisy chunks caused by duplication or those with relevance scores (`rerank_score`) below a certain threshold.
 
-### 2.3. Sinh nội dung và Vùng Phản Biện (Generation & Self-Reflection)
+### 2.3. Generation & Self-Reflection
 
-Tài liệu sau khi lọc được đóng gói cùng Query và nạp vào LLM để sinh kết quả (JSON Formatting).
-Tại pha này, hệ thống áp dụng cơ chế Self-Reflection thông qua một `Validator Agent`. Kết quả sau khi sinh sẽ được Agent này trích xuất ngược để đối soát chéo với Context ban đầu nhằm đảm bảo các yêu cầu cấu trúc và không vi phạm điều kiện logic. Nếu xác thực thất bại, tiến trình Generation sẽ được gọi đệ quy để thực thi lại đến khi đạt quy chuẩn.
+Filtered documents are packaged with the Query and fed into the LLM to generate results (JSON Formatting).
+In this phase, the system applies a Self-Reflection mechanism through a `Validator Agent`. The generated results are reversely extracted by this Agent to cross-check with the original Context to ensure structural requirements and logical conditions are met. If validation fails, the Generation process is called recursively to re-execute until it meets the standards.
 
-### 2.4. Đo lường độc lập (RAGAS Evaluation Pipeline)
+### 2.4. RAGAS Evaluation Pipeline
 
-Để đánh giá định lượng hiệu năng hệ thống RAG, dự án tích hợp một pipeline đánh giá độc lập tự động:
+To quantitatively evaluate the RAG system's performance, the project integrates an independent automated evaluation pipeline:
 
-- **Testset Generator:** Tự động tổng hợp 50-100 Samples (Query, Ground Truth Answer) ngẫu nhiên từ kho JSON chunks SGK.
-- **RAGAS Evaluator:** Sử dụng framework chuẩn đo lường 4 hệ số: _Answer Relevancy_, _Faithfulness_, _Context Precision_, và _Context Recall_.
+- **Testset Generator:** Automatically synthesizes 50-100 random samples (Query, Ground Truth Answer) from the textbook JSON chunks.
+- **RAGAS Evaluator:** Uses a standard framework to measure 4 coefficients: _Answer Relevancy_, _Faithfulness_, _Context Precision_, and _Context Recall_.
 
 ---
 
-## 3. Tech Stack (Công nghệ triển khai)
+## 3. Tech Stack
 
-Hệ thống được phát triển tách biệt thành các modules để đảm bảo tính mở rộng cao (Scalability).
+The system is developed in separate modules to ensure high scalability.
 
 **1. Core LLM & Orchestration:**
 
-- **Mô hình ngôn ngữ:** Google Gemini (`gemini-2.5-pro` & `gemini-2.5-flash`) thông qua `google-genai` SDK.
-- **Quản lý Agent:** Python hướng đối tượng (OOP) xây dựng kiến trúc State Machine nội bộ thay cho các framework nặng.
+- **Language Model:** Google Gemini (`gemini-2.5-pro` & `gemini-2.5-flash`) via `google-genai` SDK.
+- **Agent Management:** Object-Oriented Python (OOP) builds an internal State Machine architecture instead of heavy frameworks.
 
 **2. Retrieval & Vector Core:**
 
-- **Mô hình Nhúng (Embedding):** `dangvantuan/vietnamese-document-embedding` (Dựa trên kiến trúc `HuggingFaceEmbeddings` / `SentenceTransformer`, không gian 768 chiều).
-- **Mô hình Xếp hạng lại (Reranker):** `AITeamVN/Vietnamese_Reranker` (Kiến trúc Cross-Encoder chạy trên torch/CUDA).
-- **Search Engine:** Vector không gian được thực toán hóa bằng `Numpy` Thuần + Thuật toán `BM25 TF-IDF Analyzer` tự lập trình để tránh hao tổn tài nguyên và dependency thư viện native (như FAISS).
+- **Embedding Model:** `dangvantuan/vietnamese-document-embedding` (Based on `HuggingFaceEmbeddings` / `SentenceTransformer` architecture, 768 dimensions).
+- **Reranker Model:** `AITeamVN/Vietnamese_Reranker` (Cross-Encoder architecture running on torch/CUDA).
+- **Search Engine:** Vector space is mathematicalized using pure `Numpy` + a self-programmed `BM25 TF-IDF Analyzer` algorithm to avoid resource waste and native library dependencies (like FAISS).
 
 **3. Infrastructure & UI:**
 
-- **Giao diện Người dùng:** `Gradio` Web Framework.
-- **Hệ thống Đo lường (Evaluation):** `ragas==0.4.3` chạy qua CLI Argument Parser (`run_eval.py`).
-- **Data Engineering:** Regular Expression (Regex) kết hợp Chunking phân cấp (Hierarchical Document Splitting) xử lý văn bản phi cấu trúc (Markdown).
+- **User Interface:** `Gradio` Web Framework.
+- **Evaluation System:** `ragas==0.4.3` running via CLI Argument Parser (`run_eval.py`).
+- **Data Engineering:** Regular Expression (Regex) combined with Hierarchical Document Splitting handles unstructured text (Markdown).
 
 ---
 
-## 4. Hướng dẫn Local Setup
+## 4. Local Setup Guide
 
-Quá trình triển khai Local Requirement yêu cầu môi trường Python >= 3.12:
+The local deployment process requires a Python environment >= 3.12:
 
 ```bash
 # 1. Clone Source Code
 git clone https://github.com/KhacDiep08/Educational-Chatbot.git
 cd Educational-Chatbot
 
-# 2. Cài đặt Dependencies
+# 2. Install Dependencies
 pip install -r requirements.txt
 
-# 3. Phân bổ API Keys
+# 3. Assign API Keys
 echo GENAI_API_KEY=your_key_here > .env
 
-# 4. Khởi chạy Ứng dụng Server UI
+# 4. Launch UI Server Application
 python app_gradio.py
 ```
 
-Khởi chạy tập lệnh đo lường Metric RAGAS Report (Option):
+Run the RAGAS Metric Report evaluation script (Optional):
 
 ```bash
 python -m src.evaluation.run_eval --step all
@@ -154,4 +154,4 @@ python -m src.evaluation.run_eval --step all
 
 ---
 
-_Thông tin sinh viên thực hiện: Khắc Diệp (Đại học Bách Khoa Hà Nội)._
+_Student Information: Khac Diep (Hanoi University of Science and Technology)._

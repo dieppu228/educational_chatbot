@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from src.llm.handlers.base_handler import BaseHandler
-from src.prompts.question_prompts import ESSAY_GENERATION_TEMPLATE
+from src.llm.prompts import ESSAY_GENERATION_TEMPLATE
 from src.schemas.llm_outputs import EssayGenerationOutput
 from src.config.config import settings
 

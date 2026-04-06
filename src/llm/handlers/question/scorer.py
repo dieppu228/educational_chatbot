@@ -1,8 +1,7 @@
 import json
 from typing import Optional, Dict, Any, List
 from src.llm.handlers.base_handler import BaseHandler
-from src.prompts.scoring_prompts import UTILITY_SCORING_PROMPT
-from src.prompts.question_prompts import ESSAY_SCORING_TEMPLATE
+from src.llm.prompts import UTILITY_SCORING_PROMPT, ESSAY_SCORING_TEMPLATE
 from src.schemas.llm_outputs import ScoringOutput
 from src.llm.memory import TaskItem
 from src.config.config import settings

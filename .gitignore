@@ -39,3 +39,6 @@ logs/
 
 review_notes.md
 REPO_STRUCTURE.md
+.pyre_configuration
+pyproject.toml
+pyrightconfig.json

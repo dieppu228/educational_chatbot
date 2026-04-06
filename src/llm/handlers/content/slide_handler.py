@@ -1,7 +1,7 @@
 from typing import Optional, List, Dict, Any
 from src.llm.handlers.base_handler import BaseHandler
 from src.llm.handlers.question.mcq_handler import MCQHandler
-from src.prompts.slide_prompts import SLIDE_GENERATION_TEMPLATE
+from src.llm.prompts import SLIDE_GENERATION_TEMPLATE
 from src.schemas.llm_outputs import SlideGenerationOutput, SlideItem, MCQGenerationOutput
 from src.config.config import settings
 

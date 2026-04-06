@@ -1,20 +1,18 @@
 """
-Gradio Chatbot Application — Phase 2 Full Pipeline
-===================================================
-Demo hệ thống sinh câu hỏi + slide bài giảng tự động.
+Gradio Chatbot Application — Orchestrator v2
+=============================================
+Giao dien 1 khung chat duy nhat.
+Moi thu di qua Orchestrator: sinh quiz, slide, cham diem, on tap, giai thich, chat.
 
 Pipeline:
-  IntentDetector → CustomSearch (BM25 + Semantic + RRF)
-  → Reranker (CrossEncoder) → Handlers → Validator → Output
+  IntentRouter -> SessionManager -> ActionPlanner -> Handler -> SessionStore
 
-Tabs:
-  1. Sinh câu hỏi  — MCQ / Essay / Fill-blank / True-False
-  2. Sinh slide     — Tạo bài giảng HTML từ nội dung SGK
-  3. Chat tự do     — Hỏi đáp chung (chatbot.ask)
+Debug panel hien thi ket qua tung node.
 """
 
 import sys
 import os
+import json
 import gradio as gr
 from pathlib import Path
 
@@ -31,37 +29,29 @@ load_dotenv(PROJECT_ROOT / '.env')
 from src.config.config import settings
 from src.rag.retrieve_rebuild import CustomSearch
 from src.rag.reranker import Reranker
-from src.llm.conversation import ChatBot
-from src.llm.utils import format_contexts
-from src.llm.handlers.question.mcq_handler import MCQHandler
-from src.llm.handlers.question.essay_handler import EssayHandler
-from src.llm.handlers.question.fill_handler import FillHandler
-from src.llm.handlers.question.true_false_handler import TrueFalseHandler
-from src.llm.handlers.content.slide_handler import SlideHandler
-from src.llm.handlers.content.slide_template import SlideTemplate
+from src.llm.orchestrator import Orchestrator
+from src.llm.memory import MemoryManager
 
-# ── Global refs (gán trong init_components) ────────────────────
+# ── Global refs ────────────────────────────────────────────────
 searcher = None
 reranker = None
-chatbot = None
-question_handlers = {}
-slide_handler = None
+orchestrator = None
 
 
 # ============================================================
-# INITIALIZATION — gọi 1 lần khi app start
+# INITIALIZATION
 # ============================================================
 
 def init_components():
-    """Khởi tạo tất cả components. Gọi 1 lần trong main()."""
-    global searcher, reranker, chatbot, question_handlers, slide_handler
+    """Khoi tao tat ca components. Goi 1 lan trong main()."""
+    global searcher, reranker, orchestrator
 
     DATA_DIR = PROJECT_ROOT / 'data'
     CHUNKS_PATH = str(DATA_DIR / 'rag_chunks_v2.json')
     EMBEDDINGS_PATH = str(DATA_DIR / 'embeddings.npy')
 
     print("=" * 60)
-    print("Initializing Gradio Application...")
+    print("Initializing Gradio Application (Orchestrator v2)...")
     print("=" * 60, flush=True)
 
     # 1. CustomSearch (BM25 + Semantic + RRF)
@@ -77,20 +67,10 @@ def init_components():
     reranker = Reranker()
     print("   Reranker ready (lazy load)", flush=True)
 
-    # 3. ChatBot orchestrator
-    print("Initializing ChatBot...", flush=True)
-    chatbot = ChatBot(retriever=searcher, reranker=reranker)
-    print("   ChatBot ready", flush=True)
-
-    # 4. Standalone handlers
-    question_handlers.update({
-        "mcq":        MCQHandler(),
-        "essay":      EssayHandler(),
-        "fill_blank": FillHandler(),
-        "true_false": TrueFalseHandler(),
-    })
-    slide_handler = SlideHandler()
-    print("   Handlers ready", flush=True)
+    # 3. Orchestrator v2
+    print("Initializing Orchestrator v2...", flush=True)
+    orchestrator = Orchestrator(retriever=searcher, reranker=reranker)
+    print("   Orchestrator ready", flush=True)
 
     print("=" * 60)
     print("All components are ready!")
@@ -98,143 +78,98 @@ def init_components():
 
 
 # ============================================================
-# HELPER FUNCTIONS
-# ============================================================
-
-def do_rag_search(query: str, top_k: int = 60, top_n: int = 10):
-    """Chạy RAG pipeline: Search → Rerank, trả về contexts + debug info."""
-    search_results = searcher.search(query, top_k=top_k)
-    if not search_results:
-        return [], "⚠️ Không tìm thấy tài liệu liên quan."
-
-    reranked = reranker.rerank(query, search_results, top_n=top_n)
-
-    lines = [f"🔍 **Hybrid Search:** {len(search_results)} kết quả → **Rerank:** {len(reranked)} kết quả\n"]
-    for i, r in enumerate(reranked[:5], 1):
-        score = r.get('rerank_score', r.get('score', 0))
-        content_preview = r['content'][:120].replace('\n', ' ')
-        lines.append(f"**[{i}]** score={score:.4f} · `{content_preview}…`")
-    debug_text = "\n".join(lines)
-    return reranked, debug_text
-
-
-# ============================================================
-# TAB 1: SINH CÂU HỎI
-# ============================================================
-
-def generate_questions(topic, question_type, num_questions):
-    """Sinh câu hỏi: RAG → Handler → Display."""
-    if not topic or not topic.strip():
-        return "⚠️ Vui lòng nhập chủ đề.", "", ""
-
-    type_map = {
-        "Trắc nghiệm (MCQ)": "mcq",
-        "Tự luận (Essay)":    "essay",
-        "Điền khuyết (Fill)": "fill_blank",
-        "Đúng/Sai (T/F)":    "true_false",
-    }
-    q_type = type_map.get(question_type, "mcq")
-    handler = question_handlers[q_type]
-    num_q = int(num_questions)
-
-    # 1. RAG Search
-    contexts, debug_text = do_rag_search(topic)
-    if not contexts:
-        return "⚠️ Không tìm thấy tài liệu phù hợp.", debug_text, ""
-
-    context_text = format_contexts(contexts)
-
-    # 2. Generate
-    try:
-        query_str = f"Tạo {num_q} câu {question_type.split('(')[0].strip()} về {topic}"
-        output = handler.handle(query_str, context_text, num_questions=num_q)
-    except Exception as e:
-        return f"❌ Lỗi sinh câu hỏi: {e}", debug_text, ""
-
-    # 3. Format display
-    display = output.to_display_format()
-
-    # 4. Answer info
-    answer_lines = []
-    if q_type == "mcq":
-        for q in output.mcq:
-            answer_lines.append(f"**Câu {q.index}:** {q.correct_answer} — {q.explanation}")
-    elif q_type == "essay":
-        for q in output.essays:
-            answer_lines.append(
-                f"**Câu {q.index} ({q.difficulty}):**\n"
-                f"- Đáp án mẫu: {q.sample_answer[:200]}…\n"
-                f"- Rubric: {q.rubric[:200]}…"
-            )
-    elif q_type == "fill_blank":
-        for q in output.fill_blanks:
-            answer_lines.append(f"**Câu {q.index}:** {', '.join(q.answers)} — {q.explanation}")
-    elif q_type == "true_false":
-        for q in output.true_false:
-            tf_label = "Đúng ✅" if q.correct_answer else "Sai ❌"
-            answer_lines.append(f"**Câu {q.index}:** {tf_label} — {q.explanation}")
-
-    answer_text = "\n\n".join(answer_lines) if answer_lines else ""
-    return display, debug_text, answer_text
-
-
-# ============================================================
-# TAB 2: SINH SLIDE
-# ============================================================
-
-def generate_slides(topic, book, grade, lesson):
-    """Sinh slide bài giảng: RAG → SlideHandler → HTML render."""
-    if not topic or not topic.strip():
-        return "⚠️ Vui lòng nhập chủ đề.", "", "<p>Chưa có slide</p>"
-
-    contexts, debug_text = do_rag_search(topic)
-    if not contexts:
-        return "⚠️ Không tìm thấy tài liệu.", debug_text, "<p>Không có dữ liệu</p>"
-
-    context_text = format_contexts(contexts)
-
-    try:
-        slide_output = slide_handler.handle(
-            book=book or "Kết nối tri thức",
-            grade=grade or "10",
-            lesson=lesson or topic,
-            context=context_text
-        )
-    except Exception as e:
-        return f"❌ Lỗi sinh slide: {e}", debug_text, "<p>Lỗi</p>"
-
-    text_display = slide_output.to_display_format()
-    html_display = SlideTemplate.render_to_html(slide_output)
-    return text_display, debug_text, html_display
-
-
-# ============================================================
-# TAB 3: CHAT TỰ DO
+# CHAT HANDLER
 # ============================================================
 
 def chat_response(message, history):
-    """Chat qua ChatBot.ask() generator."""
+    """Process message through Orchestrator pipeline."""
     if not message or not message.strip():
-        return history
+        return history, ""
 
     history = history + [{"role": "user", "content": message}]
 
     full_response = ""
     try:
-        for chunk in chatbot.ask(message):
+        for chunk in orchestrator.ask(message):
             full_response += chunk
         history = history + [{"role": "assistant", "content": full_response}]
     except Exception as e:
-        history = history + [{"role": "assistant", "content": f"❌ Lỗi: {str(e)[:200]}"}]
+        history = history + [{"role": "assistant", "content": f"Loi: {str(e)[:300]}"}]
 
-    return history
+    # Build debug text from orchestrator.last_debug_info
+    debug_text = format_debug_info(orchestrator.last_debug_info)
+
+    return history, debug_text
+
+
+def format_debug_info(debug_info: dict) -> str:
+    """Format debug info dict into readable markdown."""
+    if not debug_info:
+        return "*Chua co debug info*"
+
+    lines = []
+    lines.append(f"**Query:** `{debug_info.get('query', '?')[:80]}`\n")
+
+    for step in debug_info.get("steps", []):
+        node = step.get("node", "?")
+
+        if node == "ContextAnalyzer":
+            enriched = "Co" if step.get("enriched") else "Khong"
+            lines.append(f"**[1] ContextAnalyzer** — Enriched: {enriched}")
+
+        elif node == "IntentRouter":
+            lines.append(
+                f"**[2] IntentRouter** ({step.get('time_s', '?')}s)\n"
+                f"  - Intent: `{step.get('primary_intent')}`\n"
+                f"  - Task type: `{step.get('task_type')}`\n"
+                f"  - Topic: `{step.get('topic')}`\n"
+                f"  - New topic: `{step.get('is_new_topic')}`"
+            )
+
+        elif node == "SessionManager":
+            lines.append(
+                f"**[3] SessionManager**\n"
+                f"  - Session ID: `{step.get('session_id')}`\n"
+                f"  - Topic: `{step.get('topic')}`\n"
+                f"  - Messages: {step.get('total_messages')}\n"
+                f"  - Quiz state: {step.get('has_quiz_state')}\n"
+                f"  - Slide state: {step.get('has_slide_state')}"
+            )
+
+        elif node == "ActionPlanner":
+            lines.append(
+                f"**[4] ActionPlanner**\n"
+                f"  - Action: `{step.get('action')}`\n"
+                f"  - Reason: {step.get('reason')}"
+            )
+            if step.get("round_id") is not None:
+                lines.append(f"  - Round ID: {step.get('round_id')}")
+
+        elif node == "RAG":
+            if step.get("error"):
+                lines.append(f"**[5] RAG** — Error: {step.get('error')}")
+            else:
+                lines.append(
+                    f"**[5] RAG Search** ({step.get('time_s', '?')}s)\n"
+                    f"  - Search results: {step.get('search_results')}\n"
+                    f"  - After rerank: {step.get('reranked')}"
+                )
+                for preview in step.get("top_chunks", []):
+                    lines.append(f"  - `{preview[:100]}`")
+
+        lines.append("")
+
+    total = debug_info.get("total_time_s")
+    if total:
+        lines.append(f"**Total time: {total}s**")
+
+    return "\n".join(lines)
 
 
 def clear_chat():
-    """Reset chat."""
-    from src.llm.memory import MemoryManager
-    chatbot.memory = MemoryManager()
-    return []
+    """Reset orchestrator memory."""
+    orchestrator.memory = MemoryManager()
+    return [], "*Reset — chua co debug info*"
 
 
 # ============================================================
@@ -262,17 +197,6 @@ CUSTOM_CSS = """
 .app-header h1 { margin: 0 0 6px 0; font-size: 1.8em; font-weight: 700; }
 .app-header p  { margin: 0; opacity: 0.9; font-size: 0.95em; }
 
-.tab-nav button {
-    font-weight: 600 !important;
-    font-size: 0.95em !important;
-    padding: 12px 24px !important;
-    border-radius: 12px 12px 0 0 !important;
-}
-.tab-nav button.selected {
-    background: linear-gradient(135deg, #667eea, #764ba2) !important;
-    color: white !important;
-}
-
 .primary-btn {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
     border: none !important;
@@ -289,6 +213,13 @@ CUSTOM_CSS = """
     box-shadow: 0 6px 20px rgba(102, 126, 234, 0.45) !important;
 }
 
+.debug-panel {
+    background: #1a1a2e !important;
+    border: 1px solid #333 !important;
+    border-radius: 12px !important;
+    font-size: 0.85em !important;
+}
+
 .app-footer {
     text-align: center;
     padding: 16px;
@@ -299,13 +230,13 @@ CUSTOM_CSS = """
 
 
 # ============================================================
-# BUILD GRADIO UI
+# BUILD GRADIO UI — Single Chat Interface
 # ============================================================
 
 def build_ui():
-    """Tạo Gradio Blocks UI. Gọi sau khi init_components()."""
+    """Tao Gradio UI — 1 khung chat duy nhat + debug panel."""
     with gr.Blocks(
-        title="🤖 EduBot — Sinh câu hỏi & Slide SGK Tin Học",
+        title="EduBot — Tro ly Giao duc Tin Hoc",
         theme=gr.themes.Soft(
             primary_hue="indigo",
             secondary_hue="purple",
@@ -319,167 +250,58 @@ def build_ui():
         gr.HTML("""
         <div class="app-header">
             <h1>🤖 EduBot — Trợ lý Giáo dục Tin Học</h1>
-            <p>Hệ thống sinh câu hỏi & slide bài giảng tự động · SGK Tin Học THPT</p>
+            <p>Sinh câu hỏi · Chấm điểm · Ôn tập · Sinh slide · Giải thích kiến thức · Chat tự do</p>
         </div>
         """)
 
-        with gr.Tabs():
-            # ══════════════════════════════════════════════════
-            # TAB 1: SINH CÂU HỎI
-            # ══════════════════════════════════════════════════
-            with gr.Tab("📝 Sinh câu hỏi"):
-                gr.Markdown("### Sinh câu hỏi tự động từ SGK Tin Học")
+        # ── Main Chat ──
+        chatbot_ui = gr.Chatbot(
+            height=520,
+            show_copy_button=True,
+            show_label=False,
+            type="messages",
+            placeholder="Hãy hỏi bất cứ điều gì: tạo câu hỏi, sinh slide, giải thích kiến thức...",
+        )
 
-                with gr.Row():
-                    with gr.Column(scale=2):
-                        q_topic = gr.Textbox(
-                            label="📌 Chủ đề / Nội dung",
-                            placeholder="VD: Mạng máy tính, An toàn thông tin...",
-                            lines=2,
-                        )
-                    with gr.Column(scale=1):
-                        q_type = gr.Dropdown(
-                            label="📋 Loại câu hỏi",
-                            choices=[
-                                "Trắc nghiệm (MCQ)",
-                                "Tự luận (Essay)",
-                                "Điền khuyết (Fill)",
-                                "Đúng/Sai (T/F)",
-                            ],
-                            value="Trắc nghiệm (MCQ)",
-                        )
-                    with gr.Column(scale=1):
-                        q_num = gr.Slider(
-                            label="🔢 Số câu",
-                            minimum=1, maximum=10, step=1, value=3,
-                        )
+        with gr.Row():
+            chat_input = gr.Textbox(
+                placeholder="VD: Tạo 3 câu trắc nghiệm về mạng LAN | Sinh slide bài An toàn thông tin | Mạng máy tính là gì?",
+                show_label=False,
+                lines=2,
+                scale=5,
+            )
+            chat_send = gr.Button(
+                "📤 Gửi", variant="primary", scale=1,
+                elem_classes=["primary-btn"],
+            )
 
-                q_btn = gr.Button(
-                    "🚀 Sinh câu hỏi", variant="primary",
-                    elem_classes=["primary-btn"]
-                )
+        with gr.Row():
+            chat_clear = gr.Button("🗑️ Xóa lịch sử", variant="secondary", scale=1)
+            gr.HTML("<div style='flex:4'></div>")  # spacer
 
-                with gr.Row():
-                    with gr.Column(scale=3):
-                        q_output = gr.Textbox(
-                            label="📄 Câu hỏi được sinh",
-                            lines=18, interactive=False,
-                            show_copy_button=True,
-                        )
-                    with gr.Column(scale=2):
-                        q_debug = gr.Markdown(
-                            label="🔍 RAG Debug",
-                            value="*Chờ sinh câu hỏi...*",
-                        )
+        # ── Debug Panel ──
+        with gr.Accordion("🔍 Pipeline Debug — Kết quả từng Node", open=False):
+            debug_output = gr.Markdown(
+                value="*Chờ xử lý tin nhắn đầu tiên...*",
+                elem_classes=["debug-panel"],
+            )
 
-                with gr.Accordion("📋 Đáp án & Giải thích", open=False):
-                    q_answer = gr.Markdown(value="*Chưa có đáp án*")
-
-                q_btn.click(
-                    fn=generate_questions,
-                    inputs=[q_topic, q_type, q_num],
-                    outputs=[q_output, q_debug, q_answer],
-                )
-
-            # ══════════════════════════════════════════════════
-            # TAB 2: SINH SLIDE
-            # ══════════════════════════════════════════════════
-            with gr.Tab("📊 Sinh slide"):
-                gr.Markdown("### Sinh bài giảng slide tự động")
-
-                with gr.Row():
-                    with gr.Column(scale=2):
-                        s_topic = gr.Textbox(
-                            label="📌 Chủ đề bài học",
-                            placeholder="VD: Mạng máy tính...",
-                            lines=2,
-                        )
-                    with gr.Column(scale=1):
-                        s_book = gr.Dropdown(
-                            label="📚 Bộ sách",
-                            choices=["Kết nối tri thức", "Cánh Diều"],
-                            value="Kết nối tri thức",
-                        )
-                    with gr.Column(scale=1):
-                        s_grade = gr.Dropdown(
-                            label="🎓 Khối lớp",
-                            choices=["10", "11", "12"],
-                            value="10",
-                        )
-
-                s_lesson = gr.Textbox(
-                    label="📖 Tên bài học (tùy chọn)",
-                    placeholder="VD: Bài 1 - Mạng máy tính",
-                )
-
-                s_btn = gr.Button(
-                    "🚀 Sinh slide", variant="primary",
-                    elem_classes=["primary-btn"]
-                )
-
-                with gr.Row():
-                    with gr.Column(scale=2):
-                        s_text = gr.Textbox(
-                            label="📄 Cấu trúc slide (text)",
-                            lines=15, interactive=False,
-                            show_copy_button=True,
-                        )
-                    with gr.Column(scale=1):
-                        s_debug = gr.Markdown(
-                            label="🔍 RAG Debug",
-                            value="*Chờ sinh slide...*",
-                        )
-
-                with gr.Accordion("🖥️ Xem slide (HTML Preview)", open=True):
-                    s_html = gr.HTML(
-                        value="<p style='text-align:center; color:#999; padding:40px;'>"
-                              "Chưa có slide — nhấn Sinh slide để bắt đầu</p>"
-                    )
-
-                s_btn.click(
-                    fn=generate_slides,
-                    inputs=[s_topic, s_book, s_grade, s_lesson],
-                    outputs=[s_text, s_debug, s_html],
-                )
-
-            # ══════════════════════════════════════════════════
-            # TAB 3: CHAT TỰ DO
-            # ══════════════════════════════════════════════════
-            with gr.Tab("💬 Chat"):
-                gr.Markdown("### Hỏi đáp tự do — Full pipeline")
-
-                chatbot_ui = gr.Chatbot(
-                    height=500,
-                    show_copy_button=True,
-                    show_label=False,
-                    type="messages",
-                )
-
-                with gr.Row():
-                    chat_input = gr.Textbox(
-                        placeholder="VD: Tạo 3 câu trắc nghiệm về mạng LAN",
-                        show_label=False, lines=2, scale=4,
-                    )
-                    chat_send = gr.Button(
-                        "📤 Gửi", variant="primary", scale=1,
-                        elem_classes=["primary-btn"],
-                    )
-
-                chat_clear = gr.Button("🗑️ Xóa lịch sử", variant="secondary")
-
-                chat_send.click(
-                    fn=chat_response,
-                    inputs=[chat_input, chatbot_ui],
-                    outputs=chatbot_ui,
-                ).then(lambda: "", outputs=chat_input)
-
-                chat_input.submit(
-                    fn=chat_response,
-                    inputs=[chat_input, chatbot_ui],
-                    outputs=chatbot_ui,
-                ).then(lambda: "", outputs=chat_input)
-
-                chat_clear.click(fn=clear_chat, outputs=chatbot_ui)
+        # ── Quick Actions (gợi ý nhanh) ──
+        with gr.Accordion("💡 Gợi ý nhanh", open=False):
+            gr.Markdown("""
+| Chức năng | Ví dụ câu lệnh |
+|-----------|----------------|
+| **Sinh câu hỏi** | "Tạo 5 câu trắc nghiệm về mạng LAN" |
+| **Tự luận** | "Cho tôi 3 câu tự luận về hệ điều hành" |
+| **Đúng/Sai** | "Sinh 4 câu đúng sai về an toàn thông tin" |
+| **Điền khuyết** | "Tạo 3 câu điền khuyết về thuật toán" |
+| **Chấm điểm** | "Câu 1 là A, câu 2 là C" |
+| **Ôn tập** | "Ôn lại câu sai lần 1" |
+| **Sinh slide** | "Tạo slide bài mạng máy tính" |
+| **Giải thích** | "Giải thích mạng WAN là gì" |
+| **Xem điểm** | "Xem thống kê điểm số" |
+| **Chat** | "Xin chào" |
+""")
 
         # ── System Info ──
         with gr.Accordion("ℹ️ Thông tin hệ thống", open=False):
@@ -490,7 +312,8 @@ def build_ui():
                 f"| **Embedding model** | `{settings.EMBEDDING_MODEL}` |\n"
                 f"| **Reranker model** | `{settings.RERANKER_MODEL}` |\n"
                 f"| **LLM model** | `{settings.LLM_MODEL}` |\n"
-                f"| **API Key** | {'✅ Set' if os.getenv('GENAI_API_KEY') else '❌ Not set'} |"
+                f"| **Orchestrator** | v2 (code-level) |\n"
+                f"| **API Key** | {'Set' if os.getenv('GENAI_API_KEY') else 'Not set'} |"
             )
             gr.Markdown(info_text)
 
@@ -501,6 +324,24 @@ def build_ui():
         </div>
         """)
 
+        # ── Event Handlers ──
+        chat_send.click(
+            fn=chat_response,
+            inputs=[chat_input, chatbot_ui],
+            outputs=[chatbot_ui, debug_output],
+        ).then(lambda: "", outputs=chat_input)
+
+        chat_input.submit(
+            fn=chat_response,
+            inputs=[chat_input, chatbot_ui],
+            outputs=[chatbot_ui, debug_output],
+        ).then(lambda: "", outputs=chat_input)
+
+        chat_clear.click(
+            fn=clear_chat,
+            outputs=[chatbot_ui, debug_output],
+        )
+
     return demo
 
 
@@ -509,11 +350,11 @@ def build_ui():
 # ============================================================
 
 if __name__ == "__main__":
-    # 1. Khởi tạo components
+    # 1. Init
     init_components()
 
     # 2. Build UI
-    print("\nBuilding Gradio UI...", flush=True)
+    print("\nBuilding Gradio UI (Single Chat + Debug)...", flush=True)
     demo = build_ui()
 
     # 3. Launch

@@ -1,5 +1,6 @@
 import json
 import numpy as np
+import torch
 from pathlib import Path
 from typing import List, Optional
 from sentence_transformers import SentenceTransformer
@@ -22,7 +23,7 @@ class EmbeddingModel:
     def __init__(
         self, 
         model_name: str = "dangvantuan/vietnamese-document-embedding",
-        device: str = "cpu",
+        device: Optional[str] = None,
         batch_size: int = 64
     ):
         """
@@ -30,11 +31,11 @@ class EmbeddingModel:
         
         Args:
             model_name: Tên model trên HuggingFace
-            device: "cpu" hoặc "cuda"
+            device: "cpu" hoặc "cuda". Nếu None sẽ tự động detect.
             batch_size: Số text encode cùng lúc (giảm nếu thiếu RAM)
         """
         self.model_name = model_name
-        self.device = device
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.batch_size = batch_size
         self.model = None  # Lazy load
     

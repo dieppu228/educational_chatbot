@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 from src.config.config import settings
+from src.llm.prompts import SYSTEM_PROMPT_SHORT
 
 
 class BaseHandler(ABC):
@@ -10,6 +11,7 @@ class BaseHandler(ABC):
     Abstract base class for all LLM handlers.
     
     Provides common functionality for API calls and error handling.
+    Automatically prepends system prompt to all LLM calls.
     """
     
     def __init__(
@@ -54,15 +56,18 @@ class BaseHandler(ABC):
         prompt: str,
         temperature: float = 0.0,
         response_mime: str = "text/plain",
+        include_system_prompt: bool = True,
         **kwargs
     ) -> str:
         """
         Generic API call wrapper with error handling.
+        Automatically prepends system prompt unless disabled.
         
         Args:
             prompt: The prompt to send to LLM
             temperature: Temperature for response generation
             response_mime: Response MIME type (text/plain or application/json)
+            include_system_prompt: Whether to prepend system prompt (default True)
             **kwargs: Additional config parameters
         
         Returns:
@@ -72,6 +77,11 @@ class BaseHandler(ABC):
             RuntimeError: If API call fails
         """
         try:
+            # Prepend system prompt for consistent bot identity
+            full_prompt = prompt
+            if include_system_prompt:
+                full_prompt = f"{SYSTEM_PROMPT_SHORT}\n\n{prompt}"
+
             config = {
                 'temperature': temperature,
                 'response_mime_type': response_mime,
@@ -80,7 +90,7 @@ class BaseHandler(ABC):
             
             response = self.client.models.generate_content(
                 model=self.model,
-                contents=prompt,
+                contents=full_prompt,
                 config=config
             )
             
