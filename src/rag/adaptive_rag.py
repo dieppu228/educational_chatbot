@@ -2,9 +2,10 @@
 Adaptive RAG Agent — tự chọn chiến lược retrieval dựa trên loại query.
 
 Strategies:
-    STANDARD   — BM25+Semantic+RRF → Reranker (query cụ thể)
-    BROAD      — Metadata filter theo grade/topic (query tổng quát)
-    CURRICULUM — Lookup danh sách bài học (hỏi về cấu trúc CT)
+    STANDARD     — BM25+Semantic+RRF → Reranker (query cụ thể, không context)
+    BROAD        — Metadata filter theo grade/topic (query tổng quát)
+    CURRICULUM   — Lookup danh sách bài học (hỏi về cấu trúc CT)
+    HIERARCHICAL — Two-phase HRAG: coarse (Level 1-2) → fine (Level 3+)
 """
 
 import time
@@ -21,9 +22,10 @@ logger = logging.getLogger("chatbot")
 # ============================================================
 
 class RAGStrategy(Enum):
-    STANDARD   = "standard"
-    BROAD      = "broad"
-    CURRICULUM = "curriculum"
+    STANDARD     = "standard"
+    BROAD        = "broad"
+    CURRICULUM   = "curriculum"
+    HIERARCHICAL = "hierarchical"
 
 
 @dataclass
@@ -145,12 +147,21 @@ class QueryClassifier:
                 ),
             )
 
-        # 3. Mặc định: STANDARD
+        # 3. Check HIERARCHICAL — query cụ thể + có grade/topic context
+        if intent_hint in ("explain", "generate") and (grade or topic_hint):
+            return QueryProfile(
+                strategy=RAGStrategy.HIERARCHICAL,
+                grade=grade,
+                topic_hint=topic_hint,
+                reason=f"Query cụ thể + context (grade={grade}, topic={topic_hint is not None}) → HRAG",
+            )
+
+        # 4. Mặc định: STANDARD (flat search, không có context)
         return QueryProfile(
             strategy=RAGStrategy.STANDARD,
             grade=grade,
             topic_hint=topic_hint,
-            reason="Query cụ thể",
+            reason="Query cụ thể, không có grade/topic context",
         )
 
     def _detect_grade(self, q_lower: str) -> Optional[str]:
@@ -232,6 +243,14 @@ class AdaptiveRAGAgent:
             # Fallback: nếu broad trả về < 3 chunks → bổ sung standard
             if len(chunks) < 3:
                 logger.info("RAGAgent: BROAD < 3 chunks → fallback standard")
+                standard = self._standard_retrieval(query)
+                chunks = self._merge_deduplicate(chunks, standard)
+
+        elif profile.strategy == RAGStrategy.HIERARCHICAL:
+            chunks = self._hierarchical_retrieval(query, profile)
+            # Fallback: nếu HRAG < 3 chunks → bổ sung standard
+            if len(chunks) < 3:
+                logger.info("RAGAgent: HIERARCHICAL < 3 chunks → fallback standard")
                 standard = self._standard_retrieval(query)
                 chunks = self._merge_deduplicate(chunks, standard)
 
@@ -334,6 +353,83 @@ class AdaptiveRAGAgent:
             })
 
         return summary_chunks[:25]
+
+    def _hierarchical_retrieval(self, query: str, profile: QueryProfile) -> List[Dict]:
+        """
+        HRAG — Two-phase hierarchical retrieval.
+
+        Phase 1 (Coarse): Semantic search trên Level 1-2 chunks
+                          → xác định TOP parent topics/lessons.
+        Phase 2 (Fine):   Scoped BM25+Semantic+RRF chỉ trên children
+                          (Level 3+) của parents đã chọn → Reranker.
+        """
+        all_chunks = self.retriever.chunks
+
+        # ── Phase 1: Coarse — tìm parents (Level 1-2) ──────────────
+        parent_indices = []
+        for i, chunk in enumerate(all_chunks):
+            m = chunk.get("metadata", {})
+            level = m.get("level", 99)
+            if level > 2:
+                continue
+            # Filter by grade nếu có
+            if profile.grade and m.get("grade") != profile.grade:
+                continue
+            parent_indices.append(i)
+
+        if not parent_indices:
+            logger.warning("HRAG Phase 1: no parent chunks found → fallback standard")
+            return self._standard_retrieval(query)
+
+        # Semantic search chỉ trên parents
+        parent_results = self.retriever.search_scoped(
+            query, doc_indices=parent_indices, top_k=3, top_n=min(30, len(parent_indices))
+        )
+
+        # Extract parent keys: (topic_name, lesson_name)
+        parent_keys = set()
+        for res in parent_results:
+            m = res["metadata"]
+            parent_keys.add((m.get("topic_name", ""), m.get("lesson_name", "")))
+
+        logger.info(
+            f"HRAG Phase 1: {len(parent_indices)} parents searched → "
+            f"{len(parent_results)} selected → {len(parent_keys)} unique lessons"
+        )
+
+        # ── Phase 2: Fine — search children (Level 3+) ─────────────
+        child_indices = []
+        for i, chunk in enumerate(all_chunks):
+            m = chunk.get("metadata", {})
+            level = m.get("level", 0)
+            if level < 3:
+                continue
+            key = (m.get("topic_name", ""), m.get("lesson_name", ""))
+            if key in parent_keys:
+                child_indices.append(i)
+
+        if not child_indices:
+            logger.warning("HRAG Phase 2: no children found → returning parent chunks")
+            return parent_results
+
+        logger.info(f"HRAG Phase 2: scoped search on {len(child_indices)} child chunks")
+
+        # Scoped hybrid search (BM25 + Semantic + RRF) trên children
+        child_results = self.retriever.search_scoped(
+            query,
+            doc_indices=child_indices,
+            top_k=self.settings.RETRIEVER_TOP_K,
+            top_n=min(30, len(child_indices)),
+        )
+
+        if not child_results:
+            return parent_results
+
+        # Rerank kết quả
+        reranked = self.reranker.rerank(
+            query, child_results, top_n=self.settings.RERANKER_TOP_N
+        )
+        return reranked if reranked else child_results
 
     def _merge_deduplicate(self, primary: List[Dict], secondary: List[Dict]) -> List[Dict]:
         """Merge 2 lists, loại trùng doc_id. Primary được ưu tiên."""

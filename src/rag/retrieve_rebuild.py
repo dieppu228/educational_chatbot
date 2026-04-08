@@ -304,3 +304,68 @@ class CustomSearch:
             })
 
         return results
+
+    def search_scoped(
+        self,
+        query: str,
+        doc_indices: List[int],
+        top_k: int = 10,
+        top_n: int = 30,
+    ) -> List[Dict]:
+        """
+        Hybrid search (BM25 + Semantic + RRF) TRONG phạm vi doc_indices.
+
+        Dùng cho HRAG — chỉ search trên subset chunks (ví dụ: Level 1-2
+        cho Phase 1, hoặc children cho Phase 2).
+
+        Tận dụng lại BM25 stats + embeddings đã tính sẵn ở __init__,
+        chỉ giới hạn scoring trên subset.
+
+        Args:
+            query: Câu truy vấn
+            doc_indices: List indices của chunks cần search
+            top_k: Số kết quả cuối cùng
+            top_n: Số kết quả mỗi method trước fusion
+
+        Returns:
+            List[Dict] cùng format với search()
+        """
+        if not doc_indices:
+            return []
+
+        idx_set = set(doc_indices)
+        top_n = min(top_n, len(doc_indices))
+
+        # === BM25 scoped ===
+        query_tokens = self._tokenize(query)
+        bm25_scored = []
+        for i in doc_indices:
+            score = self._bm25_score_doc(query_tokens, i)
+            bm25_scored.append((i, score))
+        bm25_scored.sort(key=lambda x: x[1], reverse=True)
+        bm25_results = bm25_scored[:top_n]
+
+        # === Semantic scoped ===
+        query_embedding = self.model.encode_query(query)
+        # Chỉ tính cosine trên subset
+        subset_embeddings = self.embeddings[doc_indices]
+        scores = np.dot(subset_embeddings, query_embedding)
+        # Map lại về global indices
+        local_top = np.argsort(scores)[::-1][:top_n]
+        semantic_results = [
+            (doc_indices[li], float(scores[li])) for li in local_top
+        ]
+
+        # === RRF ===
+        combined = self._rrf_combine(bm25_results, semantic_results, top_k=top_k)
+
+        return [
+            {
+                "doc_id": doc_id,
+                "score": score,
+                "content": self.chunks[doc_id]["content"],
+                "context": self.chunks[doc_id].get("context", ""),
+                "metadata": self.chunks[doc_id].get("metadata", {}),
+            }
+            for doc_id, score in combined
+        ]

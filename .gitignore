@@ -44,3 +44,5 @@ pyproject.toml
 pyrightconfig.json
 
 claude.md
+
+data/sessions/

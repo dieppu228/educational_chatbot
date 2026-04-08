@@ -177,7 +177,7 @@ class Orchestrator:
         enriched_query = query
         ctx_enriched = False
         if history_text and self.context_analyzer.needs_contextualization(query, history_text):
-            context_snippet = self.context_analyzer.extract_context_from_history(history_text)
+            context_snippet = self.context_analyzer.extract_context_from_history(query, history_text)
             enriched_query = f"Ngu canh truoc do:\n{context_snippet}\n\nCau hoi hien tai: {query}"
             ctx_enriched = True
             logger.info("ContextAnalyzer: enriched query with history")
