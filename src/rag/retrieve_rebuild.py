@@ -1,4 +1,5 @@
 import json
+import logging
 import numpy as np
 import math
 from pathlib import Path
@@ -6,6 +7,14 @@ from typing import List, Dict, Tuple, Optional
 from collections import Counter
 
 from src.rag.embedding import EmbeddingModel
+
+try:
+    from underthesea import word_tokenize as vn_tokenize
+    _HAS_UNDERTHESEA = True
+except ImportError:
+    _HAS_UNDERTHESEA = False
+
+logger = logging.getLogger("chatbot")
 
 
 class CustomSearch:
@@ -43,7 +52,8 @@ class CustomSearch:
         self.rrf_k = rrf_k
         
         # === Tokenize corpus + tính BM25 stats ===
-        self.tokenized_corpus = [chunk["content"].lower().split() for chunk in self.chunks]
+        logger.info(f"Tokenizing {self.corpus_size} docs with {'underthesea' if _HAS_UNDERTHESEA else 'split()'}...")
+        self.tokenized_corpus = [self._tokenize(chunk["content"]) for chunk in self.chunks]
         self.doc_lens = np.array([len(doc) for doc in self.tokenized_corpus], dtype=np.float64)
         self.avgdl = np.mean(self.doc_lens)
         
@@ -64,6 +74,23 @@ class CustomSearch:
             self._model = EmbeddingModel()
         return self._model
     
+    # ============================================================
+    # TOKENIZER
+    # ============================================================
+
+    @staticmethod
+    def _tokenize(text: str) -> List[str]:
+        """
+        Tokenize tiếng Việt bằng underthesea, fallback sang split().
+        
+        underthesea: "học sinh giỏi" → "học_sinh giỏi" → ["học_sinh", "giỏi"]
+        split():     "học sinh giỏi" → ["học", "sinh", "giỏi"]
+        """
+        if _HAS_UNDERTHESEA:
+            tokenized = vn_tokenize(text.lower(), format="text")
+            return tokenized.split()
+        return text.lower().split()
+
     # ============================================================
     # BM25 INTERNALS
     # ============================================================
@@ -132,7 +159,7 @@ class CustomSearch:
         Returns:
             List[(doc_index, bm25_score)] sắp xếp giảm dần
         """
-        query_tokens = query.lower().split()
+        query_tokens = self._tokenize(query)
         
         scores = np.array([
             self._bm25_score_doc(query_tokens, i)

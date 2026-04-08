@@ -7,6 +7,7 @@ Replaces the monolithic ChatBot class with a clean architecture:
 conversation.py (ChatBot) is kept for backward compatibility.
 """
 
+import re
 import json
 import time
 import logging
@@ -869,8 +870,9 @@ class Orchestrator:
         grade_hint = None
         if self._current_intent_result:
             topic_hint = self._current_intent_result.topic
-            # Grade tự detect từ topic string (vd: "Kiến thức Tin học lớp 12" → "12")
-            # AdaptiveRAGAgent.classify() sẽ xử lý việc này
+            # Extract grade từ topic string (vd: "Kiến thức Tin học lớp 12" → "12")
+            if topic_hint:
+                grade_hint = self._extract_grade_from_topic(topic_hint)
 
         try:
             result = self.rag_agent.retrieve(
@@ -896,6 +898,26 @@ class Orchestrator:
                 "node": "RAG", "error": str(e)[:100],
             })
             return []
+
+    @staticmethod
+    def _extract_grade_from_topic(topic: str) -> Optional[str]:
+        """Extract grade (10/11/12) từ topic string của IntentRouter.
+
+        Ví dụ:
+            "Kiến thức Tin học lớp 12" → "12"
+            "Tin 10 - Bài 3"          → "10"
+            "Lập trình Python"        → None
+        """
+        topic_lower = topic.lower()
+        # Pattern 1: "lớp 12", "lớp 10"
+        match = re.search(r'lớp\s*(10|11|12)', topic_lower)
+        if match:
+            return match.group(1)
+        # Pattern 2: "tin 10", "grade 10"
+        match = re.search(r'(?:tin|grade)\s*(10|11|12)', topic_lower)
+        if match:
+            return match.group(1)
+        return None
 
 
 

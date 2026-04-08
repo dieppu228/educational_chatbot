@@ -72,6 +72,11 @@ class QueryClassifier:
         "bao nhiêu bài", "bao nhiêu chương",
         "danh sách bài", "danh sách chủ đề",
         "nội dung chương trình",
+        # Bổ sung: các cụm phổ biến chứa "bài" / "chương"
+        "có những bài nào", "những bài gì", "các bài học", "mấy bài",
+        "có những chương nào", "những chương gì", "các chương", "mấy chương",
+        "gồm những bài", "gồm những chương",
+        "bài học nào", "chương nào",
     ]
 
     GRADE_PATTERNS = {
