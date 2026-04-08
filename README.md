@@ -104,7 +104,58 @@ To quantitatively evaluate the RAG system's performance, the project integrates 
 
 ---
 
-## 3. Tech Stack
+## 3. Repository Structure (Pipeline Modules)
+
+The project's codebase focuses on a highly modular architecture, mapping perfectly to the End-to-End Pipeline. Below is the comprehensive structure of the `src/` directory:
+
+```text
+src/
+├── llm/                     # CORE LLM & MULTI-AGENT ORCHESTRATION
+│   ├── orchestrator.py      # Main Dispatcher: Receives queries and coordinates the entire system workflow.
+│   ├── intent_router.py     # Intent Sensor: Classifies queries (Generate, Interact, Explain, Analyze, Chat).
+│   ├── action_planner.py    # High-level Brain: Plans multi-step tasks (e.g., slide generation workflow).
+│   ├── context_analyzer.py  # Context Extractor: Retrieves historical context using Hybrid scoring (Keyword + Recency).
+│   ├── prompts.py           # Prompt Hub: Centralizes and manages all LLM prompts with metadata.
+│   ├── memory.py            # & session_manager/store: Manages conversation state and context tracking.
+│   ├── validators/          # Self-Reflection Module: 
+│   │   └── question_validator.py # Auto cross-checks generated answers against ground-truth context.
+│   └── handlers/            # Specialist Agents: Executes specific domain tasks.
+│       ├── base_handler.py  # Common interface for all handlers.
+│       ├── chat_handler.py  # Performs free-form chat conversations.
+│       ├── explain_handler.py # Provides in-depth explanations for concepts.
+│       ├── question/        # Agent cluster specialized in generating & grading educational questions:
+│       │   ├── mcq_handler.py, essay_handler.py, fill_handler.py, true_false_handler.py
+│       │   └── scorer.py    # Grading module based on Context and predefined Rubrics.
+│       └── content/         # Generation module for extensive content (slide_handler.py, slide_template.py)...
+│
+├── rag/                     # ADVANCED RAG PIPELINE
+│   ├── adaptive_rag.py      # Dynamic Retrieval Router: Chooses strategies (Standard, Broad, Curriculum, Hierarchical).
+│   ├── retrieve_rebuild.py  # Core Search Engine: Combines Custom pure Python BM25, Semantic, RRF & Scoped Search.
+│   ├── embedding.py         # Embedding Module: Loads & infers specialized Vietnamese HuggingFace models.
+│   ├── reranker.py          # Cross-Encoder Reranking: Filters noise and re-ranks chunks post-retrieval.
+│   └── chunking.py          # Data Engineering Module: Decomposes Markdown text into a Hierarchical tree structure.
+│
+├── evaluation/              # RAGAS EVALUATION PIPELINE
+│   ├── run_eval.py          # CLI Controller: Executes entire testing & RAGAS pipeline.
+│   ├── testset_generator.py # Synthetic Generator: Auto-generates QA Ground Truth from textbook chunks.
+│   ├── ragas_eval.py        # Assessment Framework: Calculates 4 RAG metrics (Faithfulness, Relevance, Precision, Recall).
+│   ├── report.py            # Reporting Module: Transforms and visualizes RAGAS evaluation metrics.
+│   └── data_collector.py    # Data Preparation: Parses logs and datasets to feed the eval pipeline.
+│
+├── config/                  # CONFIGURATION HUB
+│   └── config.py            # Central Config: Environment variables, LLM params (Gemini), and DB/File paths.
+│
+├── schemas/                 # DATA TYPES & STANDARDS
+│   ├── message.py, session.py # Object Modeling Architecture (Session, Message, User).
+│   └── state.py             # State Management Pattern across the Multi-Agent Pipeline.
+│
+└── utils/                   # UTILITIES & HELPER
+    └── ...                  # Helper libraries: File IO, formatting, custom logging, and struct parsing.
+```
+
+---
+
+## 4. Tech Stack
 
 The system is developed in separate modules to ensure high scalability.
 
@@ -127,7 +178,7 @@ The system is developed in separate modules to ensure high scalability.
 
 ---
 
-## 4. Local Setup Guide
+## 5. Local Setup Guide
 
 The local deployment process requires a Python environment >= 3.12:
 
