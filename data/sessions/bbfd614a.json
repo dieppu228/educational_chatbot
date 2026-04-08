@@ -1,0 +1,79 @@
+{
+  "session_id": "bbfd614a",
+  "topic": "an toan thong tin",
+  "intent": "generate",
+  "created_at": "2026-04-09T02:03:33.509592",
+  "updated_at": "2026-04-09T02:04:23.577346",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tao 3 cau dung sai ve an toan thong tin"
+    },
+    {
+      "role": "assistant",
+      "content": "❓ Câu 1:\n   Switch sử dụng địa chỉ IP để chuyển tiếp các gói dữ liệu giữa các thiết bị trong mạng cục bộ.\n   → Đúng hay Sai?\n\n________________________________________\n\n❓ Câu 2:\n   Việc chia sẻ thông tin bịa đặt về dịch bệnh trên mạng xã hội có thể vi phạm pháp luật.\n   → Đúng hay Sai?\n\n________________________________________\n\n❓ Câu 3:\n   Bảng định tuyến (routing table) trong Router chứa địa chỉ MAC của các thiết bị trong mạng cục bộ.\n   → Đúng hay Sai?\n\n________________________________________\n"
+    }
+  ],
+  "quiz_state": {
+    "rounds": [
+      {
+        "round_id": 0,
+        "question_type": "true_false",
+        "query": "Tao 3 cau dung sai ve an toan thong tin",
+        "created_at": "2026-04-09T02:04:23.576654",
+        "questions": [
+          {
+            "question_id": "r0_q0",
+            "question_type": "true_false",
+            "content": {
+              "index": 1,
+              "statement": "Switch sử dụng địa chỉ IP để chuyển tiếp các gói dữ liệu giữa các thiết bị trong mạng cục bộ.",
+              "correct_answer": false,
+              "explanation": "Sai. Switch sử dụng địa chỉ MAC để chuyển tiếp dữ liệu giữa các thiết bị trong cùng một mạng LAN, còn Router mới sử dụng địa chỉ IP để chuyển tiếp dữ liệu giữa các mạng khác nhau."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          },
+          {
+            "question_id": "r0_q1",
+            "question_type": "true_false",
+            "content": {
+              "index": 2,
+              "statement": "Việc chia sẻ thông tin bịa đặt về dịch bệnh trên mạng xã hội có thể vi phạm pháp luật.",
+              "correct_answer": true,
+              "explanation": "Đúng. Theo quy định của pháp luật Việt Nam, hành vi tung tin giả, tin sai sự thật về dịch bệnh có thể bị xử lý vi phạm hành chính hoặc truy cứu trách nhiệm hình sự."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          },
+          {
+            "question_id": "r0_q2",
+            "question_type": "true_false",
+            "content": {
+              "index": 3,
+              "statement": "Bảng định tuyến (routing table) trong Router chứa địa chỉ MAC của các thiết bị trong mạng cục bộ.",
+              "correct_answer": false,
+              "explanation": "Sai. Bảng định tuyến trong Router chứa thông tin về các mạng đích và địa chỉ IP của các router kế tiếp để chuyển tiếp gói tin. Bảng chứa địa chỉ MAC là bảng địa chỉ MAC (MAC address table) của Switch."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          }
+        ]
+      }
+    ]
+  },
+  "slide_state": null,
+  "metadata": {}
+}

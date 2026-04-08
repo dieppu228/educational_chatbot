@@ -117,18 +117,35 @@ Query: "{query}"
 CÁC INTENT hợp lệ (CHỈ chọn 1):
 - "generate": Yêu cầu SINH nội dung MỚI (câu hỏi, slide, giáo án)
 - "interact": TƯƠNG TÁC với nội dung ĐÃ SINH TRƯỚC ĐÓ trong session
-  (chỉ dùng khi session_context có nội dung đã sinh)
 - "analyze": Thống kê, điểm số, đánh giá tiến độ học tập
 - "explain": Giải thích kiến thức CHUNG từ SGK
 - "chat": Chào hỏi, câu không rõ ràng, ngoài phạm vi SGK Tin học
 
-VÍ DỤ:
-"tạo 5 câu trắc nghiệm về mạng máy tính" → generate/mcq
-"giải thích câu 3 vừa rồi" → interact (vì đề cập nội dung đã sinh)
-"mạng máy tính là gì" → explain
-"tôi được bao nhiêu điểm" → analyze
-"xin chào" → chat
-"tạo slide về hệ điều hành" → generate/slide
+=== FEW-SHOT EXAMPLES ===
+
+[Session: đã sinh 3 câu MCQ về "Mạng máy tính"]
+1. "câu đầu đáp án nào?" → interact/mcq (đề cập nội dung đã sinh)
+2. "giải thích câu 2 đi" → interact/mcq
+3. "cho tôi xem đáp án" → interact/mcq
+4. "tôi trả lời câu 1 là A" → interact (chấm điểm)
+5. "câu này khó quá" → interact (reference to generated)
+
+[Session: đã tạo slide về "Hệ điều hành"]
+6. "slide đầu nói về gì?" → interact/slide
+7. "thêm slide bài tập" → interact/slide
+8. "cái này là gì" → interact (với context)
+
+[Session: mới, không có nội dung]
+9. "tạo 5 câu trắc nghiệm về mạng" → generate/mcq
+10. "mạng máy tính là gì" → explain
+11. "giải thích TCP/IP" → explain
+12. "slide về hệ điều hành" → generate/slide
+13. "tôi được bao nhiêu điểm" → analyze (vì không có quiz → gợi ý tạo quiz)
+
+[Ambiguous cases]
+14. "cho tôi xem" → explain (nếu có topic) / chat (nếu không có)
+15. "thêm" → interact (nếu có session) / generate (nếu không có)
+16. "câu hỏi" → generate (mặc định tạo mới nếu không có session)
 
 TASK_TYPE (chỉ khi intent = "generate"):
 - "mcq": Trắc nghiệm ABCD
@@ -145,7 +162,7 @@ CHỈ trả về JSON:
   "topic": "..." hoặc null,
   "is_new_topic": true/false,
   "confidence": 0.0-1.0
-}}"""
+}}"""""
 
 
 # ============================================================

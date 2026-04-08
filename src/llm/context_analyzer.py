@@ -1,6 +1,5 @@
-"""Context analyzer for intelligent query contextualization"""
-
-from typing import Set, Optional
+import re
+from typing import Set, Optional, List
 
 
 class ContextAnalyzer:
@@ -124,34 +123,72 @@ class ContextAnalyzer:
     
     def extract_context_from_history(
         self,
+        query: str,
         history: str,
         max_context_length: int = 1000
     ) -> str:
         """
-        Extract relevant context from conversation history.
-        
-        Args:
-            history: Full conversation history
-            max_context_length: Maximum length of extracted context
-        
-        Returns:
-            str: Relevant context snippet
+        Extract relevant context using a hybrid approach:
+        Score = 70% Keyword Overlap + 30% Recency
         """
-        if not history:
+        if not history or not history.strip():
             return ""
         
-        # Take last N characters from history (most recent context)
         lines = history.strip().split('\n')
+        N = len(lines)
         
+        # 1. Prepare query keywords (filter out very short words/stop words)
+        q_keywords = set(re.findall(r'\w{2,}', query.lower()))
+        if not q_keywords:
+            # Fallback to simple sliding window if no keywords
+            return self._fallback_recency_only(lines, max_context_length)
+            
+        scored_lines = []
+        for i, line in enumerate(lines):
+            # Strip speaker prefix to score content only
+            content = re.sub(r'^(user|assistant):\s*', '', line, flags=re.I).lower()
+            line_keywords = set(re.findall(r'\w{2,}', content))
+            
+            # Keyword score: overlap percentage
+            kw_score = len(q_keywords & line_keywords) / len(q_keywords)
+            
+            # Recency score: more recent = higher score (0 to 1.0)
+            recency_score = (i + 1) / N
+            
+            # Hybrid total (Keyword weighted heavily)
+            total_score = (kw_score * 0.7) + (recency_score * 0.3)
+            
+            scored_lines.append({
+                "score": total_score,
+                "text": line,
+                "idx": i
+            })
+            
+        # 2. Select top lines until limit reached
+        scored_lines.sort(key=lambda x: x["score"], reverse=True)
+        
+        selected = []
+        current_len = 0
+        for item in scored_lines:
+            if current_len + len(item["text"]) > max_context_length:
+                break
+            selected.append(item)
+            current_len += len(item["text"])
+            
+        # 3. Sort back to original order for conversation flow
+        selected.sort(key=lambda x: x["idx"])
+        
+        return '\n'.join([item["text"] for item in selected])
+
+    def _fallback_recency_only(self, lines: List[str], max_len: int) -> str:
+        """Simple fallback extracting most recent lines."""
         context_lines = []
         total_length = 0
-        
         for line in reversed(lines):
-            if total_length + len(line) > max_context_length:
+            if total_length + len(line) > max_len:
                 break
             context_lines.append(line)
             total_length += len(line)
-        
         return '\n'.join(reversed(context_lines))
 
 
