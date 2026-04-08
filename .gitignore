@@ -42,3 +42,5 @@ REPO_STRUCTURE.md
 .pyre_configuration
 pyproject.toml
 pyrightconfig.json
+
+claude.md

@@ -224,3 +224,56 @@ class CustomSearch:
             }
             for doc_id, score in combined
         ]
+
+    def search_by_metadata(
+        self,
+        grade: str = None,
+        topic_name: str = None,
+        lesson_name: str = None,
+        chunk_types: List[str] = None,
+        max_per_lesson: int = 2,
+    ) -> List[Dict]:
+        """
+        Lọc chunks theo metadata thay vì search semantic.
+
+        Args:
+            grade: Lớp học ("10", "11", "12")
+            topic_name: Tên chủ đề lớn (khớp một phần)
+            lesson_name: Tên bài học cụ thể
+            chunk_types: Loại chunk ["objective", "content", "exercise"]
+            max_per_lesson: Số chunk tối đa mỗi bài (tránh lấy quá nhiều)
+
+        Returns:
+            List[Dict] cùng format với search()
+        """
+        results = []
+        lesson_count = {}  # track số chunk per lesson
+
+        for doc_id, chunk in enumerate(self.chunks):
+            m = chunk.get("metadata", {})
+
+            # Filter logic
+            if grade and m.get("grade") != grade:
+                continue
+            if topic_name and topic_name.lower() not in m.get("topic_name", "").lower():
+                continue
+            if lesson_name and lesson_name.lower() not in m.get("lesson_name", "").lower():
+                continue
+            if chunk_types and m.get("type") not in chunk_types:
+                continue
+
+            # Giới hạn per lesson
+            lesson_key = m.get("lesson_name", "")
+            lesson_count[lesson_key] = lesson_count.get(lesson_key, 0) + 1
+            if lesson_count[lesson_key] > max_per_lesson:
+                continue
+
+            results.append({
+                "doc_id": doc_id,
+                "score": 1.0,  # metadata match = score cố định
+                "content": chunk["content"],
+                "context": chunk.get("context", ""),
+                "metadata": m,
+            })
+
+        return results

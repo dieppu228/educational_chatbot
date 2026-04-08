@@ -1,0 +1,105 @@
+{
+  "session_id": "65e5e3a4",
+  "topic": "Mạng máy tính",
+  "intent": "generate",
+  "created_at": "2026-04-06T22:02:04.741528",
+  "updated_at": "2026-04-06T22:02:49.884949",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tạo 3 câu trắc nghiệm về mạng máy tính"
+    },
+    {
+      "role": "assistant",
+      "content": "Câu hỏi 1:\nTrong các loại đường truyền, loại nào có tốc độ truyền dữ liệu nhanh nhất và sử dụng ánh sáng để truyền tín hiệu?\n\nA. Cáp đồng trục\nB. Cáp xoắn đôi\nC. Cáp quang\nD. Đường truyền vô tuyến\n\n________________________________________\n\nCâu hỏi 2:\nThiết bị nào có chức năng chính là kết nối mạng không dây với mạng có dây và cho phép các thiết bị không dây truy cập vào mạng cục bộ hoặc Internet?\n\nA. Switch\nB. Router\nC. Modem\nD. Access Point (AP)\n\n________________________________________\n\nCâu hỏi 3:\nTrong mạng máy tính, thiết bị nào chịu trách nhiệm chuyển tiếp các gói dữ liệu dựa trên địa chỉ IP để đưa chúng đến đúng mạng đích?\n\nA. Switch\nB. Modem\nC. Router\nD. Access Point\n\n________________________________________\n"
+    },
+    {
+      "role": "user",
+      "content": "Xin chào bạn là ai"
+    },
+    {
+      "role": "assistant",
+      "content": "Chào bạn! 👋 Mình là EduBot, trợ lý học tập Tin học THPT Việt Nam. Mình ở đây để giúp bạn hiểu rõ hơn về các kiến thức Tin học dựa trên sách giáo khoa.\n\nBạn có câu hỏi gì về Tin học THPT không? Mình sẵn sàng giải đáp! 😊"
+    }
+  ],
+  "quiz_state": {
+    "rounds": [
+      {
+        "round_id": 0,
+        "question_type": "mcq",
+        "query": "Tạo 3 câu trắc nghiệm về mạng máy tính",
+        "created_at": "2026-04-06T22:02:17.093023",
+        "questions": [
+          {
+            "question_id": "r0_q0",
+            "question_type": "mcq",
+            "content": {
+              "index": 1,
+              "question": "Trong các loại đường truyền, loại nào có tốc độ truyền dữ liệu nhanh nhất và sử dụng ánh sáng để truyền tín hiệu?",
+              "options": {
+                "A": "Cáp đồng trục",
+                "B": "Cáp xoắn đôi",
+                "C": "Cáp quang",
+                "D": "Đường truyền vô tuyến"
+              },
+              "correct_answer": "C",
+              "explanation": "Theo Context 4, cáp quang có tốc độ truyền dữ liệu nhanh hơn cáp đồng trục và sử dụng sóng ánh sáng để truyền dữ liệu."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          },
+          {
+            "question_id": "r0_q1",
+            "question_type": "mcq",
+            "content": {
+              "index": 2,
+              "question": "Thiết bị nào có chức năng chính là kết nối mạng không dây với mạng có dây và cho phép các thiết bị không dây truy cập vào mạng cục bộ hoặc Internet?",
+              "options": {
+                "A": "Switch",
+                "B": "Router",
+                "C": "Modem",
+                "D": "Access Point (AP)"
+              },
+              "correct_answer": "D",
+              "explanation": "Context 5 đề cập đến Access Point (AP) là một thiết bị dùng để kết nối mạng không dây và mạng có dây. Chức năng của AP là tạo ra một điểm truy cập không dây."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          },
+          {
+            "question_id": "r0_q2",
+            "question_type": "mcq",
+            "content": {
+              "index": 3,
+              "question": "Trong mạng máy tính, thiết bị nào chịu trách nhiệm chuyển tiếp các gói dữ liệu dựa trên địa chỉ IP để đưa chúng đến đúng mạng đích?",
+              "options": {
+                "A": "Switch",
+                "B": "Modem",
+                "C": "Router",
+                "D": "Access Point"
+              },
+              "correct_answer": "C",
+              "explanation": "Theo Context 5, Router sử dụng địa chỉ IP của gói tin để xác định cổng chuyển tiếp gói tin. Switch thì chứa bảng địa chỉ MAC để chuyển tiếp dữ liệu trong mạng cục bộ."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          }
+        ]
+      }
+    ]
+  },
+  "slide_state": null,
+  "metadata": {}
+}

@@ -1,0 +1,105 @@
+{
+  "session_id": "a62f5aaf",
+  "topic": "Mạng máy tính",
+  "intent": "explain",
+  "created_at": "2026-04-06T22:02:51.332873",
+  "updated_at": "2026-04-06T22:03:32.126980",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Giải thích mạng máy tính cho tôi"
+    },
+    {
+      "role": "assistant",
+      "content": "Chào em, thầy là EduBot, trợ lý học tập Tin học THPT của em đây! Thầy rất vui được giải thích về mạng máy tính cho em. Chúng ta cùng bắt đầu nhé!\n\n### 1. Khái niệm cốt lõi\n\n**Mạng máy tính** đơn giản là một hệ thống gồm nhiều thiết bị số (như máy tính, điện thoại, máy in,...) được kết nối với nhau để chúng có thể \"nói chuyện\" với nhau, chia sẻ thông tin và dữ liệu.\n\n### 2. Giải thích chi tiết\n\nĐể hiểu rõ hơn, chúng ta hãy cùng phân tích các khía cạnh quan trọng của mạng máy tính nhé:\n\n*   **Các thiết bị kết nối:**\n    *   Trong mạng máy tính, có hai loại thiết bị chính:\n        *   **Thiết bị đầu cuối:** Đây là những thiết bị mà em trực tiếp sử dụng để truy cập mạng. Ví dụ như máy tính cá nhân, điện thoại thông minh, máy tính bảng, máy in. Ngay cả những thiết bị thông minh trong \"Internet vạn vật\" như camera, đèn chiếu sáng, tủ lạnh thông minh cũng được coi là thiết bị đầu cuối khi chúng kết nối mạng.\n        *   **Thiết bị mạng:** Đây là các thiết bị giúp kết nối các thiết bị đầu cuối lại với nhau và quản lý luồng dữ liệu. Ví dụ như **Switch** (bộ chuyển mạch), **Router** (bộ định tuyến), **AP** (điểm truy cập không dây).\n*   **Cách thức kết nối:**\n    *   Các thiết bị có thể kết nối với nhau bằng hai cách:\n        *   **Mạng có dây:** Sử dụng **cáp mạng** (như cáp Ethernet) hoặc **cáp quang** (truyền tín hiệu ánh sáng). Cáp mạng là loại dây dẫn có vỏ bọc, bên trong có dây kim loại để truyền tín hiệu điện. Cáp quang thì dùng dây trong suốt để truyền tín hiệu ánh sáng, cho tốc độ cao hơn.\n        *   **Mạng không dây:** Sử dụng sóng vô tuyến để kết nối, ví dụ như Wi-Fi.\n*   **Bộ giao tiếp mạng (NIC):**\n    *   Để một thiết bị có thể tham gia vào mạng, nó cần có **bộ giao tiếp mạng (NIC – Network Interface Card)**. Đây là một \"cánh cửa\" giúp thiết bị gửi và nhận dữ liệu qua mạng, dù là kết nối có dây hay không dây. Ngày nay, nhiều thiết bị có NIC hỗ trợ cả hai loại kết nối này.\n*   **Phạm vi địa lý:**\n    *   Mạng máy tính có thể hoạt động trong nhiều phạm vi khác nhau:\n        *   **Mạng cục bộ (LAN - Local Area Network):** Kết nối các thiết bị trong một phạm vi nhỏ như nhà riêng, văn phòng, trường học. Ví dụ, mạng máy tính trong phòng thực hành Tin học của trường em chính là một mạng LAN.\n        *   **Mạng diện rộng (WAN - Wide Area Network):** Kết nối các mạng LAN ở những vị trí địa lý xa nhau, ví dụ như mạng Internet toàn cầu.\n*   **Truyền dữ liệu:**\n    *   Khi dữ liệu được truyền qua mạng, nó sẽ được chia thành các đơn vị nhỏ gọi là **gói tin**. Mỗi gói tin này sẽ được đóng gói thêm thông tin địa chỉ của người gửi và người nhận (bao gồm cả địa chỉ MAC) để biết đường đi. **Switch** là thiết bị giúp chuyển tiếp các gói tin này đến đúng địa chỉ đích trong mạng LAN.\n\n### 3. Ví dụ minh họa\n\nHãy tưởng tượng em và các bạn đang ở trong một lớp học có kết nối Wi-Fi.\n\n*   **Thiết bị đầu cuối:** Máy tính xách tay của em, điện thoại của bạn A, máy tính bảng của bạn B, máy in của phòng Tin học.\n*   **Thiết bị mạng:** Bộ phát Wi-Fi (Router kiêm AP) mà nhà trường lắp đặt.\n*   **Cách kết nối:** Máy tính của em và điện thoại của bạn A kết nối Wi-Fi (không dây), còn máy tính của bạn B có thể cắm dây mạng vào bộ phát Wi-Fi (có dây).\n*   **Mục đích:** Em có thể lên mạng tìm tài liệu, bạn A có thể lướt web, bạn B có thể xem video, và tất cả mọi người có thể cùng in tài liệu ra máy in chung của phòng.\n\n### 4. So sánh\n\n*   **Mạng LAN và Internet:**\n    *   **Mạng LAN** giống như mạng lưới đường sá trong một khu phố nhỏ, chỉ kết nối các nhà trong khu phố đó.\n    *   **Internet** giống như hệ thống đường cao tốc kết nối tất cả các thành phố, quốc gia trên toàn thế giới. Mạng LAN thường kết nối với Internet để truy cập thông tin toàn cầu, nhưng nó vẫn có thể hoạt động độc lập.\n\n### 5. Tóm tắt\n\nNhững điểm chính em cần nhớ về mạng máy tính là:\n\n1.  Mạng máy tính là hệ thống các thiết bị số kết nối để trao đổi dữ liệu.\n2.  Có hai loại thiết bị chính: thiết bị đầu cuối (em dùng) và thiết bị mạng (giúp kết nối).\n3.  Kết nối có thể bằng dây (cáp mạng, cáp quang) hoặc không dây (Wi-Fi).\n4.  Mạng LAN là mạng cục bộ trong phạm vi hẹp, còn Internet là mạng toàn cầu.\n\nHy vọng phần giải thích này giúp em hiểu rõ hơn về mạng máy tính. Nếu có bất kỳ câu hỏi nào khác, đừng ngần ngại hỏi thầy nhé!"
+    },
+    {
+      "role": "user",
+      "content": "Tạo 3 câu trắc nghiệm về chủ đề này"
+    },
+    {
+      "role": "assistant",
+      "content": "Câu hỏi 1:\nTheo nội dung được cung cấp, để xem chi tiết thống kê ý kiến phản hồi của người dùng trên trang web, người dùng cần thực hiện hành động nào?\n\nA. Mở ứng dụng Forms, chọn biểu mẫu 'Ý kiến phản hồi của bạn' và nháy chuột vào 'Câu trả lời'.\nB. Truy cập trực tiếp vào mục 'Thống kê' trên trang web.\nC. Gửi email yêu cầu báo cáo thống kê đến quản trị viên.\nD. Xem thông tin trên thanh điều hướng chính của trang web.\n\n________________________________________\n\nCâu hỏi 2:\nTrong việc xây dựng trang web, để định dạng một tiêu đề cấp cao nhất, nên sử dụng thẻ HTML nào?\n\nA. <h1>\nB. <p>\nC. <h2>\nD. <div>\n\n________________________________________\n\nCâu hỏi 3:\nKhi xây dựng kịch bản cho một đoạn phim theo gợi ý của SGK, người học cần thực hiện những bước nào?\n\nA. Suy nghĩ ý tưởng, xây dựng kịch bản, chuẩn bị tư liệu.\nB. Viết lời thoại, quay phim, dựng phim.\nC. Tìm nhạc nền, thiết kế hình ảnh, viết phụ đề.\nD. Lên danh sách diễn viên, chọn bối cảnh, tập luyện.\n\n________________________________________\n"
+    }
+  ],
+  "quiz_state": {
+    "rounds": [
+      {
+        "round_id": 0,
+        "question_type": "mcq",
+        "query": "Tạo 3 câu trắc nghiệm về chủ đề này",
+        "created_at": "2026-04-06T22:03:32.125969",
+        "questions": [
+          {
+            "question_id": "r0_q0",
+            "question_type": "mcq",
+            "content": {
+              "index": 1,
+              "question": "Theo nội dung được cung cấp, để xem chi tiết thống kê ý kiến phản hồi của người dùng trên trang web, người dùng cần thực hiện hành động nào?",
+              "options": {
+                "A": "Mở ứng dụng Forms, chọn biểu mẫu 'Ý kiến phản hồi của bạn' và nháy chuột vào 'Câu trả lời'.",
+                "B": "Truy cập trực tiếp vào mục 'Thống kê' trên trang web.",
+                "C": "Gửi email yêu cầu báo cáo thống kê đến quản trị viên.",
+                "D": "Xem thông tin trên thanh điều hướng chính của trang web."
+              },
+              "correct_answer": "A",
+              "explanation": "Dựa trên Context 2, để xem và thống kê ý kiến phản hồi, người dùng cần mở ứng dụng Forms, mở lại biểu mẫu 'Ý kiến phản hồi của bạn' và nháy chuột vào 'Câu trả lời' để xem chi tiết."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          },
+          {
+            "question_id": "r0_q1",
+            "question_type": "mcq",
+            "content": {
+              "index": 2,
+              "question": "Trong việc xây dựng trang web, để định dạng một tiêu đề cấp cao nhất, nên sử dụng thẻ HTML nào?",
+              "options": {
+                "A": "<h1>",
+                "B": "<p>",
+                "C": "<h2>",
+                "D": "<div>"
+              },
+              "correct_answer": "A",
+              "explanation": "Theo Context 5, để định dạng một tiêu đề đề cao hơn, có thể sử dụng thẻ <h1> cho dòng đầu tiên."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          },
+          {
+            "question_id": "r0_q2",
+            "question_type": "mcq",
+            "content": {
+              "index": 3,
+              "question": "Khi xây dựng kịch bản cho một đoạn phim theo gợi ý của SGK, người học cần thực hiện những bước nào?",
+              "options": {
+                "A": "Suy nghĩ ý tưởng, xây dựng kịch bản, chuẩn bị tư liệu.",
+                "B": "Viết lời thoại, quay phim, dựng phim.",
+                "C": "Tìm nhạc nền, thiết kế hình ảnh, viết phụ đề.",
+                "D": "Lên danh sách diễn viên, chọn bối cảnh, tập luyện."
+              },
+              "correct_answer": "A",
+              "explanation": "Dựa trên Context 3, các bước để xây dựng đoạn phim bao gồm: 1) Suy nghĩ về ý tưởng cho đoạn phim; 2) Xây dựng kịch bản theo bảng; 3) Chuẩn bị các tư liệu cần thiết theo kịch bản."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          }
+        ]
+      }
+    ]
+  },
+  "slide_state": null,
+  "metadata": {}
+}

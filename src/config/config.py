@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     EVAL_EMBEDDING_MODEL: str = "dangvantuan/vietnamese-document-embedding"
     EVAL_OUTPUT_DIR: str = "eval_output"
     
+    # RAG Strategy
+    RAG_BROAD_MAX_CHUNKS: int = 30  # Gioi han BROAD strategy
+
+
     class Config:
         env_file = ".env"
         case_sensitive = True

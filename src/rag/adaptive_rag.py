@@ -1,0 +1,344 @@
+"""
+Adaptive RAG Agent — tự chọn chiến lược retrieval dựa trên loại query.
+
+Strategies:
+    STANDARD   — BM25+Semantic+RRF → Reranker (query cụ thể)
+    BROAD      — Metadata filter theo grade/topic (query tổng quát)
+    CURRICULUM — Lookup danh sách bài học (hỏi về cấu trúc CT)
+"""
+
+import time
+import logging
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Optional, List, Dict
+
+logger = logging.getLogger("chatbot")
+
+
+# ============================================================
+# DATA MODELS
+# ============================================================
+
+class RAGStrategy(Enum):
+    STANDARD   = "standard"
+    BROAD      = "broad"
+    CURRICULUM = "curriculum"
+
+
+@dataclass
+class QueryProfile:
+    strategy: RAGStrategy
+    grade: Optional[str] = None
+    topic_hint: Optional[str] = None
+    top_k_override: Optional[int] = None
+    reason: str = ""
+
+
+@dataclass
+class RAGResult:
+    chunks: List[Dict]
+    strategy_used: RAGStrategy
+    metadata_filter: dict
+    total_time_s: float
+    reason: str
+
+
+# ============================================================
+# QUERY CLASSIFIER — pure code, không LLM
+# ============================================================
+
+class QueryClassifier:
+    """
+    Phân loại query để chọn chiến lược RAG.
+    KHÔNG dùng LLM — chỉ dùng heuristics + keyword matching.
+    """
+
+    BROAD_KEYWORDS = [
+        "tổng quan", "tổng quát", "toàn cảnh", "tổng hợp",
+        "giới thiệu", "mở đầu", "khái quát",
+        "tất cả", "toàn bộ", "toàn diện",
+        "tổng thể", "tóm tắt", "tóm lược",
+        "overview", "general", "comprehensive", "summary",
+        "all", "entire", "complete",
+        "những gì", "gồm những", "bao gồm", "các chủ đề",
+    ]
+
+    # Lưu ý: CURRICULUM_KEYWORDS nên CỤ THỂ hơn BROAD
+    # để tránh false positive (vd: "bài" có trong quá nhiều query)
+    CURRICULUM_KEYWORDS = [
+        "chương trình học", "cấu trúc môn",
+        "môn tin học lớp", "học những gì",
+        "bao nhiêu bài", "bao nhiêu chương",
+        "danh sách bài", "danh sách chủ đề",
+        "nội dung chương trình",
+    ]
+
+    GRADE_PATTERNS = {
+        "10": ["lớp 10", "tin 10", "grade 10", "lớp mười "],
+        "11": ["lớp 11", "tin 11", "grade 11", "lớp mười một"],
+        "12": ["lớp 12", "tin 12", "grade 12", "lớp mười hai"],
+    }
+
+    def classify(
+        self,
+        query: str,
+        intent_hint: str = None,
+        grade_hint: Optional[str] = None,
+        topic_hint: Optional[str] = None,
+    ) -> QueryProfile:
+        """
+        Phân loại query → chọn strategy.
+
+        Args:
+            query: Câu truy vấn của user
+            intent_hint: Intent từ IntentRouter ("explain"|"generate"|"chat")
+            grade_hint: Grade đã detect từ IntentRouter (ưu tiên hơn keyword)
+            topic_hint: Topic từ IntentRouter — dùng cho metadata filter
+
+        Returns:
+            QueryProfile với strategy đã chọn
+        """
+        q_lower = query.lower()
+
+        # Ưu tiên grade từ IntentRouter (LLM đã reasoning)
+        # Chỉ tự detect nếu IntentRouter không cung cấp
+        grade = grade_hint or self._detect_grade(q_lower)
+
+        # Nếu topic_hint chứa grade (vd: "Kiến thức Tin học lớp 12") → extract
+        if not grade and topic_hint:
+            grade = self._detect_grade(topic_hint.lower())
+
+        # 1. Check CURRICULUM
+        if any(kw in q_lower for kw in self.CURRICULUM_KEYWORDS):
+            return QueryProfile(
+                strategy=RAGStrategy.CURRICULUM,
+                grade=grade,
+                topic_hint=topic_hint,
+                reason="Hỏi về cấu trúc chương trình",
+            )
+
+        # 2. Check BROAD
+        is_broad = any(kw in q_lower for kw in self.BROAD_KEYWORDS)
+        has_grade_no_lesson = grade is not None and not self._has_lesson_hint(q_lower)
+        # Topic-specific broad: có topic rõ ràng + intent explain + không có bài cụ thể
+        is_topic_broad = (
+            topic_hint is not None
+            and not self._has_lesson_hint(q_lower)
+            and intent_hint == "explain"
+        )
+
+        if (is_broad or has_grade_no_lesson or is_topic_broad) and intent_hint in ("explain", None):
+            return QueryProfile(
+                strategy=RAGStrategy.BROAD,
+                grade=grade,
+                topic_hint=topic_hint,
+                reason=(
+                    f"Query tổng quát: broad={is_broad}, "
+                    f"grade_only={has_grade_no_lesson}, "
+                    f"topic_broad={is_topic_broad}"
+                ),
+            )
+
+        # 3. Mặc định: STANDARD
+        return QueryProfile(
+            strategy=RAGStrategy.STANDARD,
+            grade=grade,
+            topic_hint=topic_hint,
+            reason="Query cụ thể",
+        )
+
+    def _detect_grade(self, q_lower: str) -> Optional[str]:
+        """Nhận diện lớp từ query (ưu tiên match cụm, không match số đơn)."""
+        for grade, patterns in self.GRADE_PATTERNS.items():
+            if any(p in q_lower for p in patterns):
+                return grade
+        return None
+
+    def _has_lesson_hint(self, q_lower: str) -> bool:
+        """Query có đề cập bài học cụ thể không."""
+        # Chỉ match khi đi kèm số (vd: "bài 3", "chương 2")
+        import re
+        return bool(re.search(r'(bài|chương|mục|tiết|phần)\s*\d', q_lower))
+
+
+# ============================================================
+# ADAPTIVE RAG AGENT
+# ============================================================
+
+class AdaptiveRAGAgent:
+    """
+    Agent quyết định chiến lược RAG dựa trên loại query.
+
+    Observe → Classify → Act (choose strategy) → Return chunks
+
+    Đây là Agent (không phải LLM) vì:
+    - Tự quyết định chiến lược (không pre-defined)
+    - Observe kết quả → fallback nếu insufficient
+    - Có thể loop thêm strategy nếu primary thất bại
+    """
+
+    def __init__(self, retriever, reranker, settings):
+        self.retriever = retriever
+        self.reranker  = reranker
+        self.settings  = settings
+        self.classifier = QueryClassifier()
+
+    def retrieve(
+        self,
+        query: str,
+        intent_hint: str = None,
+        topic_hint: str = None,
+        grade_hint: str = None,
+    ) -> RAGResult:
+        """
+        Main entry point — Agent tự chọn và thực thi strategy.
+
+        Args:
+            query: Câu truy vấn
+            intent_hint: "explain" | "generate" | "chat" (từ IntentRouter)
+            topic_hint: Topic đã detect bởi IntentRouter LLM
+            grade_hint: Grade đã detect bởi IntentRouter LLM
+
+        Returns:
+            RAGResult với chunks và metadata
+        """
+        t0 = time.time()
+
+        # === OBSERVE — tích hợp signals từ IntentRouter ===
+        profile = self.classifier.classify(
+            query,
+            intent_hint=intent_hint,
+            grade_hint=grade_hint,
+            topic_hint=topic_hint,
+        )
+        logger.info(
+            f"RAGAgent: strategy={profile.strategy.value} | "
+            f"grade={profile.grade} | topic={profile.topic_hint} | "
+            f"{profile.reason}"
+        )
+
+        # === ACT ===
+        if profile.strategy == RAGStrategy.CURRICULUM:
+            chunks = self._curriculum_lookup(profile)
+
+        elif profile.strategy == RAGStrategy.BROAD:
+            chunks = self._broad_retrieval(query, profile)
+            # Fallback: nếu broad trả về < 3 chunks → bổ sung standard
+            if len(chunks) < 3:
+                logger.info("RAGAgent: BROAD < 3 chunks → fallback standard")
+                standard = self._standard_retrieval(query)
+                chunks = self._merge_deduplicate(chunks, standard)
+
+        else:  # STANDARD
+            chunks = self._standard_retrieval(query)
+
+        total_time = time.time() - t0
+        logger.info(f"RAGAgent done: {len(chunks)} chunks, {total_time:.2f}s")
+
+        return RAGResult(
+            chunks=chunks,
+            strategy_used=profile.strategy,
+            metadata_filter={"grade": profile.grade, "topic": profile.topic_hint},
+            total_time_s=round(total_time, 2),
+            reason=profile.reason,
+        )
+
+    # ============================================================
+    # Strategy Implementations
+    # ============================================================
+
+    def _standard_retrieval(self, query: str) -> List[Dict]:
+        """BM25 + Semantic + RRF → Reranker. Flow hiện tại."""
+        results = self.retriever.search(query, top_k=self.settings.RETRIEVER_TOP_K)
+        if not results:
+            return []
+        return self.reranker.rerank(query, results, top_n=self.settings.RERANKER_TOP_N)
+
+    def _broad_retrieval(self, query: str, profile: QueryProfile) -> List[Dict]:
+        """
+        Metadata filter → lấy đại diện chunk mỗi bài.
+        Dùng grade + topic_hint từ IntentRouter để filter chính xác hơn.
+        """
+        raw = self.retriever.search_by_metadata(
+            grade=profile.grade,
+            topic_name=profile.topic_hint,   # ← từ IntentRouter LLM
+            chunk_types=["objective"],
+            max_per_lesson=1,
+        )
+        if not raw:
+            # Fallback 1: bỏ topic filter, giữ grade
+            raw = self.retriever.search_by_metadata(
+                grade=profile.grade,
+                chunk_types=["objective"],
+                max_per_lesson=1,
+            )
+        if not raw:
+            # Fallback 2: lấy content nếu không có objective
+            raw = self.retriever.search_by_metadata(
+                grade=profile.grade,
+                chunk_types=["content"],
+                max_per_lesson=1,
+            )
+
+        max_chunks = getattr(self.settings, 'RAG_BROAD_MAX_CHUNKS', 30)
+        return raw[:max_chunks]
+
+    def _curriculum_lookup(self, profile: QueryProfile) -> List[Dict]:
+        """
+        Tổng hợp danh sách bài học từ metadata — không cần LLM.
+        Dùng topic_hint để filter theo chủ đề nếu user hỏi về topic cụ thể.
+        """
+        raw = self.retriever.search_by_metadata(
+            grade=profile.grade,
+            topic_name=profile.topic_hint,   # ← từ IntentRouter LLM
+            chunk_types=["objective"],
+            max_per_lesson=1,
+        )
+        if not raw:
+            # Fallback: bỏ topic filter
+            raw = self.retriever.search_by_metadata(
+                grade=profile.grade,
+                chunk_types=["objective"],
+                max_per_lesson=1,
+            )
+        if not raw:
+            return []
+
+        # Deduplicate theo (topic_name, lesson_name)
+        seen: set = set()
+        summary_chunks: List[Dict] = []
+
+        for chunk in raw:
+            m = chunk["metadata"]
+            key = (m.get("topic_name", ""), m.get("lesson_name", ""))
+            if key in seen:
+                continue
+            seen.add(key)
+
+            summary_chunks.append({
+                "doc_id": chunk["doc_id"],
+                "score": 1.0,
+                "content": (
+                    f"Chủ đề: {m.get('topic_name', '')}\n"
+                    f"Bài học: {m.get('lesson_name', '')}\n"
+                    f"---\n{chunk['content'][:300]}"
+                ),
+                "context": chunk["context"],
+                "metadata": m,
+            })
+
+        return summary_chunks[:25]
+
+    def _merge_deduplicate(self, primary: List[Dict], secondary: List[Dict]) -> List[Dict]:
+        """Merge 2 lists, loại trùng doc_id. Primary được ưu tiên."""
+        seen_ids = {c["doc_id"] for c in primary}
+        merged = list(primary)
+        for c in secondary:
+            if c["doc_id"] not in seen_ids:
+                merged.append(c)
+                seen_ids.add(c["doc_id"])
+        return merged
+
+
+__all__ = ["AdaptiveRAGAgent", "RAGStrategy", "RAGResult", "QueryClassifier"]

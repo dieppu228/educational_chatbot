@@ -1,0 +1,20 @@
+{
+  "session_id": "ab0f5cf8",
+  "topic": "",
+  "intent": "chat",
+  "created_at": "2026-04-06T22:23:05.881634",
+  "updated_at": "2026-04-06T22:24:43.657601",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hello bạn là ai là được gì"
+    },
+    {
+      "role": "assistant",
+      "content": "Chào bạn! 👋 Mình là EduBot, trợ lý học tập Tin học THPT Việt Nam. Rất vui được giúp bạn học tập!\n\nDựa trên thông tin bạn cung cấp, mình có thể giải thích như sau:\n\n*   **\"Hello\"** trong ngữ cảnh này là tên của một **hàm**.\n*   Một **hàm** là một khối lệnh được đặt tên, có thể thực hiện một nhiệm vụ cụ thể khi được gọi.\n*   Hàm `Hello` được mô tả là sẽ yêu cầu người dùng nhập tên, sau đó tạo một lời chào và in ra màn hình.\n*   Khi bạn **gọi hàm** `Hello()`, các lệnh bên trong hàm đó sẽ được thực thi.\n\nBạn có muốn thử đặt một câu hỏi khác về hàm hoặc các khái niệm trong Tin học không? 😊"
+    }
+  ],
+  "quiz_state": null,
+  "slide_state": null,
+  "metadata": {}
+}

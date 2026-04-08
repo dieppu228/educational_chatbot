@@ -111,30 +111,41 @@ SYSTEM_PROMPT_SHORT = """Bạn là EduBot — trợ lý học tập Tin học TH
 
 INTENT_ROUTER_PROMPT = """Bạn là hệ thống phân loại intent cho chatbot giáo dục SGK Tin học THPT.
 
-Phân loại câu truy vấn sau:
 Query: "{query}"
 {session_context}
-CÁC INTENT hợp lệ (CHỈ chọn 1):
-- "generate": Yêu cầu SINH nội dung mới (câu hỏi, slide, giáo án)
-- "interact": TƯƠNG TÁC với nội dung ĐÃ SINH (trả lời câu hỏi, ôn lại câu sai, giải thích câu hỏi cụ thể, làm bài tập slide)
-- "analyze": YÊU CẦU thống kê, điểm số, đánh giá năng lực, tiến độ học tập
-- "explain": Giải thích kiến thức CHUNG (không liên quan câu hỏi đã sinh)
-- "chat": Hỏi đáp tự do, chào hỏi, câu không rõ ràng
 
-TASK_TYPE (chỉ áp dụng khi intent = "generate"):
+CÁC INTENT hợp lệ (CHỈ chọn 1):
+- "generate": Yêu cầu SINH nội dung MỚI (câu hỏi, slide, giáo án)
+- "interact": TƯƠNG TÁC với nội dung ĐÃ SINH TRƯỚC ĐÓ trong session
+  (chỉ dùng khi session_context có nội dung đã sinh)
+- "analyze": Thống kê, điểm số, đánh giá tiến độ học tập
+- "explain": Giải thích kiến thức CHUNG từ SGK
+- "chat": Chào hỏi, câu không rõ ràng, ngoài phạm vi SGK Tin học
+
+VÍ DỤ:
+"tạo 5 câu trắc nghiệm về mạng máy tính" → generate/mcq
+"giải thích câu 3 vừa rồi" → interact (vì đề cập nội dung đã sinh)
+"mạng máy tính là gì" → explain
+"tôi được bao nhiêu điểm" → analyze
+"xin chào" → chat
+"tạo slide về hệ điều hành" → generate/slide
+
+TASK_TYPE (chỉ khi intent = "generate"):
 - "mcq": Trắc nghiệm ABCD
-- "essay": Tự luận
-- "fill_blank": Điền khuyết / đục lỗ
+- "essay": Tự luận  
+- "fill_blank": Điền khuyết
 - "true_false": Đúng/Sai
 - "slide": Tạo slide bài giảng
 - "lesson_plan": Tạo giáo án
 
-TOPIC: Xác định chủ đề CHÍNH của câu hỏi (ví dụ: "Mạng máy tính", "Hệ điều hành", "An toàn thông tin").
-
-IS_NEW_TOPIC: {topic_instruction}
-
-CHỈ trả về JSON, KHÔNG giải thích:
-{{"intent": "...", "task_type": "..." hoặc null, "topic": "..." hoặc null, "is_new_topic": true/false}}"""
+CHỈ trả về JSON:
+{{
+  "intent": "...",
+  "task_type": "..." hoặc null,
+  "topic": "..." hoặc null,
+  "is_new_topic": true/false,
+  "confidence": 0.0-1.0
+}}"""
 
 
 # ============================================================

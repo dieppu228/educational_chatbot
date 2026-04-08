@@ -1,0 +1,79 @@
+{
+  "session_id": "cb295f01",
+  "topic": "An toàn thông tin",
+  "intent": "generate",
+  "created_at": "2026-04-06T22:03:33.036590",
+  "updated_at": "2026-04-06T22:04:01.588129",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tạo 3 câu đúng sai về an toàn thông tin"
+    },
+    {
+      "role": "assistant",
+      "content": "❓ Câu 1:\n   An toàn thông tin chỉ đơn thuần là bảo vệ dữ liệu khỏi bị đánh cắp hoặc phá hủy.\n   → Đúng hay Sai?\n\n________________________________________\n\n❓ Câu 2:\n   Kĩ sư an toàn thông tin có nhiệm vụ chính là sửa chữa các lỗ hổng an toàn thông tin và tư vấn cho bộ phận phát triển phần mềm.\n   → Đúng hay Sai?\n\n________________________________________\n\n❓ Câu 3:\n   Việc An thông báo địa chỉ nhà của Bình trên mạng xã hội để tổ chức sinh nhật mà không hỏi ý kiến Bình có thể bị coi là vi phạm Luật An toàn thông tin mạng.\n   → Đúng hay Sai?\n\n________________________________________\n"
+    }
+  ],
+  "quiz_state": {
+    "rounds": [
+      {
+        "round_id": 0,
+        "question_type": "true_false",
+        "query": "Tạo 3 câu đúng sai về an toàn thông tin",
+        "created_at": "2026-04-06T22:04:01.587134",
+        "questions": [
+          {
+            "question_id": "r0_q0",
+            "question_type": "true_false",
+            "content": {
+              "index": 1,
+              "statement": "An toàn thông tin chỉ đơn thuần là bảo vệ dữ liệu khỏi bị đánh cắp hoặc phá hủy.",
+              "correct_answer": false,
+              "explanation": "Sai. An toàn thông tin không chỉ bảo vệ dữ liệu khỏi bị đánh cắp hay phá hủy, mà còn đảm bảo hệ thống thông tin luôn sẵn sàng, tin cậy, cung cấp thông tin tới đúng đối tượng và không để lộ, mất thông tin."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          },
+          {
+            "question_id": "r0_q1",
+            "question_type": "true_false",
+            "content": {
+              "index": 2,
+              "statement": "Kĩ sư an toàn thông tin có nhiệm vụ chính là sửa chữa các lỗ hổng an toàn thông tin và tư vấn cho bộ phận phát triển phần mềm.",
+              "correct_answer": true,
+              "explanation": "Đúng. Theo nội dung tài liệu, một số công việc chính của kĩ sư an toàn thông tin bao gồm sửa chữa những lỗ hổng an toàn thông tin và tư vấn an toàn thông tin cho bộ phận phát triển phần cứng, phần mềm."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          },
+          {
+            "question_id": "r0_q2",
+            "question_type": "true_false",
+            "content": {
+              "index": 3,
+              "statement": "Việc An thông báo địa chỉ nhà của Bình trên mạng xã hội để tổ chức sinh nhật mà không hỏi ý kiến Bình có thể bị coi là vi phạm Luật An toàn thông tin mạng.",
+              "correct_answer": true,
+              "explanation": "Đúng. Việc chia sẻ thông tin cá nhân (họ tên, địa chỉ nhà) của người khác mà không có sự đồng ý có thể vi phạm các quy định về bảo vệ thông tin cá nhân, dẫn đến các hậu quả không mong muốn."
+            },
+            "user_answer": null,
+            "is_correct": null,
+            "score": null,
+            "answered_at": null,
+            "attempt_count": 0,
+            "source": "quiz"
+          }
+        ]
+      }
+    ]
+  },
+  "slide_state": null,
+  "metadata": {}
+}
