@@ -109,61 +109,82 @@ SYSTEM_PROMPT_SHORT = """Bạn là EduBot — trợ lý học tập Tin học TH
 # 3. INTENT ROUTER
 # ============================================================
 
-INTENT_ROUTER_PROMPT = """Bạn là hệ thống phân loại intent cho chatbot giáo dục SGK Tin học THPT.
+INTENT_ROUTER_PROMPT = INTENT_ROUTER_PROMPT = """Bạn là hệ thống phân loại intent cho chatbot giáo dục SGK Tin học THPT.
 
+CONTEXT
 Query: "{query}"
 {session_context}
 
-CÁC INTENT hợp lệ (CHỈ chọn 1):
-- "generate": Yêu cầu SINH nội dung MỚI (câu hỏi, slide, giáo án)
-- "interact": TƯƠNG TÁC với nội dung ĐÃ SINH TRƯỚC ĐÓ trong session
-- "analyze": Thống kê, điểm số, đánh giá tiến độ học tập
-- "explain": Giải thích kiến thức CHUNG từ SGK
-- "chat": Chào hỏi, câu không rõ ràng, ngoài phạm vi SGK Tin học
+BƯỚC 1 — XÁC ĐỊNH BỘ SÁCH
+Nhận diện bộ sách từ query:
+- "CD"   : cánh diều / canhieu / CD / diều
+- "KNTT" : kết nối tri thức / ket noi / KNTT / kết nối
+- null   : không đề cập
 
-=== FEW-SHOT EXAMPLES ===
+Nếu book = "CD" VÀ query có "chương N" (N là số) thì đổi sang chữ:
+1=A, 2=B, 3=C, 4=D, 5=E, 6=F, 7=G, 8=H
+Ví dụ: "chương 2 lớp 10 Cánh diều" thì topic = "Chương B - Lớp 10"
+Nếu book = "KNTT" hoặc null thì giữ nguyên số.
 
-[Session: đã sinh 3 câu MCQ về "Mạng máy tính"]
-1. "câu đầu đáp án nào?" → interact/mcq (đề cập nội dung đã sinh)
-2. "giải thích câu 2 đi" → interact/mcq
-3. "cho tôi xem đáp án" → interact/mcq
-4. "tôi trả lời câu 1 là A" → interact (chấm điểm)
-5. "câu này khó quá" → interact (reference to generated)
+BƯỚC 2 — PHÂN LOẠI INTENT
+Chọn đúng 1 intent:
 
-[Session: đã tạo slide về "Hệ điều hành"]
-6. "slide đầu nói về gì?" → interact/slide
-7. "thêm slide bài tập" → interact/slide
-8. "cái này là gì" → interact (với context)
+"generate" — Yêu cầu SINH nội dung MỚI (câu hỏi, slide, giáo án)
+"interact" — TƯƠNG TÁC với nội dung ĐÃ SINH trong session hiện tại
+"analyze"  — Hỏi điểm số, thống kê, tiến độ học tập
+"explain"  — Giải thích kiến thức từ SGK Tin học
+"chat"     — Chào hỏi, chit-chat, ngoài phạm vi SGK Tin học
 
-[Session: mới, không có nội dung]
-9. "tạo 5 câu trắc nghiệm về mạng" → generate/mcq
-10. "mạng máy tính là gì" → explain
-11. "giải thích TCP/IP" → explain
-12. "slide về hệ điều hành" → generate/slide
-13. "tôi được bao nhiêu điểm" → analyze (vì không có quiz → gợi ý tạo quiz)
+TASK_TYPE chỉ khi intent = "generate":
+mcq / essay / fill_blank / true_false / slide / lesson_plan
 
-[Ambiguous cases]
-14. "cho tôi xem" → explain (nếu có topic) / chat (nếu không có)
-15. "thêm" → interact (nếu có session) / generate (nếu không có)
-16. "câu hỏi" → generate (mặc định tạo mới nếu không có session)
+BƯỚC 3 — CONFIDENCE
+0.9 trở lên : Query rõ ràng, không ambiguous
+0.7         : Có thể hiểu được nhưng còn mơ hồ
+0.5         : Ambiguous, phải đoán dựa trên context
+Dưới 0.5    : Mặc định về "chat"
 
-TASK_TYPE (chỉ khi intent = "generate"):
-- "mcq": Trắc nghiệm ABCD
-- "essay": Tự luận  
-- "fill_blank": Điền khuyết
-- "true_false": Đúng/Sai
-- "slide": Tạo slide bài giảng
-- "lesson_plan": Tạo giáo án
+FEW-SHOT EXAMPLES
 
-BỘ SÁCH (book):
-Hệ thống hỗ trợ 2 bộ sách SGK Tin học THPT:
-- "CD": Cánh Diều (các từ khóa: "cánh diều", "canh dieu", "CD")
-- "KNTT": Kết Nối Tri Thức (các từ khóa: "kết nối tri thức", "ket noi tri thuc", "KNTT", "kết nối")
-- null: Nếu user KHÔNG đề cập bộ sách nào
+INTERACT — chỉ dùng khi session đã có nội dung sinh trước đó
+[Session: đã sinh MCQ về "Mạng máy tính"]
+"câu đầu đáp án nào?" → interact, mcq, confidence=0.95
+"giải thích câu 2 đi" → interact, mcq, confidence=0.95
+"tôi trả lời câu 1 là A" → interact, null, confidence=0.9
+"câu này khó quá" → interact, null, confidence=0.8
+
+[Session: đã tạo slide "Hệ điều hành"]
+"slide đầu nói về gì?" → interact, slide, confidence=0.95
+"thêm slide bài tập" → interact, slide, confidence=0.9
+
+GENERATE — tạo nội dung mới
+"tạo 5 câu trắc nghiệm về mạng" → generate, mcq, confidence=0.95
+"slide về hệ điều hành" → generate, slide, confidence=0.95
+"tạo câu hỏi chương 3 lớp 12 Cánh diều" → generate, mcq, topic="Chương C - Lớp 12", book="CD"
+"slide chương 4 lớp 10 KNTT" → generate, slide, topic="Chương 4 - Lớp 10", book="KNTT"
+
+EXPLAIN — giải thích kiến thức SGK
+"mạng máy tính là gì" → explain, confidence=0.95
+"giải thích TCP/IP" → explain, confidence=0.95
+"tổng hợp chương 1 lớp 10 Cánh diều" → explain, topic="Chương A - Lớp 10", book="CD"
+"giải thích chương 2 lớp 11 KNTT" → explain, topic="Chương 2 - Lớp 11", book="KNTT"
+
+ANALYZE
+"tôi được bao nhiêu điểm" → analyze, confidence=0.9
+
+CHAT — ngoài phạm vi hoặc không rõ
+"chào bạn" / "hello" / "bạn là ai" → chat, confidence=0.95
+"hôm nay trời đẹp" / "tôi mệt" / "mấy giờ rồi" → chat, confidence=0.95
+"?" / "được rồi" / "làm ơn" → chat, confidence=0.9
+
+AMBIGUOUS — dùng session context để quyết định
+"cho tôi xem" → interact nếu có session / explain nếu có topic / chat nếu không có gì
+"thêm" → interact nếu có session / generate nếu không có session
+"câu hỏi" → generate mặc định nếu không có session
 
 {topic_instruction}
 
-CHỈ trả về JSON:
+CHỈ trả về JSON, KHÔNG giải thích:
 {{
   "intent": "...",
   "task_type": "..." hoặc null,
@@ -775,6 +796,60 @@ CHỈ trả về JSON:
 
 
 # ============================================================
+# 10. QUERY REWRITING
+# ============================================================
+
+QUERY_REWRITE_PROMPT = """Bạn là hệ thống viết lại câu truy vấn (query rewriting) cho hệ thống RAG giáo dục SGK Tin học THPT.
+
+=== NGỮ CẢNH HỘI THOẠI ===
+{context}
+
+=== CÂU HỎI HIỆN TẠI CỦA HỌC SINH ===
+"{query}"
+
+=== NHIỆM VỤ ===
+Phân tích câu hỏi hiện tại kết hợp ngữ cảnh hội thoại, sau đó:
+
+1. **Xác định** câu hỏi có cần viết lại hay không:
+   - CẦN viết lại nếu: câu hỏi chứa đại từ ("nó", "cái này", "điều đó"), câu rút gọn, hoặc thiếu ngữ cảnh
+   - KHÔNG cần viết lại nếu: câu hỏi đã đầy đủ, rõ ràng, tự đứng độc lập
+
+2. **Viết lại** thành 2-3 câu truy vấn tìm kiếm tối ưu:
+   - Mỗi câu PHẢI tự đứng độc lập (không cần ngữ cảnh để hiểu)
+   - Mỗi câu tập trung vào 1 khía cạnh khác nhau của câu hỏi gốc
+   - Giữ nguyên ý nghĩa gốc, KHÔNG thêm thông tin mới
+   - Dùng từ khóa đa dạng để tăng độ phủ tìm kiếm
+   - Ưu tiên thuật ngữ chuyên ngành Tin học nếu phù hợp
+
+=== VÍ DỤ ===
+
+Context: "User: Mạng LAN là gì? Assistant: Mạng LAN là mạng cục bộ..."
+Query: "ưu điểm của nó?"
+Output: {{"needs_rewrite": true, "queries": ["Ưu điểm của mạng LAN là gì?", "Mạng cục bộ LAN có những lợi ích và điểm mạnh nào?"]}}
+
+Context: "User: Giải thích thuật toán sắp xếp nổi bọt"
+Query: "so sánh với sắp xếp chọn"
+Output: {{"needs_rewrite": true, "queries": ["So sánh thuật toán sắp xếp nổi bọt và sắp xếp chọn", "Sự khác nhau giữa Bubble Sort và Selection Sort", "Ưu nhược điểm của sắp xếp nổi bọt so với sắp xếp chọn"]}}
+
+Context: ""
+Query: "Hệ điều hành là gì?"
+Output: {{"needs_rewrite": false, "queries": ["Hệ điều hành là gì?"]}}
+
+=== OUTPUT ===
+CHỈ trả về JSON thuần túy:
+{{"needs_rewrite": true/false, "queries": ["query1", "query2", ...]}}
+"""
+
+QUERY_REWRITE_TEMPLATE = PromptTemplate(
+    name="query_rewrite",
+    template=QUERY_REWRITE_PROMPT,
+    required_vars=["query", "context"],
+    version="1.0",
+    description="Rewrite ambiguous queries using conversation context into 2-3 standalone search queries"
+)
+
+
+# ============================================================
 # EXPORTS
 # ============================================================
 
@@ -805,4 +880,6 @@ __all__ = [
     "FEEDBACK_GENERATION_PROMPT",
     "RESPONSE_FORMATTING_PROMPT",
     "KNOWLEDGE_RELATION_PROMPT",
+    # Query Rewriting
+    "QUERY_REWRITE_PROMPT", "QUERY_REWRITE_TEMPLATE",
 ]
