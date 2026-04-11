@@ -71,14 +71,14 @@ class QueryClassifier:
     CURRICULUM_KEYWORDS = [
         "chương trình học", "cấu trúc môn",
         "môn tin học lớp", "học những gì",
-        "bao nhiêu bài", "bao nhiêu chương",
+        "bao nhiêu bài", "bao nhiêu chủ đề",
         "danh sách bài", "danh sách chủ đề",
         "nội dung chương trình",
-        # Bổ sung: các cụm phổ biến chứa "bài" / "chương"
+        # Bổ sung: các cụm phổ biến chứa "bài" / "chủ đề"
         "có những bài nào", "những bài gì", "các bài học", "mấy bài",
-        "có những chương nào", "những chương gì", "các chương", "mấy chương",
-        "gồm những bài", "gồm những chương",
-        "bài học nào", "chương nào",
+        "có những chủ đề nào", "những chủ đề gì", "các chủ đề", "mấy chủ đề",
+        "gồm những bài", "gồm những chủ đề",
+        "bài học nào", "chủ đề nào",
     ]
 
     GRADE_PATTERNS = {
@@ -173,9 +173,9 @@ class QueryClassifier:
 
     def _has_lesson_hint(self, q_lower: str) -> bool:
         """Query có đề cập bài học cụ thể không."""
-        # Chỉ match khi đi kèm số (vd: "bài 3", "chương 2")
+        # Chỉ match khi đi kèm số (vd: "bài 3", "chủ đề 2")
         import re
-        return bool(re.search(r'(bài|chương|mục|tiết|phần)\s*\d', q_lower))
+        return bool(re.search(r'(bài|chủ đề|mục|tiết|phần)\s*\d', q_lower))
 
 
 # ============================================================
@@ -206,6 +206,7 @@ class AdaptiveRAGAgent:
         intent_hint: str = None,
         topic_hint: str = None,
         grade_hint: str = None,
+        book: str = None,
     ) -> RAGResult:
         """
         Main entry point — Agent tự chọn và thực thi strategy.
@@ -215,11 +216,17 @@ class AdaptiveRAGAgent:
             intent_hint: "explain" | "generate" | "chat" (từ IntentRouter)
             topic_hint: Topic đã detect bởi IntentRouter LLM
             grade_hint: Grade đã detect bởi IntentRouter LLM
+            book: Book series filter ("CD" | "KNTT" | None)
 
         Returns:
             RAGResult với chunks và metadata
         """
         t0 = time.time()
+
+        # === Pre-compute book-scoped indices (if book provided) ===
+        book_indices = self._get_book_indices(book) if book else None
+        if book:
+            logger.info(f"RAGAgent: book filter='{book}' → {len(book_indices) if book_indices else 0} chunks in scope")
 
         # === OBSERVE — tích hợp signals từ IntentRouter ===
         profile = self.classifier.classify(
@@ -231,31 +238,31 @@ class AdaptiveRAGAgent:
         logger.info(
             f"RAGAgent: strategy={profile.strategy.value} | "
             f"grade={profile.grade} | topic={profile.topic_hint} | "
-            f"{profile.reason}"
+            f"book={book} | {profile.reason}"
         )
 
         # === ACT ===
         if profile.strategy == RAGStrategy.CURRICULUM:
-            chunks = self._curriculum_lookup(profile)
+            chunks = self._curriculum_lookup(profile, book=book)
 
         elif profile.strategy == RAGStrategy.BROAD:
-            chunks = self._broad_retrieval(query, profile)
+            chunks = self._broad_retrieval(query, profile, book=book)
             # Fallback: nếu broad trả về < 3 chunks → bổ sung standard
             if len(chunks) < 3:
                 logger.info("RAGAgent: BROAD < 3 chunks → fallback standard")
-                standard = self._standard_retrieval(query)
+                standard = self._standard_retrieval(query, book_indices=book_indices)
                 chunks = self._merge_deduplicate(chunks, standard)
 
         elif profile.strategy == RAGStrategy.HIERARCHICAL:
-            chunks = self._hierarchical_retrieval(query, profile)
+            chunks = self._hierarchical_retrieval(query, profile, book_indices=book_indices)
             # Fallback: nếu HRAG < 3 chunks → bổ sung standard
             if len(chunks) < 3:
                 logger.info("RAGAgent: HIERARCHICAL < 3 chunks → fallback standard")
-                standard = self._standard_retrieval(query)
+                standard = self._standard_retrieval(query, book_indices=book_indices)
                 chunks = self._merge_deduplicate(chunks, standard)
 
         else:  # STANDARD
-            chunks = self._standard_retrieval(query)
+            chunks = self._standard_retrieval(query, book_indices=book_indices)
 
         total_time = time.time() - t0
         logger.info(f"RAGAgent done: {len(chunks)} chunks, {total_time:.2f}s")
@@ -263,7 +270,7 @@ class AdaptiveRAGAgent:
         return RAGResult(
             chunks=chunks,
             strategy_used=profile.strategy,
-            metadata_filter={"grade": profile.grade, "topic": profile.topic_hint},
+            metadata_filter={"grade": profile.grade, "topic": profile.topic_hint, "book": book},
             total_time_s=round(total_time, 2),
             reason=profile.reason,
         )
@@ -272,31 +279,43 @@ class AdaptiveRAGAgent:
     # Strategy Implementations
     # ============================================================
 
-    def _standard_retrieval(self, query: str) -> List[Dict]:
-        """BM25 + Semantic + RRF → Reranker. Flow hiện tại."""
-        results = self.retriever.search(query, top_k=self.settings.RETRIEVER_TOP_K)
+    def _standard_retrieval(self, query: str, book_indices: List[int] = None) -> List[Dict]:
+        """BM25 + Semantic + RRF → Reranker. Scoped by book if provided."""
+        if book_indices is not None:
+            results = self.retriever.search_scoped(
+                query, doc_indices=book_indices, top_k=self.settings.RETRIEVER_TOP_K
+            )
+        else:
+            results = self.retriever.search(query, top_k=self.settings.RETRIEVER_TOP_K)
         if not results:
             return []
         return self.reranker.rerank(query, results, top_n=self.settings.RERANKER_TOP_N)
 
-    def _broad_retrieval(self, query: str, profile: QueryProfile) -> List[Dict]:
+    def _broad_retrieval(self, query: str, profile: QueryProfile, book: str = None) -> List[Dict]:
         """
         Metadata filter → lấy đại diện chunk mỗi bài.
-        Dùng grade + topic_hint từ IntentRouter để filter chính xác hơn.
+        Dùng grade + topic_hint + book từ IntentRouter để filter chính xác hơn.
         """
         raw = self.retriever.search_by_metadata(
             grade=profile.grade,
-            topic_name=profile.topic_hint,   # ← từ IntentRouter LLM
+            topic_name=profile.topic_hint,
             chunk_types=["objective"],
             max_per_lesson=1,
         )
+        # Apply book filter
+        if book:
+            raw = [c for c in raw if c.get("metadata", {}).get("book") == book]
+
         if not raw:
-            # Fallback 1: bỏ topic filter, giữ grade
+            # Fallback 1: bỏ topic filter, giữ grade + book
             raw = self.retriever.search_by_metadata(
                 grade=profile.grade,
                 chunk_types=["objective"],
                 max_per_lesson=1,
             )
+            if book:
+                raw = [c for c in raw if c.get("metadata", {}).get("book") == book]
+
         if not raw:
             # Fallback 2: lấy content nếu không có objective
             raw = self.retriever.search_by_metadata(
@@ -304,21 +323,26 @@ class AdaptiveRAGAgent:
                 chunk_types=["content"],
                 max_per_lesson=1,
             )
+            if book:
+                raw = [c for c in raw if c.get("metadata", {}).get("book") == book]
 
         max_chunks = getattr(self.settings, 'RAG_BROAD_MAX_CHUNKS', 30)
         return raw[:max_chunks]
 
-    def _curriculum_lookup(self, profile: QueryProfile) -> List[Dict]:
+    def _curriculum_lookup(self, profile: QueryProfile, book: str = None) -> List[Dict]:
         """
         Tổng hợp danh sách bài học từ metadata — không cần LLM.
-        Dùng topic_hint để filter theo chủ đề nếu user hỏi về topic cụ thể.
+        Dùng topic_hint + book để filter theo chủ đề và bộ sách.
         """
         raw = self.retriever.search_by_metadata(
             grade=profile.grade,
-            topic_name=profile.topic_hint,   # ← từ IntentRouter LLM
+            topic_name=profile.topic_hint,
             chunk_types=["objective"],
             max_per_lesson=1,
         )
+        if book:
+            raw = [c for c in raw if c.get("metadata", {}).get("book") == book]
+
         if not raw:
             # Fallback: bỏ topic filter
             raw = self.retriever.search_by_metadata(
@@ -326,6 +350,9 @@ class AdaptiveRAGAgent:
                 chunk_types=["objective"],
                 max_per_lesson=1,
             )
+            if book:
+                raw = [c for c in raw if c.get("metadata", {}).get("book") == book]
+
         if not raw:
             return []
 
@@ -354,7 +381,7 @@ class AdaptiveRAGAgent:
 
         return summary_chunks[:25]
 
-    def _hierarchical_retrieval(self, query: str, profile: QueryProfile) -> List[Dict]:
+    def _hierarchical_retrieval(self, query: str, profile: QueryProfile, book_indices: List[int] = None) -> List[Dict]:
         """
         HRAG — Two-phase hierarchical retrieval.
 
@@ -364,10 +391,14 @@ class AdaptiveRAGAgent:
                           (Level 3+) của parents đã chọn → Reranker.
         """
         all_chunks = self.retriever.chunks
+        # If book_indices provided, use as base scope
+        scope_set = set(book_indices) if book_indices else None
 
         # ── Phase 1: Coarse — tìm parents (Level 1-2) ──────────────
         parent_indices = []
         for i, chunk in enumerate(all_chunks):
+            if scope_set is not None and i not in scope_set:
+                continue
             m = chunk.get("metadata", {})
             level = m.get("level", 99)
             if level > 2:
@@ -379,7 +410,7 @@ class AdaptiveRAGAgent:
 
         if not parent_indices:
             logger.warning("HRAG Phase 1: no parent chunks found → fallback standard")
-            return self._standard_retrieval(query)
+            return self._standard_retrieval(query, book_indices=book_indices)
 
         # Semantic search chỉ trên parents
         parent_results = self.retriever.search_scoped(
@@ -400,6 +431,8 @@ class AdaptiveRAGAgent:
         # ── Phase 2: Fine — search children (Level 3+) ─────────────
         child_indices = []
         for i, chunk in enumerate(all_chunks):
+            if scope_set is not None and i not in scope_set:
+                continue
             m = chunk.get("metadata", {})
             level = m.get("level", 0)
             if level < 3:
@@ -440,6 +473,14 @@ class AdaptiveRAGAgent:
                 merged.append(c)
                 seen_ids.add(c["doc_id"])
         return merged
+
+    def _get_book_indices(self, book: str) -> List[int]:
+        """Pre-compute danh sách indices thuộc bộ sách chỉ định."""
+        indices = []
+        for i, chunk in enumerate(self.retriever.chunks):
+            if chunk.get("metadata", {}).get("book") == book:
+                indices.append(i)
+        return indices
 
 
 __all__ = ["AdaptiveRAGAgent", "RAGStrategy", "RAGResult", "QueryClassifier"]

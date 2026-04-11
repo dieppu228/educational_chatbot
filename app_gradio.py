@@ -81,16 +81,23 @@ def init_components():
 # CHAT HANDLER
 # ============================================================
 
-def chat_response(message, history):
+def chat_response(message, history, book_option):
     """Process message through Orchestrator pipeline."""
     if not message or not message.strip():
         return history, ""
+
+    # Map UI dropdown to book code
+    ui_book = None
+    if book_option == "Cánh Diều (CD)":
+        ui_book = "CD"
+    elif book_option == "Kết Nối Tri Thức (KNTT)":
+        ui_book = "KNTT"
 
     history = history + [{"role": "user", "content": message}]
 
     full_response = ""
     try:
-        for chunk in orchestrator.ask(message):
+        for chunk in orchestrator.ask(message, ui_book=ui_book):
             full_response += chunk
         history = history + [{"role": "assistant", "content": full_response}]
     except Exception as e:
@@ -265,10 +272,16 @@ def build_ui():
 
         with gr.Row():
             chat_input = gr.Textbox(
-                placeholder="VD: Tạo 3 câu trắc nghiệm về mạng LAN | Sinh slide bài An toàn thông tin | Mạng máy tính là gì?",
+                placeholder="VD: Tạo 3 câu trắc nghiệm chủ đề A | Tóm tắt kiến thức chủ đề 1 | Mạng máy tính là gì?",
                 show_label=False,
                 lines=2,
-                scale=5,
+                scale=4,
+            )
+            book_dropdown = gr.Dropdown(
+                choices=["Không chọn (Auto)", "Cánh Diều (CD)", "Kết Nối Tri Thức (KNTT)"],
+                value="Không chọn (Auto)",
+                label="📚 Bộ sách",
+                scale=1,
             )
             chat_send = gr.Button(
                 "📤 Gửi", variant="primary", scale=1,
@@ -291,6 +304,7 @@ def build_ui():
             gr.Markdown("""
 | Chức năng | Ví dụ câu lệnh |
 |-----------|----------------|
+| **Tìm theo mã chủ đề** | "Tìm bài tập chủ đề A" (Cánh Diều) hoặc "Tóm tắt chủ đề 1" (KNTT) |
 | **Sinh câu hỏi** | "Tạo 5 câu trắc nghiệm về mạng LAN" |
 | **Tự luận** | "Cho tôi 3 câu tự luận về hệ điều hành" |
 | **Đúng/Sai** | "Sinh 4 câu đúng sai về an toàn thông tin" |
@@ -327,13 +341,13 @@ def build_ui():
         # ── Event Handlers ──
         chat_send.click(
             fn=chat_response,
-            inputs=[chat_input, chatbot_ui],
+            inputs=[chat_input, chatbot_ui, book_dropdown],
             outputs=[chatbot_ui, debug_output],
         ).then(lambda: "", outputs=chat_input)
 
         chat_input.submit(
             fn=chat_response,
-            inputs=[chat_input, chatbot_ui],
+            inputs=[chat_input, chatbot_ui, book_dropdown],
             outputs=[chatbot_ui, debug_output],
         ).then(lambda: "", outputs=chat_input)
 

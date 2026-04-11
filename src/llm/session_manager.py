@@ -88,6 +88,10 @@ class SessionManager:
         if intent_result.topic and not current.topic:
             current.topic = intent_result.topic
 
+        # Update book if LLM detected one and current has none
+        if intent_result.book and not current.book:
+            current.book = intent_result.book
+
         current.touch()
         return current
 
@@ -131,9 +135,12 @@ class SessionManager:
             topic=intent_result.topic or "",
             intent=intent_result.primary_intent,
         )
+        # Set book from intent detection
+        session.book = intent_result.book
         logger.info(
             f"New session created: id={session.session_id}, "
-            f"topic='{session.topic}', intent={session.intent}"
+            f"topic='{session.topic}', intent={session.intent}, "
+            f"book={session.book}"
         )
         return session
 

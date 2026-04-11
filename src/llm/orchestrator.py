@@ -145,12 +145,19 @@ class Orchestrator:
     # MAIN ENTRY POINT
     # ============================================================
 
-    def ask(self, query: str, **kwargs) -> Generator[str, None, None]:
+    # Actions that REQUIRE book filter (involve RAG search)
+    ACTIONS_REQUIRING_BOOK = {
+        Action.GENERATE_QUIZ, Action.GENERATE_SLIDE,
+        Action.GENERATE_LESSON_PLAN, Action.EXPLAIN_CONCEPT,
+    }
+
+    def ask(self, query: str, ui_book: Optional[str] = None, **kwargs) -> Generator[str, None, None]:
         """
         Main processing pipeline.
 
         Args:
             query: User's message
+            ui_book: Book series from UI dropdown ("CD" | "KNTT" | None)
 
         Yields:
             str: Response chunks (for streaming display)
@@ -215,6 +222,7 @@ class Orchestrator:
             "task_type": intent_result.task_type,
             "topic": intent_result.topic,
             "is_new_topic": intent_result.is_new_topic,
+            "book": intent_result.book,
             "time_s": round(intent_time, 2),
         })
 
@@ -231,6 +239,7 @@ class Orchestrator:
             "session_id": session.session_id,
             "topic": session.topic,
             "intent": session.intent,
+            "book": session.book,
             "total_messages": len(session.messages),
             "has_quiz_state": session.quiz_state is not None,
             "has_slide_state": session.slide_state is not None,
@@ -249,6 +258,37 @@ class Orchestrator:
             "reason": action_plan.reason,
             "round_id": action_plan.round_id,
         })
+
+        # ④½ Book Resolution — resolve effective book
+        effective_book = ui_book or intent_result.book or session.book
+        if effective_book and not session.book:
+            session.book = effective_book  # persist for future turns
+        self._current_book = effective_book  # store for _get_rag_context
+
+        logger.info(f"Book: ui={ui_book}, llm={intent_result.book}, session={session.book} -> effective={effective_book}")
+
+        # Block if action requires RAG but no book specified
+        if action_plan.action in self.ACTIONS_REQUIRING_BOOK and not effective_book:
+            msg = (
+                "📚 Hệ thống hỗ trợ 2 bộ sách SGK Tin học THPT:\n"
+                "- **Cánh Diều** (CD)\n"
+                "- **Kết Nối Tri Thức** (KNTT)\n\n"
+                "Vui lòng cho mình biết bạn đang học theo bộ sách nào "
+                "để mình tra cứu chính xác nhất nhé! 🎯"
+            )
+            session.add_message("assistant", msg)
+            self.last_debug_info["steps"].append({
+                "node": "BookFilter",
+                "status": "blocked",
+                "reason": "No book specified for RAG-dependent action",
+                "action": action_plan.action.value,
+            })
+            yield msg
+            # Write trace and return early
+            total_time = time.time() - t0
+            self.last_debug_info["total_time_s"] = round(total_time, 2)
+            _write_json_trace(self.last_debug_info)
+            return
 
         # ⑤ Execute
         response_chunks = []
@@ -862,8 +902,8 @@ class Orchestrator:
     def _get_rag_context(self, query: str, intent_hint: str = None) -> List[Dict]:
         """Adaptive RAG Agent — tự chọn chiến lược retrieval.
 
-        Truyền topic_hint và grade_hint từ IntentRouter để agent
-        filter metadata chính xác hơn (không cần LLM call thêm).
+        Truyền topic_hint, grade_hint, và book từ IntentRouter/Session
+        để agent filter metadata chính xác hơn.
         """
         # Lấy topic và grade từ IntentRouter đã chạy upstream
         topic_hint = None
@@ -874,12 +914,16 @@ class Orchestrator:
             if topic_hint:
                 grade_hint = self._extract_grade_from_topic(topic_hint)
 
+        # Book filter from resolved book
+        book = getattr(self, '_current_book', None)
+
         try:
             result = self.rag_agent.retrieve(
                 query,
                 intent_hint=intent_hint,
                 topic_hint=topic_hint,
                 grade_hint=grade_hint,
+                book=book,
             )
 
             self.last_debug_info["steps"].append({

@@ -441,6 +441,7 @@ class Session:
     session_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     topic: str = ""
     intent: str = "chat"                # Primary intent: generate|interact|analyze|explain|chat
+    book: Optional[str] = None          # "CD" | "KNTT" | None (book series filter)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
@@ -494,6 +495,7 @@ class Session:
             "session_id": self.session_id,
             "topic": self.topic,
             "intent": self.intent,
+            "book": self.book,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "messages": [m.to_dict() for m in self.messages],
@@ -511,6 +513,7 @@ class Session:
             session_id=data.get("session_id", str(uuid.uuid4())[:8]),
             topic=data.get("topic", ""),
             intent=data.get("intent", "chat"),
+            book=data.get("book"),
             created_at=data.get("created_at", datetime.now().isoformat()),
             updated_at=data.get("updated_at", datetime.now().isoformat()),
             messages=messages,

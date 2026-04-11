@@ -37,6 +37,7 @@ class IntentResult:
     task_type: Optional[str] = None    # "mcq" | "essay" | "fill_blank" | "true_false" | "slide" | ...
     topic: Optional[str] = None        # Detected topic
     is_new_topic: bool = False         # Whether topic changed from current session
+    book: Optional[str] = None         # "CD" | "KNTT" | None (detected book series)
     raw_response: Optional[str] = None # Raw LLM response for debugging
 
 
@@ -57,6 +58,7 @@ class IntentRouter:
 
     VALID_INTENTS = {"generate", "interact", "analyze", "explain", "chat"}
     VALID_TASK_TYPES = {"mcq", "essay", "fill_blank", "true_false", "slide", "lesson_plan"}
+    VALID_BOOKS = {"CD", "KNTT"}
 
     def __init__(self, api_key: str = None, model_name: str = None):
         self.api_key = api_key or settings.GENAI_API_KEY or os.getenv("GENAI_API_KEY", "")
@@ -112,7 +114,7 @@ class IntentRouter:
                 logger.info(
                     f"IntentRouter: intent={result.primary_intent}, "
                     f"task_type={result.task_type}, topic={result.topic}, "
-                    f"is_new_topic={result.is_new_topic}"
+                    f"is_new_topic={result.is_new_topic}, book={result.book}"
                 )
                 return result
 
@@ -169,11 +171,17 @@ class IntentRouter:
             if task_type and task_type not in self.VALID_TASK_TYPES:
                 task_type = None
 
+            # Validate book
+            book = data.get("book")
+            if book and book not in self.VALID_BOOKS:
+                book = None
+
             return IntentResult(
                 primary_intent=intent,
                 task_type=task_type,
                 topic=data.get("topic"),
                 is_new_topic=data.get("is_new_topic", False),
+                book=book,
             )
 
         except json.JSONDecodeError:

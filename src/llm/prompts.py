@@ -155,12 +155,21 @@ TASK_TYPE (chỉ khi intent = "generate"):
 - "slide": Tạo slide bài giảng
 - "lesson_plan": Tạo giáo án
 
+BỘ SÁCH (book):
+Hệ thống hỗ trợ 2 bộ sách SGK Tin học THPT:
+- "CD": Cánh Diều (các từ khóa: "cánh diều", "canh dieu", "CD")
+- "KNTT": Kết Nối Tri Thức (các từ khóa: "kết nối tri thức", "ket noi tri thuc", "KNTT", "kết nối")
+- null: Nếu user KHÔNG đề cập bộ sách nào
+
+{topic_instruction}
+
 CHỈ trả về JSON:
 {{
   "intent": "...",
   "task_type": "..." hoặc null,
   "topic": "..." hoặc null,
   "is_new_topic": true/false,
+  "book": "CD" hoặc "KNTT" hoặc null,
   "confidence": 0.0-1.0
 }}"""
 

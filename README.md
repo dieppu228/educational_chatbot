@@ -17,85 +17,101 @@ The system aims to provide a tool that automates complex academic tasks, serving
 
 ## 2. Detailed System Pipeline
 
-The system is designed with a Multi-Agent processing flow combined with an advanced RAG mechanism. The End-to-End Workflow goes through independent stages:
+The system is designed with a Code-Level Orchestrator resolving sessions, coupled with Multi-Agent execution. The End-to-End Workflow goes through the following distinct stages:
 
 ```text
-┌────────────────────────────────────────────────────────┐
-│                   User Message / Query                 │
-└───────────────────────────┬────────────────────────────┘
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│               1. Intent Detector Agent                 │
-│  (Extracts: Intent, Task Type, Topic, Specific Info)   │
-└───────────────────────────┬────────────────────────────┘
-                            ▼
-                    [ Dispatcher ] ────────────┐
-                            │                  │
-                      (Match Task)             │
-                            ▼                  ▼
-┌──────────────────────────────────┐   ┌───────────────┐
-│        Specialist Handlers       │   │ General Chat  │
-│  (Question / Explain / Slide...) │   │   Handler     │
-└─────────────────┬────────────────┘   └───────────────┘
-                  │
-                  ▼
-┌────────────────────────────────────────────────────────┐
-│            2. Advanced RAG Pipeline Core               │
-│                                                        │
-│  a. Query Rewriting (Expands query context)            │
-│          │                                             │
-│  b. Hybrid Search ──▶ Lexical (Custom BM25)            │
-│                   ──▶ Semantic (Vector Embedding)      │
-│          │                                             │
-│  c. RRF (Reciprocal Rank Fusion - Score merging)       │
-│          │                                             │
-│  d. Reranking (Cross-Encoder threshold filtering)      │
-└─────────────────────────┬──────────────────────────────┘
-                          │      ┌───────────────────────┐
-                          ├──────┤  Document Datastore   │
-                          │      │  (Text Chunks / JSON) │
-                          ▼      └───────────────────────┘
-┌────────────────────────────────────────────────────────┐
-│          3. Generation & Validator (Reflection)        │
-│                                                        │
-│   ┌───────────────────┐        ┌───────────────────┐   │
-│   │   Generator LLM   │───────▶│  Validator Agent  │   │
-│   │ (Drafts Content)  │◀───────│ (Check & Reflect) │   │
-│   └───────────────────┘        └───────────────────┘   │
-└───────────────────────────┬────────────────────────────┘
-                            ▼
-┌────────────────────────────────────────────────────────┐
-│                 Final Response / UI Output             │
-└────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                           User Message / Query                            │
+└────────────────────────────────────┬──────────────────────────────────────┘
+                                     ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                   1. Context Extraction & Intent Routing                  │
+│                                                                           │
+│ [ContextAnalyzer (Code)] ── (If needed, enrich query with Session History)│
+│          │                                                                │
+│          ▼             [  1st LLM Call  ]                                 │
+│ [IntentDetector (LLM)] ──── (Extracts: Intent, Task Type, Topic, Grade)   │
+└────────────────────────────────────┬──────────────────────────────────────┘
+                                     ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│                     2. Core Orchestration (Pure Code)                     │
+│                                                                           │
+│ [SessionManager] ──▶ Resolves Current Session State (Memory & Store)      │
+│          │                                                                │
+│          ▼                                                                │
+│ [ActionPlanner] ───▶ Decides Action Plan (GenerateQuiz, Slide, Scorer...) │
+└────────────────────────────────────┬──────────────────────────────────────┘
+                                     ▼
+     ┌───────────────────────── Dispatcher ─────────────────────────┐
+     │                                                              │
+(Direct Executions)                                      (Needs Retrieval)
+     │                                                              │
+     ▼                                                              ▼
+┌───────────────────────┐                    ┌──────────────────────────────┐
+│  Specialist Handlers  │                    │     3. Adaptive RAG Agent    │
+│  (Chat, Scorer, Stats,│                    │                              │
+│   Review_Wrong)       │                    │    [QueryClassifier (Logic)] │
+│                       │                    │   ──▶ STANDARD (BM25+Vector) │
+│  ──▶ Direct Logic /   │                    │   ──▶ BROAD (Metadata Filter)│
+│      [LLM Call]       │                    │   ──▶ CURRICULUM (Lessons)   │
+└────────────┬──────────┘                    │   ──▶ HIERARCHICAL (HRAG)    │
+             │                               │               │              │
+             │                               │    [Cross-Encoder Reranker]  │
+             │                               └───────────────┬──────────────┘
+             │                                               ▼
+             │                               ┌──────────────────────────────┐
+             │                               │  4. Generation & Validator   │
+             │                               │                              │
+             │                               │ [Generator LLM] (in Handlers)│
+             │                               │  [  Next LLM Call  ]         │
+             │                               │               │              │
+             │                               │               ▼              │
+             │                               │ [Validator Agent] (Reflect)  │
+             │                               │  [  Validation LLM Call  ]   │
+             │                               └───────────────┬──────────────┘
+             └───────────────────────┬───────────────────────┘
+                                     ▼
+┌───────────────────────────────────────────────────────────────────────────┐
+│             Final Response Output & Auto-Save Session State               │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.1. Intent Detection
+### 2.1. Context Extraction & Intent Routing
 
-When the system receives a natural language query from the user, the `IntentDetector Agent` performs semantic analysis to extract 3 entities (Entities):
+When the system receives a natural language query:
 
-- `intent`: The actual purpose of the command (Chat, Generate Question, Explain, etc.).
-- `task_type`: Desired output format (e.g., `mcq`, `essay`).
-- `topic`: The knowledge topic the user is targeting.
+1. **ContextAnalyzer**: Evaluates if the query requires historical session context. If true, it extracts past conversations and injects them into the query.
+2. **IntentDetector Agent**: Performs the first major **LLM Call** to run semantic analysis extracting 4 key entities:
+   - `intent`: The actual purpose (Chat, Generate Question, Explain, Answer, Review, etc.).
+   - `task_type`: Desired output format (e.g., `mcq`, `essay`).
+   - `topic`: The knowledge topic the user is targeting.
+   - `grade`: The grade level if specified.
 
-The extraction command is then routed by the Dispatcher to the corresponding Specialist Handler.
+### 2.2. Core Orchestration (Pure Code)
 
-### 2.2. Advanced RAG Pipeline
+To optimize latency, routing and state management are handled strictly by pure Python code logic:
 
-To ensure the LLM receives the most accurate context (Context), the system implements a Retrieval pipeline with 4 steps optimized for latency and precision:
+1. **SessionManager**: Resolves and syncs the current session state via memory or JSON storage based on intent and topic.
+2. **ActionPlanner**: Consumes the context and state to chart an `ActionPlan` mapping to specific internal tools (e.g., `GENERATE_QUIZ`, `EXPLAIN_CONCEPT`, `CHECK_ANSWER`).
+3. **Dispatcher**: Forwards the request into designated **Specialist Handlers** (e.g., `MCQHandler`, `Scorer`, `SlideHandler`). Actions requiring curriculum knowledge activate the RAG pipeline.
 
-1. **Query Rewriting:** The LLM Agent breaks down and rewrites the original question into variants (queries) to cover the semantic space, increasing the Recall metric.
-2. **Hybrid Search:** Performs parallel searching in Vector space:
-   - **Lexical Search:** Uses an independent `Custom BM25` module (enhanced TF-IDF) to accurately trace industry-specific keywords.
-   - **Semantic Search:** Uses Cosine Similarity on an Embedding model to find semantic similarities.
-3. **Reciprocal Rank Fusion (RRF):** An algorithm to normalize and merge ranking results from the two search engines in step 2.
-4. **Cross-Encoder Reranking:** Uses the `Vietnamese_Reranker` model to calculate linear vector distances between the Query and Top N Documents. Filters out noisy chunks caused by duplication or those with relevance scores (`rerank_score`) below a certain threshold.
+### 2.3. Adaptive RAG Agent
 
-### 2.3. Generation & Self-Reflection
+Instead of a flat pipeline, the system uses an `AdaptiveRAGAgent` that observes the query intent and dynamically decides the most performant retrieval strategy using `QueryClassifier`:
 
-Filtered documents are packaged with the Query and fed into the LLM to generate results (JSON Formatting).
-In this phase, the system applies a Self-Reflection mechanism through a `Validator Agent`. The generated results are reversely extracted by this Agent to cross-check with the original Context to ensure structural requirements and logical conditions are met. If validation fails, the Generation process is called recursively to re-execute until it meets the standards.
+- **STANDARD**: For regular specific queries, implementing Hybrid Search (Lexical Custom BM25 + Semantic Cosine Similarity) followed by RRF normalization.
+- **BROAD**: For overall overview queries, heavily relies on Document Metadata filtering filtering top-level objective chunks.
+- **CURRICULUM**: Rapid metadata aggregation over the curriculum textbook structure returning lesson topics.
+- **HIERARCHICAL (HRAG)**: A complex Two-Phase setup. Phase 1 runs semantic search purely on Coarse/Parent chunks (Level 1-2). Phase 2 executes a scoped Hybrid Search isolated on the Fine/Child chunks (Level 3+) belonging strictly to Phase 1 parents.
 
-### 2.4. RAGAS Evaluation Pipeline
+All retrieved chunks are subjected to **Cross-Encoder Reranking** filtering out non-relevant duplications using linear vector distances.
+
+### 2.4. Generation & Self-Reflection
+
+Filtered chunks act as the grounded context fed into the Handler's **Generator LLMs** for generation (**Next LLM Call**).
+The output (Formatted JSON Data, Markdown, HTML Slides) is intercepted by a recursive **Self-Reflection mechanism** using the `Validator Agent` (**Validation LLM Call**). This Agent reflects and cross-checks the response against original contexts and strict evaluation rubrics, optionally triggering regeneration until structural and logical requirements are fully met.
+
+### 2.5. RAGAS Evaluation Pipeline
 
 To quantitatively evaluate the RAG system's performance, the project integrates an independent automated evaluation pipeline:
 
@@ -117,7 +133,7 @@ src/
 │   ├── context_analyzer.py  # Context Extractor: Retrieves historical context using Hybrid scoring (Keyword + Recency).
 │   ├── prompts.py           # Prompt Hub: Centralizes and manages all LLM prompts with metadata.
 │   ├── memory.py            # & session_manager/store: Manages conversation state and context tracking.
-│   ├── validators/          # Self-Reflection Module: 
+│   ├── validators/          # Self-Reflection Module:
 │   │   └── question_validator.py # Auto cross-checks generated answers against ground-truth context.
 │   └── handlers/            # Specialist Agents: Executes specific domain tasks.
 │       ├── base_handler.py  # Common interface for all handlers.
