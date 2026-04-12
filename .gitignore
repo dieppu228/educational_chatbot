@@ -46,3 +46,17 @@ pyrightconfig.json
 claude.md
 
 data/sessions/
+# LaTeX auxiliary files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*-blx.bib
+*.run.xml
+*.synctex.gz

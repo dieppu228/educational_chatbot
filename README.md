@@ -17,99 +17,90 @@ The system aims to provide a tool that automates complex academic tasks, serving
 
 ## 2. Detailed System Pipeline
 
-The system is designed with a Code-Level Orchestrator resolving sessions, coupled with Multi-Agent execution. The End-to-End Workflow goes through the following distinct stages:
+The system is engineered around a Clean Architecture approach with a **Thin Pipeline Controller (Orchestrator v3)** dynamically resolving requests without hardcoupled domain logic. The data flows encapsulated within a `RequestContext` through the following End-to-End steps:
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────────┐
-│                           User Message / Query                            │
+│               User Message / Query  ──▶  [RequestContext]                 │
 └────────────────────────────────────┬──────────────────────────────────────┘
                                      ▼
 ┌───────────────────────────────────────────────────────────────────────────┐
-│                   1. Context Extraction & Intent Routing                  │
+│                  1. Context Analysis & Intent Routing                     │
 │                                                                           │
-│ [ContextAnalyzer (Code)] ── (If needed, enrich query with Session History)│
+│ [ContextAnalyzer (Code)] ──▶ Evaluates history context dependency         │
+│          │                                                                │
+│ [QueryRewriter (LLM)] ─────▶ (If needed) Generates multi-queries for RAG  │
 │          │                                                                │
 │          ▼             [  1st LLM Call  ]                                 │
-│ [IntentDetector (LLM)] ──── (Extracts: Intent, Task Type, Topic, Grade)   │
+│ [IntentRouter (LLM)] ──────▶ (Extracts: Intent, Task Type, Topic, Grade)  │
 └────────────────────────────────────┬──────────────────────────────────────┘
                                      ▼
 ┌───────────────────────────────────────────────────────────────────────────┐
-│                     2. Core Orchestration (Pure Code)                     │
+│                2. Core Pipeline Controller (Pure Code)                    │
 │                                                                           │
 │ [SessionManager] ──▶ Resolves Current Session State (Memory & Store)      │
 │          │                                                                │
-│          ▼                                                                │
-│ [ActionPlanner] ───▶ Decides Action Plan (GenerateQuiz, Slide, Scorer...) │
+│ [ActionPlanner] ───▶ Decides Action Plan (GenerateQuiz, Slide, Score...)  │
 └────────────────────────────────────┬──────────────────────────────────────┘
                                      ▼
-     ┌───────────────────────── Dispatcher ─────────────────────────┐
-     │                                                              │
-(Direct Executions)                                      (Needs Retrieval)
-     │                                                              │
-     ▼                                                              ▼
-┌───────────────────────┐                    ┌──────────────────────────────┐
-│  Specialist Handlers  │                    │     3. Adaptive RAG Agent    │
-│  (Chat, Scorer, Stats,│                    │                              │
-│   Review_Wrong)       │                    │    [QueryClassifier (Logic)] │
-│                       │                    │   ──▶ STANDARD (BM25+Vector) │
-│  ──▶ Direct Logic /   │                    │   ──▶ BROAD (Metadata Filter)│
-│      [LLM Call]       │                    │   ──▶ CURRICULUM (Lessons)   │
-└────────────┬──────────┘                    │   ──▶ HIERARCHICAL (HRAG)    │
-             │                               │               │              │
-             │                               │    [Cross-Encoder Reranker]  │
-             │                               └───────────────┬──────────────┘
-             │                                               ▼
-             │                               ┌──────────────────────────────┐
-             │                               │  4. Generation & Validator   │
-             │                               │                              │
-             │                               │ [Generator LLM] (in Handlers)│
-             │                               │  [  Next LLM Call  ]         │
-             │                               │               │              │
-             │                               │               ▼              │
-             │                               │ [Validator Agent] (Reflect)  │
-             │                               │  [  Validation LLM Call  ]   │
-             │                               └───────────────┬──────────────┘
-             └───────────────────────┬───────────────────────┘
-                                     ▼
+                ┌───────── Execution Dispatcher ─────────┐
+                │     (Dictionary-based Registry)        │
+                └─────────┬────────────────────┬─────────┘   
+                          ▼                    ▼             
+    ┌───────────────────────────┐       ┌───────────────────────────────┐
+    │     Domain Services       │──────▶│         3. RAG Service        │
+    │                           │       │                               │
+    │ • QuizService (Generate,  │       │ • AdaptiveRAGAgent (Strategy) │
+    │   Score, Review, Stats)   │       │   ──▶ STANDARD / BROAD /      │
+    │ • SlideService (Slides),  │       │       CURRICULUM / HRAG       │
+    │ • Specialized Handlers    │       │                               │
+    │   (Explain, Chat)         │       │ • Handles Multi-query Dedup   │
+    └──────────────┬────────────┘       │ • Cross-Encoder Reranking     │
+                   │                    └───────────────────────────────┘
+                   ▼                                         
+    ┌───────────────────────────┐                            
+    │ 4. Generation & Validator │                            
+    │                           │                            
+    │ • Generator LLM Call      │                            
+    │ • Validator Agent         │                            
+    └──────────────┬────────────┘                            
+                   ▼                                         
 ┌───────────────────────────────────────────────────────────────────────────┐
-│             Final Response Output & Auto-Save Session State               │
+│   Final Response Output  ──▶  TraceService log  ──▶  Session Auto-Save    │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.1. Context Extraction & Intent Routing
 
-When the system receives a natural language query:
+When the system receives a natural language query, it invokes a `RequestContext` spanning the entire operation:
 
-1. **ContextAnalyzer**: Evaluates if the query requires historical session context. If true, it extracts past conversations and injects them into the query.
-2. **IntentDetector Agent**: Performs the first major **LLM Call** to run semantic analysis extracting 4 key entities:
-   - `intent`: The actual purpose (Chat, Generate Question, Explain, Answer, Review, etc.).
-   - `task_type`: Desired output format (e.g., `mcq`, `essay`).
-   - `topic`: The knowledge topic the user is targeting.
-   - `grade`: The grade level if specified.
+1. **ContextAnalyzer**: Evaluates if the query requires historical session context. If true, it extracts past conversations using a Keyword/Recency hybrid scoring algorithm.
+2. **QueryRewriter Agent**: When context enrichment occurs, it rewrites the single natural query into 2-3 transparent queries optimized exclusively for deep semantic retrieval.
+3. **IntentRouter Agent**: Performs the first major **LLM Call** to run semantic analysis extracting key entities: `intent`, `task_type`, `topic`, and `grade`. It also detects topic switching logic (`is_new_topic`).
 
-### 2.2. Core Orchestration (Pure Code)
+### 2.2. Thin Pipeline Controller (Pure Code)
 
-To optimize latency, routing and state management are handled strictly by pure Python code logic:
+To optimize latency, the core pipeline acts as a non-mutating router purely passing states:
 
-1. **SessionManager**: Resolves and syncs the current session state via memory or JSON storage based on intent and topic.
-2. **ActionPlanner**: Consumes the context and state to chart an `ActionPlan` mapping to specific internal tools (e.g., `GENERATE_QUIZ`, `EXPLAIN_CONCEPT`, `CHECK_ANSWER`).
-3. **Dispatcher**: Forwards the request into designated **Specialist Handlers** (e.g., `MCQHandler`, `Scorer`, `SlideHandler`). Actions requiring curriculum knowledge activate the RAG pipeline.
+1. **SessionManager**: Resolves and syncs the current session context via Memory Manager or persistent JSON Storage based on intent compatibility.
+2. **ActionPlanner**: Consumes the context to construct an `ActionPlan` mapping accurately to a predefined action sequence (e.g., `GENERATE_QUIZ`, `EXPLAIN_CONCEPT`).
+3. **ExecutionDispatcher**: Uses a dictionary-based registry (Strategy Pattern) bridging the pipeline layer directly down to domain-specific services, maintaining single-responsibility and highly scalable code abstraction.
 
-### 2.3. Adaptive RAG Agent
+### 2.3. Domain Services & Adaptive RAG
 
-Instead of a flat pipeline, the system uses an `AdaptiveRAGAgent` that observes the query intent and dynamically decides the most performant retrieval strategy using `QueryClassifier`:
+Action plans flow dynamically into the respective **Domain Services** (`QuizService`, `SlideService`). Operations requiring textbook knowledge pass through the decoupled **RAGService**.
 
-- **STANDARD**: For regular specific queries, implementing Hybrid Search (Lexical Custom BM25 + Semantic Cosine Similarity) followed by RRF normalization.
-- **BROAD**: For overall overview queries, heavily relies on Document Metadata filtering filtering top-level objective chunks.
-- **CURRICULUM**: Rapid metadata aggregation over the curriculum textbook structure returning lesson topics.
-- **HIERARCHICAL (HRAG)**: A complex Two-Phase setup. Phase 1 runs semantic search purely on Coarse/Parent chunks (Level 1-2). Phase 2 executes a scoped Hybrid Search isolated on the Fine/Child chunks (Level 3+) belonging strictly to Phase 1 parents.
+The internal `AdaptiveRAGAgent` observes the query intent and dynamically decides the most performant retrieval strategy using heuristic-based `QueryClassifier`:
 
-All retrieved chunks are subjected to **Cross-Encoder Reranking** filtering out non-relevant duplications using linear vector distances.
+- **STANDARD**: For regular specific queries, implementing Hybrid Search (Lexical Custom BM25 + Semantic Cosine) followed by RRF normalization.
+- **BROAD**: For large systemic queries, exclusively querying Metadata properties extracting top-level "objective" chunks.
+- **CURRICULUM**: Rapid metadata aggregation over the curriculum textbook structure returning mapped out lessons.
+- **HIERARCHICAL (HRAG)**: A complex Two-Phase semantic hierarchy. Phase 1 runs semantic search purely on Coarse chunks (Level 1-2). Phase 2 executes a scoped Hybrid Search localized only on the Fine chunks (Level 3+) directly descending from Phase 1 parents.
 
 ### 2.4. Generation & Self-Reflection
 
-Filtered chunks act as the grounded context fed into the Handler's **Generator LLMs** for generation (**Next LLM Call**).
-The output (Formatted JSON Data, Markdown, HTML Slides) is intercepted by a recursive **Self-Reflection mechanism** using the `Validator Agent` (**Validation LLM Call**). This Agent reflects and cross-checks the response against original contexts and strict evaluation rubrics, optionally triggering regeneration until structural and logical requirements are fully met.
+Filtered and reranked contexts act as the grounded information provided to the **Generator LLMs**.
+Outputs corresponding to structured formats (e.g., Quiz JSON Arrays, Raw HTML Slides) are intercepted by a recursive **Self-Reflection mechanism** using the `QuestionValidator` Agent. This agent scrutinizes accuracy and cross-checks the response against original textbook contexts and strict evaluation rubrics, optionally looping regeneration until rigid logical standards and quality benchmarks are fully met.
 
 ### 2.5. RAGAS Evaluation Pipeline
 

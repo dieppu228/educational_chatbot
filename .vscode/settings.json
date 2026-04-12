@@ -3,5 +3,28 @@
     "python.analysis.extraPaths": [
         "./src"
     ],
-    "python.analysis.autoSearchPaths": true
+    "python.analysis.autoSearchPaths": true,
+    "files.exclude": {
+        "**/*.aux": true,
+        "**/*.bbl": true,
+        "**/*.blg": true,
+        "**/*.fdb_latexmk": true,
+        "**/*.fls": true,
+        "**/*.log": true,
+        "**/*.out": true,
+        "**/*.toc": true,
+        "**/*.lof": true,
+        "**/*.lot": true,
+        "**/*-blx.bib": true,
+        "**/*.run.xml": true,
+        "**/*.synctex.gz": true
+    },
+    "editor.wordWrap": "on",
+    "[latex]": {
+        "editor.wordWrap": "active",
+        "editor.formatOnSave": true
+    },
+    "[tex]": {
+        "editor.wordWrap": "active"
+    }
 }

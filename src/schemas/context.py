@@ -1,0 +1,102 @@
+"""
+RequestContext — Per-request data container.
+
+Thay thế toàn bộ global state trong Orchestrator:
+    - self._current_intent_result
+    - self._current_book
+    - self._current_queries_for_rag
+    - self.last_debug_info
+
+Mỗi lần gọi ask(), tạo 1 RequestContext mới, truyền xuyên suốt pipeline.
+"""
+
+import time
+import uuid
+from dataclasses import dataclass, field
+from typing import Optional, List, Dict, Any
+
+from src.llm.intent_router import IntentResult
+from src.llm.action_planner import ActionPlan
+from src.llm.memory import Session
+
+
+@dataclass
+class RequestContext:
+    """
+    Chứa toàn bộ dữ liệu vòng đời của 1 request.
+
+    Được tạo mới ở đầu ask(), truyền qua từng stage:
+        ContextAnalyzer → IntentRouter → SessionManager
+        → ActionPlanner → RAGService → ExecutionDispatcher
+    """
+
+    # ── Input ──────────────────────────────────────────────
+    query: str                                  # Query gốc từ user
+    ui_book: Optional[str] = None               # Book từ UI dropdown
+
+    # ── Enrichment (ContextAnalyzer) ───────────────────────
+    enriched_query: str = ""                    # Query đã bổ sung context
+    queries_for_rag: List[str] = field(default_factory=list)
+    context_enriched: bool = False
+    rewrite_info: Optional[Dict] = None
+
+    # ── Intent (IntentRouter) ──────────────────────────────
+    intent_result: Optional[IntentResult] = None
+
+    # ── Session (SessionManager) ───────────────────────────
+    session: Optional[Session] = None
+
+    # ── Action (ActionPlanner) ─────────────────────────────
+    action_plan: Optional[ActionPlan] = None
+
+    # ── Book Resolution ────────────────────────────────────
+    effective_book: Optional[str] = None
+
+    # ── Debug / Trace ──────────────────────────────────────
+    request_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
+    debug_steps: List[Dict[str, Any]] = field(default_factory=list)
+    t0: float = field(default_factory=time.time)
+
+    def __post_init__(self):
+        """Set enriched_query and queries_for_rag defaults."""
+        if not self.enriched_query:
+            self.enriched_query = self.query
+        if not self.queries_for_rag:
+            self.queries_for_rag = [self.query]
+
+    # ── Convenience methods ────────────────────────────────
+
+    def add_debug_step(self, node: str, **kwargs):
+        """Thêm 1 node vào trace."""
+        step = {"node": node, **kwargs}
+        self.debug_steps.append(step)
+
+    def resolve_book(self):
+        """Resolve effective book từ ui_book, intent, session."""
+        self.effective_book = (
+            self.ui_book
+            or (self.intent_result.book if self.intent_result else None)
+            or (self.session.book if self.session else None)
+        )
+        # Persist vào session nếu session chưa có book
+        if self.effective_book and self.session and not self.session.book:
+            self.session.book = self.effective_book
+
+    def to_debug_dict(self) -> dict:
+        """Serialize full debug info — dùng cho trace log."""
+        return {
+            "request_id": self.request_id,
+            "query": self.query,
+            "timestamp": self.timestamp,
+            "effective_book": self.effective_book,
+            "steps": self.debug_steps,
+        }
+
+    @property
+    def elapsed_time(self) -> float:
+        """Thời gian đã trôi qua kể từ khi request bắt đầu."""
+        return round(time.time() - self.t0, 2)
+
+
+__all__ = ["RequestContext"]

@@ -109,7 +109,7 @@ SYSTEM_PROMPT_SHORT = """Bạn là EduBot — trợ lý học tập Tin học TH
 # 3. INTENT ROUTER
 # ============================================================
 
-INTENT_ROUTER_PROMPT = INTENT_ROUTER_PROMPT = """Bạn là hệ thống phân loại intent cho chatbot giáo dục SGK Tin học THPT.
+INTENT_ROUTER_PROMPT = """Bạn là hệ thống phân loại intent cho chatbot giáo dục SGK Tin học THPT.
 
 CONTEXT
 Query: "{query}"

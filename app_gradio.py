@@ -123,6 +123,13 @@ def format_debug_info(debug_info: dict) -> str:
         if node == "ContextAnalyzer":
             enriched = "Co" if step.get("enriched") else "Khong"
             lines.append(f"**[1] ContextAnalyzer** — Enriched: {enriched}")
+            rewrite = step.get("rewrite")
+            if rewrite:
+                rw_queries = rewrite.get("rewritten_queries", [])
+                rw_time = rewrite.get("time_s", "?")
+                lines.append(f"  - QueryRewriter ({rw_time}s): {len(rw_queries)} queries")
+                for i, rq in enumerate(rw_queries, 1):
+                    lines.append(f"    {i}. `{rq[:120]}`")
 
         elif node == "IntentRouter":
             lines.append(
