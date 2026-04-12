@@ -1,0 +1,437 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+\section{Môi trường và dữ liệu thực nghiệm}
+\subsection{Môi trường phát triển}
+Hệ thống được xây dựng chủ yếu dựa trên ngôn ngữ lập trình Python, kết hợp cùng các thư viện xử lý toán học như Numpy và Pandas để xử lý ma trận vector nhúng. 
+Việc truy xuất và sinh ngôn ngữ tự nhiên được thực hiện thông qua API của mô hình ngôn ngữ lớn Google Gemini 2.5 Flash, qua thư viện \textit{google-genai}. 
+Đối với tác vụ giải thuật đánh giá sự tương đồng, hệ thống sử dụng mô hình nhúng \textit{dangvantuan/vietnamese-document-embedding} có chiều dài 768 chiều. 
+Giai đoạn tái xếp hạng được đảm nhiệm bởi mô hình Cross-Encoder \textit{AITeamVN/Vietnamese\_Reranker}. 
+Khác với các hệ thống phụ thuộc thư viện kín, logic tìm kiếm từ khoá (Custom BM25) được code tay tinh chỉnh ở mức toán học (TF, DF, IDF), tạo sự chủ động tuỳ biến cho đặc thù tiếng Việt.
+
+\subsection{Dữ liệu thực nghiệm}
+Nguồn dữ liệu gốc được khai thác từ toàn bộ tài liệu Sách Giáo Khoa Tin học lớp 10, 11 và 12, thuộc cả hai bộ sách Cánh Diều và Kết Nối Tri Thức. 
+Qua quá trình tiền xử lý, văn bản được làm sạch và dán nhãn phân cấp từ chương, bài đến sâu nhất là tiểu mục. 
+Tổng cộng, dữ liệu được phân rã thành 2348 khối dữ liệu (chunks) và có chứa thuộc tính level để biểu diễn độ sâu, phục vụ trực tiếp cho vòng phục hồi phân cấp (Hierarchical RAG).
+
+\section{Tổng quan kiến trúc toàn bộ hệ thống}
+Kiến trúc tổng thể của dự án được thiết kế thành một pipeline (Data Pipeline) từ bước xử lý tài liệu thô ban đầu cho tới bước sinh câu trả lời hoàn thiện phục vụ người dùng. Quá trình này được chia làm các cụm thành phần nối tiếp nhau:
+
+\begin{itemize}
+    \item \textbf{Cụm Tiền xử lý dữ liệu (Data Ingestion \& OCR):} Nguồn dữ liệu dạng giáo trình (PDF) được nạp vào và đi qua mô hình khai phá OCR để nhận dạng, chuyển đổi văn bản sang định dạng Markdown theo chuẩn của LlamaParse. Việc này nhằm bóc tách cấu trúc phân cấp tinh vi (chương, bài, tiểu mục) của giáo trình.
+    \item \textbf{Cụm Xây dựng Cơ sở tri thức (Knowledge Base Construction):} Văn bản Markdown sau quá trình làm sạch sẽ được phân rã (Chunking) theo đúng phân cấp. Mỗi khối dữ liệu (chunk) được nhúng (Embedding) thành ma trận vector và lưu trữ vĩnh viễn ở Cơ sở tri thức (Knowledge Base / Vector DB) cùng với metadata (\textit{hệ cấp} và \textit{ID cha con}).
+    \item \textbf{Cụm Phân hệ Truy xuất (Retrieval \& Reranking):} Ở chặng run-time, hệ thống đón nhận truy vấn (User Query) từ người dùng. Cụm RAG làm nhiệm vụ định tuyến hướng đi, tìm kiếm không gian vector, tìm kiếm từ khoá và lai ghép (Hybrid Search + Reranker) nhằm đánh giá và rút trích các khối tri thức chứa ngữ cảnh sát nhất.
+    \item \textbf{Cụm Sinh ngôn ngữ (LLM Generation):} Nhận Top-K ngữ cảnh cô đặc ở đầu ra của cụm Truy xuất, kết hợp cùng Prompt (câu hỏi gốc) để truyền vào mô hình ngôn ngữ lớn (Google Gemini). LLM sẽ phân tích, đối chiếu nội dung ngữ cảnh từ tri thức và sinh ra câu trả lời theo ngôn ngữ tự nhiên.
+\end{itemize}
+
+Sơ đồ tổng quan được biểu diễn tại Hình \ref{fig:overall_architecture_repo}, mô tả toàn bộ quy trình xử lý từ khi tiếp nhận truy vấn của người dùng cho đến khi sinh ra câu trả lời cuối cùng. Kiến trúc hệ thống theo mô hình tuổi thọ yêu cầu (request lifecycle) với 5 giai đoạn chính: Định tuyến ý định (Intent Routing), Phối hợp (Orchestration), Điểm chọn hướng (Dispatcher), Xử lý đôi đường (Dual-Path Processing), và Sinh phản hồi \& Xác thực (Generation \& Validation). Lõi thông minh nhất của kiến trúc là \textbf{Dispatcher} chịu trách nhiệm quyết định định tuyến giữa hai đường xử lý: (i) đường trực tiếp cho các truy vấn đơn giản hoặc yêu cầu có tính chất chuyên biệt, và (ii) đường Adaptive RAG cho các truy vấn phức tạp cần lấy ngữ cảnh từ tri thức tích lũy.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.8\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 1.2cm and 2.5cm,
+        font=\small,
+        base/.style = {draw=black!80, thick, align=center},
+        % Style nâng cấp: Bo góc nhiều hơn, đổ bóng nhẹ, gradient fill giả lập
+        process/.style = {base, rectangle, rounded corners=6pt, fill=green!15, minimum width=4.2cm, minimum height=1.2cm, text width=3.8cm, drop shadow={opacity=0.15, shadow xshift=2pt, shadow yshift=-2pt}},
+        io/.style = {base, ellipse, fill=orange!15, minimum width=3.8cm, minimum height=1.2cm, text width=3.4cm, drop shadow={opacity=0.15, shadow xshift=2pt, shadow yshift=-2pt}},
+        service/.style = {base, rectangle, rounded corners=6pt, fill=blue!10, minimum width=4cm, minimum height=1.2cm, text width=3.6cm, drop shadow={opacity=0.15, shadow xshift=2pt, shadow yshift=-2pt}},
+        llm/.style = {base, rectangle, rounded corners=6pt, fill=red!15, minimum width=4.2cm, minimum height=1.2cm, text width=3.8cm, drop shadow={opacity=0.15, shadow xshift=2pt, shadow yshift=-2pt}},
+        % Mũi tên phong cách hiện đại với shorten để không chạm sát node
+        arrow/.style = {thick, -{Stealth[scale=1.2]}, draw=black!70, shorten >=2pt, shorten <=2pt}
+    ]
+
+    % --- Nodes: Luồng dọc trung tâm ---
+    \node (user_query) [io] {\textbf{User Query}};
+    \node (intent) [process, below=1.2cm of user_query] {Context and Intent\\Understanding};
+    \node (orchestration) [process, below=1.2cm of intent] {\textbf{Orchestration Layer}};
+    
+    % --- Nodes: Phân nhánh ngang (Dispatcher logic) ---
+    \node (direct) [service, below left=1.6cm and 0.6cm of orchestration, fill=cyan!8, draw=cyan!60!black] {Direct Execution\\Handlers};
+    \node (rag) [service, below right=1.6cm and 0.6cm of orchestration, fill=blue!8, draw=blue!60!black] {Adaptive RAG\\Pipeline};
+    
+    % --- Nodes: Hội tụ lại luồng dọc ---
+    \node (generation) [llm, below=4.2cm of orchestration] {\textbf{Response Generation}};
+    \node (validation) [process, below=1.2cm of generation] {Response Validation};
+    \node (final) [io, below=1.2cm of validation] {\textbf{Final Response}};
+
+    % --- Connections ---
+    \draw [arrow] (user_query) -- (intent);
+    \draw [arrow] (intent) -- (orchestration);
+    
+    % Phân nhánh (Đường gấp khúc bo tròn 10pt cho cảm giác mượt mà)
+    \draw [arrow, rounded corners=10pt] (orchestration.south) -- ++(0,-0.8) -| node[above, font=\scriptsize\itshape, pos=0.25, xshift=-1.1cm, text=cyan!40!black] {Direct Tasks} (direct.north);
+    \draw [arrow, rounded corners=10pt] (orchestration.south) -- ++(0,-0.8) -| node[above, font=\scriptsize\itshape, pos=0.25, xshift=1.3cm, text=blue!40!black] {Knowledge-Intensive Tasks} (rag.north);
+    
+    % Hội tụ
+    \draw [arrow, rounded corners=10pt] (direct.south) |- ++(0,-0.8) -| (generation.north);
+    \draw [arrow, rounded corners=10pt] (rag.south) |- ++(0,-0.8) -| (generation.north);
+    
+    \draw [arrow] (generation) -- (validation);
+    \draw [arrow] (validation) -- (final);
+
+    % Khung bao quanh (Sử dụng scoping để vẽ dưới các node)
+    \begin{scope}[on background layer]
+        \node [rectangle, draw=gray!30, thick, dashed, inner sep=0.6cm, fill=gray!3, rounded corners=15pt, fit=(direct) (rag)] (core_box) {};
+        \node [anchor=north east, font=\bfseries\scriptsize, text=gray!70] at (core_box.north east) {Processing Strategy Core};
+    \end{scope}
+
+    \end{tikzpicture}
+    }
+    \caption{Sơ đồ tổng quan kiến trúc hệ thống phiên bản nâng cấp thẩm mỹ (System Overview Architecture)}
+    \label{fig:overall_architecture_repo}
+\end{figure}
+
+Trong Hình \ref{fig:overall_architecture_repo}, kiến trúc hệ thống hoạt động theo các giai đoạn tuần tự và liên quan như sau:
+
+\textbf{Giai đoạn 1 - User Query \& Intent Understanding:} Bắt đầu từ truy vấn của người dùng, hệ thống thực hiện phân tích ngữ cảnh cuộc hội thoại và phát hiện ý định cốt lõi để xác định phạm vi xử lý cần thiết.
+
+\textbf{Giai đoạn 2 - Orchestration Layer:} Đóng vai trò lớp phối hợp, quản lý trạng thái phiên làm việc và lập kế hoạch các hành động cụ thể dựa trên ý định đã phân tích.
+
+\textbf{Giai đoạn 3 - Dual-Path Processing Strategy:} Tại đây, hệ thống phân nhánh thành hai con đường xử lý chuyên biệt gồm \textit{Direct Execution Handlers} dành cho các yêu cầu đơn giản, lệnh trực tiếp không cần tra cứu tri thức và \textit{Adaptive RAG Pipeline} kích hoạt quy trình truy xuất tri thức phân cấp từ kho dữ liệu SGK cho các câu hỏi phức tạp.
+
+\textbf{Giai đoạn 4 - Response Generation:} Cả hai đường quy tụ lại tại mô hình ngôn ngữ lớn để tổng hợp thông tin và sinh ra câu trả lời tự nhiên nhất theo đúng ngữ cảnh đã được cung cấp.
+
+\textbf{Giai đoạn 5 - Response Validation \& Final Response:} Kết quả sinh ra được đi qua một lớp kiểm tra (Validation) để đảm bảo tính chính xác, logic và không vi phạm các ràng buộc an toàn trước khi gửi phản hồi cuối cùng tới người dùng.
+
+\section{Thiết kế chi tiết các thành phần hệ thống}
+\label{sec:system_details}
+
+Dựa trên sơ đồ kiến trúc tổng quát tại Hình \ref{fig:overall_architecture_repo}, các thành phần cốt lõi của hệ thống được thiết kế chi tiết nhằm đảm bảo tính linh hoạt và độ chính xác cao trong quá trình xử lý:
+
+\subsection{Thành phần Context and Intent Understanding}
+Đây là lớp tiếp nhận đầu tiên, thực hiện nhiệm vụ bóc tách ngữ cảnh (ContextAnalyzer) và định danh ý định (IntentDetector). ContextAnalyzer phân tích lịch sử hội thoại để làm rõ các đại từ thay thế hoặc các thực thể bị ẩn ý, trong khi IntentDetector sử dụng mô hình ngôn ngữ lớn để phân loại truy vấn vào các nhóm nhiệm vụ như: hỏi đáp tri thức, thực thi lệnh hệ thống, hoặc trò chuyện thông thường.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.9\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 1.2cm and 2.5cm,
+        font=\small,
+        base/.style = {draw=black, thick, align=center},
+        process/.style = {base, rectangle, rounded corners, fill=green!10, minimum width=4cm, minimum height=1.1cm, text width=3.8cm},
+        io/.style = {base, ellipse, fill=orange!10, minimum width=3.2cm, minimum height=1cm, text width=3cm},
+        decision/.style = {base, diamond, aspect=2, fill=yellow!10, text width=2.8cm, inner sep=0pt},
+        arrow/.style = {thick, -{Stealth[scale=1.2]}}
+    ]
+
+    % --- Column 1: Inputs ---
+    \node (query) [io] {User Query};
+    \node (history) [io, below=1.2cm of query] {Session History};
+    
+    % --- Column 2: Analysis ---
+    \node (module) [process, right=3cm of $(query.south)!0.5!(history.north)$] {Context Analysis Module};
+    
+    % --- Column 3: Decision ---
+    \node (decision) [decision, below=1.8cm of module] {Context\\Required?};
+    
+    % --- Column 4 ---
+    \node (enrich) [process, left=2.5cm of decision] {Query Enrichment\\with History};
+    \node (original) [process, right=2.5cm of decision] {Original Query};
+    
+    % --- Column 5 ---
+    \node (llm) [process, below=2cm of decision, fill=red!10] {Intent Detection LLM};
+    
+    % --- Column 6 ---
+    \node (output) [io, below=1.2cm of llm] {Structured Intent Output};
+
+    % ===== Connections (Thẳng và cân đối) =====
+    \draw [arrow] (query.east) -- ++(0.15,0) |- (module.170);
+    \draw [arrow] (history.east) -- ++(0.15,0) |- (module.190);
+    
+    \draw [arrow] (module.south) -- (decision.north);
+    
+    \draw [arrow] (decision.west) -- node[above, font=\scriptsize] {Yes} (enrich.east);
+    \draw [arrow] (decision.east) -- node[above, font=\scriptsize] {No} (original.west);
+    
+    \draw [arrow] (enrich.south) -- ++(0,-0.6) -| (llm.175);
+    \draw [arrow] (original.south) -- ++(0,-0.6) -| (llm.5);
+    
+    \draw [arrow] (llm.south) -- (output.north);
+
+    \end{tikzpicture}
+    }
+    \caption{Chi tiết quy trình phân tích ngữ cảnh và nhận dạng ý định}
+    \label{fig:intent_understanding_detail}
+\end{figure}
+
+Dữ liệu đầu vào của khối này là \textit{User Query} thô cùng với \textit{Conversation History} từ cơ sở dữ liệu phiên. Đầu ra là một cấu trúc dữ liệu \textit{Intent Object} bao gồm nhãn ý định và các thực thể trích xuất, phục vụ trực tiếp cho việc lập kế hoạch tại tầng tiếp theo.
+
+\subsection{Thành phần Orchestration Layer}
+\label{subsec:orchestration_detail}
+Sau khi có ý định rõ ràng, lớp phối hợp sẽ đảm nhiệm vai trò điều phối luồng công việc. Thành phần SessionManager chịu trách nhiệm duy trì trạng thái hội thoại, đảm bảo tính nhất quán của thông tin qua nhiều lượt tương tác. ActionPlanner sẽ dựa trên kết quả phân tích ý định để lập lộ trình thực thi, quyết định xem một yêu cầu cần được xử lý trực tiếp hay cần phải kích hoạt quy trình truy xuất tri thức bổ trợ.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.9\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 1.1cm and 1.5cm,
+        font=\small,
+        base/.style = {draw=black, thick, align=center},
+        orch/.style = {base, rectangle, fill=blue!10, minimum width=4.5cm, minimum height=1.3cm, text width=4.2cm, font=\bfseries\small, rounded corners=2pt},
+        handler/.style = {base, rectangle, rounded corners=6pt, fill=green!5, minimum width=3.2cm, minimum height=1cm, text width=3cm},
+        database/.style = {base, cylinder, shape border rotate=90, fill=gray!10, minimum width=2cm, minimum height=1.5cm, aspect=0.25},
+        arrow/.style = {thick, -{Stealth[scale=1.2]}}
+    ]
+
+    % --- Central Hub ---
+    \node (intent_in) [draw=none] {Intent Result};
+    \node (planner) [orch, below=0.8cm of intent_in] {Action Planner \&\\Session Manager};
+    
+    % --- State Persistence ---
+    \node (store) [database, right=2.5cm of planner] {Session Store\\(JSON)};
+
+    % --- Dispatching Logic (The "Spokes") ---
+    \node (quiz) [handler, below left=1.5cm and -0.5cm of planner] {Generate Quiz\\Handler};
+    \node (slide) [handler, left=0.8cm of quiz] {Slide Design\\Handler};
+    
+    \node (check) [handler, below right=1.5cm and -0.5cm of planner] {Answer Scorer\\Handler};
+    \node (rag) [handler, right=0.8cm of check, fill=blue!5, draw=blue!50] {Adaptive RAG\\Agent};
+
+    \node (chat) [handler, below=3.5cm of planner] {General Chat\\Handler};
+
+    % --- Connections ---
+    \draw [arrow] (intent_in) -- (planner);
+    \draw [arrow, <->] (planner) -- node[above, font=\scriptsize] {Load/Save} (store);
+
+    % Luồng rẽ nhánh từ Planner xuống các Handler
+    \coordinate (split) at ($(planner.south)+(0,-0.5)$);
+    \draw [thick] (planner.south) -- (split);
+    
+    \draw [arrow, rounded corners=8pt] (split) -| (quiz.north);
+    \draw [arrow, rounded corners=8pt] (split) -| (slide.north);
+    \draw [arrow, rounded corners=8pt] (split) -| (check.north);
+    \draw [arrow, rounded corners=8pt] (split) -| (rag.north);
+    \draw [arrow] (planner.south) -- (chat.north);
+
+    % Label cho routing
+    \node [font=\scriptsize\itshape, left=0.1cm of planner.south west, anchor=east] {Task-specific};
+    \node [font=\scriptsize\itshape, right=0.1cm of planner.south east, anchor=west] {Knowledge-based};
+
+    \end{tikzpicture}
+    }
+    \caption{Kiến trúc điều phối (Orchestration) và cơ chế phân phối tác vụ (Task Dispatching)}
+    \label{fig:orchestration_flow}
+\end{figure}
+
+Đầu vào của khối là \textit{Intent Object} từ tầng trước. Đầu ra của Orchestration là một \textit{Execution Plan} mô tả các bước cần thực hiện và định tuyến (routing) hướng đi cho Dispatcher. Trạng thái sau mỗi bước được \textit{SessionManager} đồng bộ xuống \textit{SessionStore} để phục vụ cho các lượt hội thoại kế tiếp.
+
+\subsection{Thành phần Direct Execution Handlers}
+Đối với các "Direct Tasks", hệ thống cung cấp các bộ xử lý chuyên biệt (Specialist Handlers). Các handler này được thiết kế để giải quyết nhanh chóng các tác vụ như: tra cứu định nghĩa ngắn, thực thi các hàm logic đã định nghĩa trước, hoặc các yêu cầu mang tính chất thủ tục mà không yêu cầu tìm kiếm ngữ cảnh rộng từ kho dữ liệu RAG.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.9\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 1.2cm and 2cm,
+        font=\small,
+        base/.style = {draw=black, thick, align=center},
+        orch/.style = {base, rectangle, fill=blue!10, minimum width=3.5cm, minimum height=1cm, text width=3.2cm},
+        handler/.style = {base, rectangle, rounded corners=6pt, fill=cyan!10, minimum width=3.5cm, minimum height=1.2cm, text width=3.2cm},
+        tool/.style = {base, rectangle, rounded corners=2pt, fill=gray!5, dashed, minimum width=3cm, minimum height=0.8cm, text width=2.8cm, font=\scriptsize},
+        arrow/.style = {thick, -{Stealth[scale=1.2]}}
+    ]
+
+    % --- Input from Orchestrator ---
+    \node (plan) [orch] {Execution Plan\\(Direct Action)};
+    
+    % --- Router ---
+    \coordinate (split) at ($(plan.south)+(0,-0.6)$);
+    \draw [thick] (plan.south) -- (split);
+
+    % --- Handlers ---
+    \node (stat) [handler, below=1.5cm of plan] {Student Tracker\\\& Stats Handler};
+    \node (review) [handler, left=1cm of stat] {Review Wrong\\Questions Handler};
+    \node (scoring) [handler, right=1cm of stat] {Question Scorer\\Handler};
+
+    % --- Sub-tools ---
+    \node (memory) [tool, below=0.5cm of review] {MemoryManager\\(Wrong Records)};
+    \node (tracker) [tool, below=0.5cm of stat] {StudentTracker\\(Progress DB)};
+    \node (llm_score) [tool, below=0.5cm of scoring, fill=red!5] {Scorer LLM\\(Exact Matching)};
+
+    % --- Connections ---
+    \draw [arrow, rounded corners=8pt] (split) -| (review.north);
+    \draw [arrow] (split) -- (stat.north);
+    \draw [arrow, rounded corners=8pt] (split) -| (scoring.north);
+
+    \draw [arrow, dashed] (review) -- (memory);
+    \draw [arrow, dashed] (stat) -- (tracker);
+    \draw [arrow, dashed] (scoring) -- (llm_score);
+
+    \node (out) [draw=none, below=2cm of tracker] {Direct Response / Result Object};
+    \draw [arrow] (tracker.south) -- ++(0,-0.3) -| (out.north);
+    \draw [arrow] (memory.south) -- ++(0,-0.3) -| (out.north);
+    \draw [arrow] (llm_score.south) -- ++(0,-0.3) -| (out.north);
+
+    \end{tikzpicture}
+    }
+    \caption{Sơ đồ luồng xử lý của các bộ thực thi trực tiếp (Direct Execution Handlers)}
+    \label{fig:direct_handlers_flow}
+\end{figure}
+
+Khối này nhận \textit{Execution Plan} và các tham số thực thi. Sau khi xử lý, nó trả về \textit{Raw Result} trực tiếp cho khối sinh phản hồi mà không đi qua quy trình tìm kiếm vector phức tạp, giúp giảm thiểu độ trễ cho các yêu cầu đơn giản.
+
+\subsection{Thành phần Adaptive RAG Pipeline}
+Đây là thành phần chịu trách nhiệm cho các "Knowledge-Intensive Tasks". Pipeline này không hoạt động theo một luồng cố định mà có khả năng thích ứng (Adaptive) dựa trên độ khó của câu hỏi. Nó thực hiện quy trình truy xuất phân cấp (Hierarchical Retrieval) để lấy về các khối tri thức sát nhất với yêu cầu, sau đó sử dụng các thuật toán xếp hạng lai (Hybrid Search) để tinh lọc ngữ cảnh trước khi cung cấp cho mô hình sinh.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.75\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 0.8cm and 1.2cm,
+        font=\small,
+        base/.style = {draw=black, thick, align=center, drop shadow={opacity=0.2, shadow xshift=0.1cm, shadow yshift=-0.1cm}},
+        ragnode/.style = {base, rectangle, rounded corners=3pt, fill=blue!5, minimum width=3.2cm, minimum height=0.9cm, text width=3cm},
+        database/.style = {base, cylinder, shape border rotate=90, fill=gray!10, minimum width=2.2cm, minimum height=1.2cm, aspect=0.25},
+        process/.style = {base, rectangle, rounded corners=6pt, fill=orange!10, minimum width=3.2cm, minimum height=0.9cm, text width=3cm},
+        arrow/.style = {thick, -{Stealth[scale=1.1]}}
+    ]
+
+    % --- Retrieval Core ---
+    \node (query) [draw=none] {Search Queries};
+    \node (hierarchical) [ragnode, below=0.6cm of query] {Hierarchical Retrieval\\(Parent-Child Chunks)};
+    
+    % --- Knowledge Base ---
+    \node (kb) [database, right=1.8cm of hierarchical] {Vector DB \&\\Metadata BM25};
+    
+    % --- Hybrid Processing ---
+    \node (hybrid) [process, below=1.2cm of hierarchical] {Hybrid Search\\(Vector + Keyword)};
+    \node (rerank) [process, below=1cm of hybrid, fill=red!10] {Cross-Encoder\\Reranker};
+
+    % --- Output ---
+    \node (context) [ragnode, below=1cm of rerank, fill=green!10] {Top-K Context Chunks\\(Optimized)};
+
+    % --- Connections ---
+    \draw [arrow] (query) -- (hierarchical);
+    \draw [arrow, <->] (hierarchical) -- node[above, font=\scriptsize] {Metadata Match} (kb);
+    \draw [arrow] (hierarchical) -- (hybrid);
+    \draw [arrow] (hybrid) -- (rerank);
+    \draw [arrow] (rerank) -- (context);
+
+    % Legend/Notes
+    \node [right=0.4cm of rerank, font=\scriptsize\itshape, text=red!70!black] {Tinh loc tri thuc};
+    \node [right=0.4cm of hybrid, font=\scriptsize\itshape, text=orange!70!black] {Da phuong thuc tim kiem};
+
+    \end{tikzpicture}
+    }
+    \caption{Chi tiết quy trình truy xuất tri thức thích ứng (Adaptive RAG Pipeline)}
+    \label{fig:adaptive_rag_detail}
+\end{figure}
+
+Đầu vào là các \textit{Search Keywords} hoặc \textit{Query Embeddings}. Đầu ra của pipeline là danh sách \textit{Top-K Context Chunks} đã được tái xếp hạng (Reranked), đảm bảo chỉ những thông tin giá trị nhất mới được đưa vào mô hình sinh. Quy trình này bao gồm việc kết hợp giữa tìm kiếm vector (Dense Retrieval) và tìm kiếm từ khóa (Sparse Retrieval) thông qua thuật toán Reciprocal Rank Fusion (RRF), sau đó sử dụng mô hình Cross-Encoder để đánh giá lại mức độ liên quan thực tế giữa truy vấn và từng đoạn văn bản.
+
+\subsection{Thành phần Generation and Validation}
+Cuối cùng, Response Generation nhận ngữ cảnh tinh lọc để biên soạn câu trả lời. Điểm khác biệt quan trọng là sự xuất hiện của Validator Agent, một lớp hậu kiểm thực hiện đối soát câu trả lời vừa sinh ra với nguồn tri thức gốc để phát hiện các lỗi "hallucination" (ảo tưởng), đảm bảo rằng mọi thông tin gửi tới người dùng đều có căn cứ xác thực từ sách giáo khoa.
+
+Đầu vào của khối gồm \textit{Context Chunks} và \textit{Original User Prompt}. Đầu ra cuối cùng (\textit{Final Response}) là văn bản ngôn ngữ tự nhiên đã qua kiểm định chất lượng, sẵn sàng hiển thị trên giao diện người dùng.
+
+\section{Thiết kế kiến trúc hệ thống RAG}
+\label{sec:rag_architecture}
+
+\begin{figure}[H]
+    \centering
+    \resizebox{\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 1.8cm and 3cm,
+        font=\small,
+        base/.style = {draw=black, thick, align=center},
+        % Định nghĩa các style hình khối
+        process/.style = {base, rectangle, rounded corners, fill=green!10, minimum width=4cm, minimum height=1.2cm, text width=3.8cm},
+        database/.style = {base, cylinder, cylinder uses custom fill, cylinder body fill=blue!10, cylinder end fill=blue!20, shape border rotate=90, aspect=0.25, minimum height=2.2cm, minimum width=2.5cm, text width=2.2cm},
+        decision/.style = {base, diamond, aspect=2.5, fill=yellow!10, text width=3.5cm, inner sep=0pt},
+        io/.style = {base, ellipse, fill=orange!10, minimum width=3.5cm, minimum height=1.2cm, text width=3cm},
+        llm/.style = {base, rectangle, rounded corners, fill=red!10, minimum width=4cm, minimum height=1.2cm, text width=3.8cm},
+        arrow/.style = {thick, -{Stealth[scale=1.2]}},
+        dashed_arrow/.style = {thick, dashed, -{Stealth[scale=1.2]}}
+    ]
+
+    % --- Các Nodes ---
+    % 1. Input
+    \node (query) [io] {Truy vấn\\người dùng};
+
+    % 2. Classifier
+    \node (classifier) [decision, below=1.8cm of query] {Adaptive RAG\\Classifier};
+
+    % 3. HRAG Pha 1
+    \node (hrag1) [process, right=3cm of classifier] {HRAG Pha 1:\\Coarse Retrieval};
+    
+    % 4. DB
+    \node (db) [database, right=2.5cm of hrag1] {Vector DB \&\\Metadata BM25};
+
+    % 5. HRAG Pha 2
+    \node (hrag2) [process, below=1.8cm of hrag1] {HRAG Pha 2:\\Fine Retrieval};
+
+    % 6. RRF \& Reranker
+    \node (rrf) [process, below=1.8cm of hrag2] {Hybrid Search\\(RRF \& Reranker)};
+
+    % 7. LLM \& Output
+    \node (llm) [llm, left=3cm of rrf] {LLM Generation\\(Gemini 2.5 Flash)};
+    \node (output) [io, below=1.5cm of llm] {Câu trả lời\\cuối cùng};
+
+    % --- Vẽ các đường mũi tên ---
+    \draw [arrow] (query) -- (classifier);
+    \draw [arrow] (classifier) -- node[above=0.15cm] {Định tuyến} (hrag1);
+    
+    \draw [arrow] (hrag1) -- node[right=0.15cm] {Parent ID} (hrag2);
+    \draw [arrow] (hrag2) -- node[right=0.15cm] {Top-K Context} (rrf);
+    \draw [arrow] (rrf) -- node[above=0.15cm] {Tối ưu Context} (llm);
+    
+    % Tuỳ chỉnh đường dắt Prompt uốn vòng tránh đi xuyên qua khối hình thoi
+    % Sử dụng toạ độ trung gian để gắn chữ chính giữa đoạn gập xuống
+    \draw [arrow] (query.west) -- ++(-2.5,0) coordinate (p1) -- node[left=0.15cm] {Prompt} (p1 |- llm.west) -- (llm.west);
+    
+    \draw [arrow] (llm) -- (output);
+
+    % Tương tác với DB
+    % Gắn node bên dưới đường để không đè vào chữ của DB nếu nó gần nhau
+    \draw [dashed_arrow] (hrag1) -- node[below=0.15cm] {Mức 1 \& 2} (db);
+    
+    % Điểm rẽ góc 90 độ cho mức 3
+    \draw [dashed_arrow] (hrag2.east) -- node[above=0.15cm] {Mức $\ge$ 3} (hrag2.east -| db.south) -- (db.south);
+
+    % --- Đóng khung định nghĩa các cụm chức năng ---
+    \begin{scope}[on background layer]
+        \node [rectangle, draw=gray, thick, dashed, inner sep=0.6cm, fill=gray!5, fit=(hrag1) (hrag2) (rrf) (db)] (rag_box) {};
+        \node [anchor=south east, font=\bfseries\small, text=gray, inner sep=0.4cm] at (rag_box.south east) {Hệ thống RAG Phân cấp};
+    \end{scope}
+    
+    \end{tikzpicture}
+    }
+    \caption{Kiến trúc tổng quát hệ thống Adaptive - Hierarchical RAG}
+    \label{fig:overall_pipeline_tikz}
+\end{figure}
+
+\subsection{Tuỳ biến chiến lược Adaptive RAG}
+Kiến trúc hệ thống RAG hiện tại được nâng cấp lên cơ chế Adaptive RAG. 
+Cơ chế này tiếp nhận truy vấn đầu vào và sử dụng \textit{QueryClassifier} dưới dạng Agent để rút ra lộ trình phục hồi thích hợp. 
+Thành phần Agent sẽ đánh giá bám sát và quyết định \textit{RetrievalStrategy} trong 4 loại mặc định, trong đó quan trọng nhất là chiến lược tìm kiếm \textit{Hierarchical}. 
+Tùy theo kết quả đánh giá này mà bước tìm kiếm tiếp theo có sự thích ứng cụ thể và chính xác.
+
+\subsection{Kỹ thuật truy xuất phân cấp (Hierarchical RAG - HRAG)}
+Kỹ thuật \textit{Hierarchical RAG} đóng vai trò cốt lõi nhằm tương thích hoàn toàn với dữ liệu có tính cấu trúc của SGK, qua đó khắc phục hiện tượng mất ngữ cảnh rộng khi chỉ dùng BM25 thông thường. 
+Kỹ thuật này được chia thành hai giai đoạn độc lập và liên hiệp mật thiết: Pha 1 (Coarse Retrieval) và Pha 2 (Fine Retrieval).
+
+Trước hết, trong Pha 1, hệ thống thực hiện tìm kiếm ngữ nghĩa thuần túy dưới dạng mô hình vector đối với đại diện khối gốc (lớp cha). 
+Các khối này là các bản ghi chứa tên chương, bài và không chứa nội dung chi tiết nằm ở mức \textit{level~1} và \textit{level~2}. 
+Những vector chunk có điểm số Semantic lớn hơn một ngưỡng cố định (khoảng $0.55$) sẽ được trả về, cho biết \textit{mã khóa} parent tiềm năng nhất. 
+
+Tiếp đến, ở Pha 2 (Fine Retrieval), mã khóa của level cha lấy được sẽ đóng vai trò khoanh vùng. 
+Mô hình tìm kiếm thứ hai - tìm kiếm lai (Hybrid Search) - sẽ hoạt động chỉ trên các khối dữ liệu con chứa nội dung chi tiết (\textit{level} $\ge 3$) mà thuộc quyền sở hữu của danh sách \textit{parent} kể trên. 
+Kỹ thuật này giúp loại bỏ nhiều nhiễu so với tìm kiếm nhắm thẳng vào toàn bộ dữ liệu, giảm chi phí tính toán nhờ thu hẹp vùng nháp, và đảm bảo ngữ cảnh tài liệu tập trung. 
+
+\subsection{Tìm kiếm lai (Hybrid) và sắp xếp (RRF, Reranker)}
+Không dừng lại ở Semantic, kết quả được củng cố cùng Custom BM25 thuật toán thông qua hàm lai tiêu chuẩn là Reciprocal Rank Fusion (RRF). 
+RRF liên kết thứ hạng của tìm kiếm chính xác từ khóa với tìm kiếm vector trình độ tương tự, thiết lập tham số $\omega=60$. 
+Cuối cùng, tập kết quả RRF sẽ được tái xếp hạng lại bằng Cross-Encoder Reranker, dựa trên trọng số logits giữa câu hỏi và từng chunk, giúp lọc ra \textit{Top-K} chính xác nhất để tối ưu hóa việc truyền vào mô hình LLM chuyên trách sinh câu trả lời (Generation).
+
+\section{Đánh giá và kết quả đạt được}
+Quá trình đánh giá hiệu suất được đo lường nghiêm ngặt bằng hình thức thử nghiệm tự động từ framework RAGAS. 
+Quy trình sử dụng bộ tham chiếu tự sinh ngẫu nhiên hoá gồm 246 mẫu câu hỏi tiêu chuẩn, bám sát SGK. 
+
+Kết quả thực tế cho thấy sáng kiến Adaptive RAG kết hợp HRAG tương tác tốt và kéo lên rõ rệt chỉ số \textit{Faithfulness} (Độ tin cậy), đạt được điểm số trung bình là $0.9757$. 
+Thông số này tương đương với mức độ ảo giác sinh ra từ LLM là cực thấp so với ngữ cảnh nạp vào. 
+Đồng thời, biến số \textit{Context Recall} đạt hiệu năng là $0.9593$, chứng minh việc sử dụng HRAG phòng chống hiệu quả tình trạng sót thông tin khi tìm kiếm, khắc phục độ trôi ngữ cảnh khi tài liệu bị trộn lẫn. 
+Trừ các mặt tốn kém thời gian đi tìm hai chặng trong HRAG, chiêu thức này cho ra sự ưu việt đáng kể vào khả năng cá nhân hóa truy xuất trên tài liệu dạng cấu trúc giáo trình như SGK.
+
+\end{document}

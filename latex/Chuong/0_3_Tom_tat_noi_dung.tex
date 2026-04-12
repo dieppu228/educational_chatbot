@@ -1,0 +1,20 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+\begin{center}
+    \Large{\textbf{TÓM TẮT NỘI DUNG ĐỒ ÁN}}\\
+\end{center}
+\vspace{1cm}
+Hệ thống giáo dục hiện đại đòi hỏi các công cụ hỗ trợ học tập thông minh, nhất là sau đại dịch COVID-19. Các chatbot AI tổng quát như ChatGPT, mặc dù mạnh mẽ, nhưng dễ bịa chuyện (hallucination) và không được đặc thù hóa cho sách giáo khoa Việt Nam. Các hệ thống Intelligent Tutoring System (ITS) hiệu quả nhưng thiếu phiên bản tiếng Việt, còn Learning Management System (LMS) cung cấp nền tảng lưu trữ nhưng thiếu khả năng sinh câu hỏi tự động và chấm điểm thông minh.
+
+Đề tài này đề xuất kiến trúc \textbf{Code-level Orchestrator} kết hợp \textbf{Adaptive RAG} (Retrieval-Augmented Generation) để xây dựng hệ thống Chatbot hỗ trợ dạy-học Tin Học THPT (lớp 10-12). Phương pháp RAG được lựa chọn vì không yêu cầu fine-tune LLM toàn bộ, chi phí thấp, và dễ cập nhật khi sách giáo khoa thay đổi. Hệ thống cung cấp 4 chức năng chính: (1) trả lời câu hỏi dựa trên kiến thức từ sách giáo khoa, (2) sinh câu hỏi tự động bốn dạng (trắc nghiệm, tự luận, điền khuyết, đúng/sai), (3) chấm điểm tự động dựa trên ngữ cảnh (không chỉ so khớp từ khóa), và (4) tạo bài giảng từ nội dung sách.
+
+Các đóng góp chính gồm: (i) xây dựng Orchestrator 100\% từ code Python thuần (tránh dùng framework như LangChain/CrewAI), giúp dễ kiểm soát và giải thích; (ii) chiến lược Adaptive RAG với 4 phương pháp tìm kiếm tối ưu theo loại truy vấn; (iii) hệ thống sinh câu và chấm điểm dựa ngữ cảnh với 4 metrics đánh giá RAG (Faithfulness 0.9757, Answer Relevancy 0.8571, Context Recall 0.9593); (iv) quản lý session cộng tác hóa cho học sinh. Kết quả cho thấy hệ thống đạt độ chính xác cao và đáng tin cậy, sẵn sàng triển khai trong lớp học thực tế từ lớp 10-12.
+\begin{flushright}
+Sinh viên thực hiện\\
+\begin{tabular}{@{}c@{}}
+\textit{(Ký và ghi rõ họ tên)}
+\end{tabular}
+\end{flushright}
+
+\end{document}
