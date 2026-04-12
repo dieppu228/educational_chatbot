@@ -56,25 +56,7 @@ def calculate_adaptive_questions(context_count: int) -> int:
         return random.randint(4, 5)
 
 
-def format_contexts(contexts: List[Dict]) -> str:
-    """
-    Format context list for prompt insertion.
-    
-    Args:
-        contexts: List of context dictionaries with 'content' key
-    
-    Returns:
-        str: Formatted context string separated by newlines
-    """
-    if not contexts:
-        return "[Không có context]"
-    
-    formatted = []
-    for i, ctx in enumerate(contexts, 1):
-        content = ctx.get("content", "")
-        formatted.append(f"Context {i}:\n{content}")
-    
-    return "\n\n---\n\n".join(formatted)
+
 
 
 def extract_question_index_from_query(query: str) -> Optional[int]:
@@ -141,7 +123,6 @@ def fuzzy_match_option(query: str, options: Dict[str, str]) -> Optional[str]:
 __all__ = [
     "extract_num_questions",
     "calculate_adaptive_questions",
-    "format_contexts",
     "extract_question_index_from_query",
     "fuzzy_match_option",
 ]

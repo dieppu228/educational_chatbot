@@ -14,7 +14,7 @@ from src.llm.memory import Session, QuestionRecord
 from src.llm.handlers.content.slide_handler import SlideHandler
 from src.llm.handlers.content.slide_template import SlideTemplate
 from src.llm.handlers.question.scorer import QuestionScorer
-from src.llm.utils import format_contexts
+from src.rag.context_combiner import format_contexts
 from src.rag.rag_service import RAGService
 from src.utils.error_handling import safe_execute
 
@@ -53,7 +53,7 @@ class SlideService:
             yield "Không tìm thấy nội dung bài học phù hợp."
             return
 
-        context_text = format_contexts(contexts)
+        context_text = format_contexts(contexts, action="generate_slide")
 
         t0 = time.time()
         slide_output = self.slide_handler.handle(

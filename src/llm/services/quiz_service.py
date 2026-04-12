@@ -17,7 +17,8 @@ from src.llm.handlers.question.scorer import QuestionScorer
 from src.llm.validators.question_validator import QuestionValidator
 from src.llm.handlers.explain_handler import ExplainHandler
 from src.llm.student_tracker import StudentTracker
-from src.llm.utils import extract_num_questions, format_contexts
+from src.llm.utils import extract_num_questions
+from src.rag.context_combiner import format_contexts
 from src.rag.rag_service import RAGService
 from src.utils.error_handling import safe_execute
 
@@ -66,7 +67,7 @@ class QuizService:
             yield "Không tìm thấy tài liệu phù hợp để tạo câu hỏi."
             return
 
-        context_text = format_contexts(contexts)
+        context_text = format_contexts(contexts, action="generate_quiz")
         handler = self.question_handlers.get(task_type, self.question_handlers["mcq"])
         num_q = extract_num_questions(query) or 3
         logger.info(f"Generate: type={task_type}, num={num_q}")

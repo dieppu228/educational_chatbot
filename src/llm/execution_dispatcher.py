@@ -12,7 +12,7 @@ from src.llm.action_planner import Action, ActionPlan
 from src.schemas.context import RequestContext
 from src.llm.handlers.chat_handler import ChatHandler
 from src.llm.handlers.explain_handler import ExplainHandler
-from src.llm.utils import format_contexts
+from src.rag.context_combiner import format_contexts
 from src.llm.services.quiz_service import QuizService
 from src.llm.services.slide_service import SlideService
 from src.rag.rag_service import RAGService
@@ -121,7 +121,7 @@ class ExecutionDispatcher:
 
         import time
         contexts = self.rag_service.get_context(ctx, intent_hint="explain")
-        context_text = format_contexts(contexts) if contexts else ""
+        context_text = format_contexts(contexts, action="explain_concept") if contexts else ""
 
         t0 = time.time()
         response = self.explain_handler.handle(ctx.enriched_query, context=context_text)
@@ -144,7 +144,7 @@ class ExecutionDispatcher:
         import time
 
         contexts = self.rag_service.get_context(ctx, intent_hint="chat")
-        context_text = format_contexts(contexts) if contexts else ""
+        context_text = format_contexts(contexts, action="chat") if contexts else ""
 
         t0 = time.time()
         response = self.chat_handler.handle(ctx.enriched_query, context=context_text)
