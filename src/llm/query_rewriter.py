@@ -1,13 +1,3 @@
-"""
-Query Rewriter — Viết lại query dựa trên ngữ cảnh hội thoại.
-
-Nhận query gốc + context từ ContextAnalyzer, quyết định có cần rewrite không,
-và sinh ra 2-3 queries tối ưu cho việc tìm kiếm RAG.
-
-Input:  query + history_context (từ ContextAnalyzer)
-Output: List[str] — danh sách 2-3 queries đã rewrite (hoặc [query] nếu không cần)
-"""
-
 import json
 import re
 import os

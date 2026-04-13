@@ -1,11 +1,12 @@
 """
-Gradio Chatbot Application — Orchestrator v2
+Gradio Chatbot Application — Orchestrator v3
 =============================================
 Giao dien 1 khung chat duy nhat.
 Moi thu di qua Orchestrator: sinh quiz, slide, cham diem, on tap, giai thich, chat.
 
 Pipeline:
-  IntentRouter -> SessionManager -> ActionPlanner -> Handler -> SessionStore
+  ContextAnalyzer -> IntentRouter -> SessionManager -> ActionPlanner
+  -> ExecutionDispatcher -> Domain Services -> SessionStore -> TraceService
 
 Debug panel hien thi ket qua tung node.
 """
@@ -30,7 +31,7 @@ from src.config.config import settings
 from src.rag.retrieve_rebuild import CustomSearch
 from src.rag.reranker import Reranker
 from src.llm.orchestrator import Orchestrator
-from src.llm.memory import MemoryManager
+
 
 # ── Global refs ────────────────────────────────────────────────
 searcher = None
@@ -51,7 +52,7 @@ def init_components():
     EMBEDDINGS_PATH = str(DATA_DIR / 'embeddings.npy')
 
     print("=" * 60)
-    print("Initializing Gradio Application (Orchestrator v2)...")
+    print("Initializing Gradio Application (Orchestrator v3)...")
     print("=" * 60, flush=True)
 
     # 1. CustomSearch (BM25 + Semantic + RRF)
@@ -67,8 +68,8 @@ def init_components():
     reranker = Reranker()
     print("   Reranker ready (lazy load)", flush=True)
 
-    # 3. Orchestrator v2
-    print("Initializing Orchestrator v2...", flush=True)
+    # 3. Orchestrator v3
+    print("Initializing Orchestrator v3...", flush=True)
     orchestrator = Orchestrator(retriever=searcher, reranker=reranker)
     print("   Orchestrator ready", flush=True)
 
@@ -163,13 +164,43 @@ def format_debug_info(debug_info: dict) -> str:
             if step.get("error"):
                 lines.append(f"**[5] RAG** — Error: {step.get('error')}")
             else:
+                strategy = step.get('strategy', step.get('strategies', '?'))
                 lines.append(
                     f"**[5] RAG Search** ({step.get('time_s', '?')}s)\n"
-                    f"  - Search results: {step.get('search_results')}\n"
-                    f"  - After rerank: {step.get('reranked')}"
+                    f"  - Strategy: `{strategy}`\n"
+                    f"  - Chunks returned: {step.get('chunks_returned', '?')}"
                 )
-                for preview in step.get("top_chunks", []):
-                    lines.append(f"  - `{preview[:100]}`")
+                if step.get('multi_query'):
+                    lines.append(f"  - Multi-query: Yes ({len(step.get('queries_used', []))} queries)")
+                queries = step.get('queries_used', [])
+                if queries:
+                    for i, q in enumerate(queries[:3], 1):
+                        lines.append(f"    {i}. `{q[:100]}`")
+                filt = step.get('filter', {})
+                if filt:
+                    lines.append(f"  - Filter: grade={filt.get('grade')}, book={filt.get('book')}")
+                if step.get('reason'):
+                    lines.append(f"  - Reason: {step.get('reason')}")
+
+        elif node == "Handler":
+            lines.append(
+                f"**[6] Handler**\n"
+                f"  - Action: `{step.get('action', '?')}`\n"
+                f"  - Status: {step.get('status', '?')}"
+            )
+            if step.get('rag_chunks'):
+                lines.append(f"  - RAG chunks used: {step.get('rag_chunks')}")
+            for key in ['generation_time_s', 'explain_time_s', 'chat_time_s', 'scorer_time_s', 'slide_time_s']:
+                if step.get(key):
+                    lines.append(f"  - {key}: {step.get(key)}s")
+            if step.get('response_length'):
+                lines.append(f"  - Response length: {step.get('response_length')} chars")
+
+        elif node == "BookFilter":
+            lines.append(
+                f"**[5] BookFilter** — `{step.get('status')}`\n"
+                f"  - Reason: {step.get('reason')}"
+            )
 
         lines.append("")
 
@@ -181,9 +212,10 @@ def format_debug_info(debug_info: dict) -> str:
 
 
 def clear_chat():
-    """Reset orchestrator memory."""
-    orchestrator.memory = MemoryManager()
-    return [], "*Reset — chua co debug info*"
+    """Reset orchestrator — tạo lại instance mới, clean toàn bộ state."""
+    global orchestrator
+    orchestrator = Orchestrator(retriever=searcher, reranker=reranker)
+    return [], "*Reset — chưa có debug info*"
 
 
 # ============================================================
@@ -333,7 +365,7 @@ def build_ui():
                 f"| **Embedding model** | `{settings.EMBEDDING_MODEL}` |\n"
                 f"| **Reranker model** | `{settings.RERANKER_MODEL}` |\n"
                 f"| **LLM model** | `{settings.LLM_MODEL}` |\n"
-                f"| **Orchestrator** | v2 (code-level) |\n"
+                f"| **Orchestrator** | v3 (Pipeline Controller) |\n"
                 f"| **API Key** | {'Set' if os.getenv('GENAI_API_KEY') else 'Not set'} |"
             )
             gr.Markdown(info_text)

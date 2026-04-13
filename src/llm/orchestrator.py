@@ -1,7 +1,5 @@
 """
-Orchestrator v3 — Thin Pipeline Controller for EduBot.
-
-Refactored từ God Object (v2, ~1050 dòng) thành Pipeline Controller (~200 dòng).
+Orchestrator— Thin Pipeline Controller for EduBot.
 
 Responsibilities (CHỈ orchestrate, KHÔNG chứa domain logic):
     1. Tạo RequestContext

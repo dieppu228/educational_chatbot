@@ -1,12 +1,3 @@
-"""
-Session Manager — Session Lifecycle & Topic Change Detection.
-
-Trách nhiệm:
-    - Quyết định giữ session hiện tại hay tạo session mới
-    - Auto-save session cũ khi chuyển session
-    - Tích hợp với SessionStore cho persistence
-"""
-
 import logging
 from typing import Optional, List
 

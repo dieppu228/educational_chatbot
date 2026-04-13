@@ -1,15 +1,3 @@
-"""
-RAGService — Tách RAG logic khỏi Orchestrator.
-
-Bao bọc AdaptiveRAGAgent, nhận RequestContext để:
-    - Lấy intent_hint, book, queries_for_rag
-    - Xử lý multi-query retrieval + dedup
-    - Rerank tổng hợp khi cần
-    - Ghi trace vào RequestContext
-
-Thay thế hàm _get_rag_context() cũ trong orchestrator.py.
-"""
-
 import re
 import logging
 from typing import Optional, List, Dict

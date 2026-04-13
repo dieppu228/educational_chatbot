@@ -1,14 +1,3 @@
-"""
-Action Planner — Rule-based Sub-Intent Resolution (Level 2).
-
-Map (primary_intent + session state + message keywords) → Action enum.
-Chạy bằng code thuần, không tốn API call.
-
-Ví dụ:
-    primary_intent="interact" + session có quiz_state + "câu sai" → REVIEW_WRONG
-    primary_intent="generate" + task_type="mcq" → GENERATE_QUIZ
-"""
-
 import re
 import logging
 from enum import Enum

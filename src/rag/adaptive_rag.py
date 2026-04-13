@@ -1,13 +1,3 @@
-"""
-Adaptive RAG Agent — tự chọn chiến lược retrieval dựa trên loại query.
-
-Strategies:
-    STANDARD     — BM25+Semantic+RRF → Reranker (query cụ thể, không context)
-    BROAD        — Metadata filter theo grade/topic (query tổng quát)
-    CURRICULUM   — Lookup danh sách bài học (hỏi về cấu trúc CT)
-    HIERARCHICAL — Two-phase HRAG: coarse (Level 1-2) → fine (Level 3+)
-"""
-
 import time
 import logging
 from dataclasses import dataclass, field

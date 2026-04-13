@@ -1,8 +1,4 @@
 """
-Prompt Hub — Tất cả prompt templates cho EduBot.
-
-Tập trung quản lý tại 1 file duy nhất.
-
 Sections:
     1. PromptTemplate base class
     2. System Prompt (identity & role)

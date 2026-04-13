@@ -1,16 +1,3 @@
-"""
-Memory Manager v2 — State & Session Management for EduBot.
-
-New data models:
-    - QuestionRecord: Chi tiết 1 câu hỏi + kết quả trả lời
-    - QuizRound: 1 lần user yêu cầu sinh câu hỏi
-    - QuizSessionState: State chuyên biệt cho quiz session
-    - SlideSessionState: State cho slide session (kế thừa quiz exercise)
-    - Session: Thay thế SessionState cũ
-
-Backward-compatible: TaskItem, SessionState, QuizStats vẫn giữ lại.
-"""
-
 import uuid
 from datetime import datetime
 from dataclasses import dataclass, field

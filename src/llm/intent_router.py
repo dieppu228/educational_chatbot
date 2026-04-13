@@ -1,15 +1,3 @@
-"""
-Intent Router — 2-Level Intent Detection.
-
-Level 1 (LLM): Phân loại primary intent (5 loại)
-    generate | interact | analyze | explain | chat
-
-Level 2 (Rule-based): Xác định sub-intent dựa vào session state
-    Không tốn API call, chạy bằng code thuần.
-
-Tích hợp topic detection: 1 LLM call trả về cả intent + topic + is_new_topic.
-"""
-
 import json
 import re
 import os

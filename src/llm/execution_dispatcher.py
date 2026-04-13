@@ -1,10 +1,3 @@
-"""
-ExecutionDispatcher — Action → Handler mapping (Strategy Pattern).
-
-Thay thế chuỗi if-elif-else khổng lồ trong _execute() cũ
-bằng dictionary dispatch (handler registry).
-"""
-
 import logging
 from typing import Generator, Dict, Callable
 
@@ -140,20 +133,17 @@ class ExecutionDispatcher:
     def _dispatch_chat(
         self, plan: ActionPlan, ctx: RequestContext
     ) -> Generator[str, None, None]:
-        """Chat tự do (RAG + ChatHandler)."""
+        """Chat tự do — KHÔNG gọi RAG, chỉ dùng ChatHandler."""
         import time
 
-        contexts = self.rag_service.get_context(ctx, intent_hint="chat")
-        context_text = format_contexts(contexts, action="chat") if contexts else ""
-
         t0 = time.time()
-        response = self.chat_handler.handle(ctx.enriched_query, context=context_text)
+        response = self.chat_handler.handle(ctx.enriched_query, context="")
         chat_time = time.time() - t0
 
         ctx.session.add_message("assistant", response)
         ctx.add_debug_step(
             "Handler", action="chat", status="success",
-            rag_chunks=len(contexts) if contexts else 0,
+            rag_chunks=0,
             chat_time_s=round(chat_time, 2),
             response_length=len(response),
         )
