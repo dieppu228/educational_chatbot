@@ -33,6 +33,7 @@ class RequestContext:
     # ── Input ──────────────────────────────────────────────
     query: str                                  # Query gốc từ user
     ui_book: Optional[str] = None               # Book từ UI dropdown
+    user_id: str = "anonymous"                 # User identity from client/UI
 
     # ── Enrichment (ContextAnalyzer) ───────────────────────
     enriched_query: str = ""                    # Query đã bổ sung context
@@ -41,13 +42,15 @@ class RequestContext:
     rewrite_info: Optional[Dict] = None
 
     # ── Intent (IntentRouter) ──────────────────────────────
-    intent_result: Optional[IntentResult] = None
+    intent_result: Optional[IntentResult] = None          # Intent chính (= intent_results[0]), backward-compat
+    intent_results: List[IntentResult] = field(default_factory=list)  # Multi-intent list (max 3)
 
     # ── Session (SessionManager) ───────────────────────────
     session: Optional[Session] = None
 
     # ── Action (ActionPlanner) ─────────────────────────────
-    action_plan: Optional[ActionPlan] = None
+    action_plan: Optional[ActionPlan] = None              # Plan chính (= action_plans[0]), backward-compat
+    action_plans: List[ActionPlan] = field(default_factory=list)      # Multi-action list
 
     # ── Book Resolution ────────────────────────────────────
     effective_book: Optional[str] = None
@@ -87,6 +90,7 @@ class RequestContext:
         """Serialize full debug info — dùng cho trace log."""
         return {
             "request_id": self.request_id,
+            "user_id": self.user_id,
             "query": self.query,
             "timestamp": self.timestamp,
             "effective_book": self.effective_book,

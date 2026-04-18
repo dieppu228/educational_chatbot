@@ -381,58 +381,6 @@ class ValidationResult(BaseModel):
             raise ValueError(f"Invalid JSON: {e}")
 
 
-# ============================================================
-# Slide Generation Output Schemas
-# ============================================================
-
-class SlideItem(BaseModel):
-    """Schema for a single slide."""
-    slide_type: Literal["title", "content", "exercise", "image", "summary"] = Field(
-        ..., description="Type of slide"
-    )
-    title: str = Field(..., description="Slide title")
-    bullets: List[str] = Field(default_factory=list, description="Content bullet points")
-    notes: Optional[str] = Field(None, description="Speaker notes")
-    questions: Optional[List[Dict[str, Any]]] = Field(
-        None, description="Exercise questions (for exercise slides)"
-    )
-    related_lessons: Optional[List[str]] = Field(
-        None, description="Related lesson references (for summary slides)"
-    )
-
-
-class SlideGenerationOutput(BaseModel):
-    """Schema for Slide Generator output."""
-    lesson_title: str = Field(..., description="Lesson title")
-    lesson_metadata: Dict[str, str] = Field(
-        ..., description="Metadata: {book, grade, lesson}"
-    )
-    slides: List[SlideItem] = Field(..., min_length=1, description="List of slides")
-    total_slides: int = Field(..., ge=1, description="Total number of slides")
-
-    @classmethod
-    def from_json_string(cls, json_str: str) -> "SlideGenerationOutput":
-        try:
-            data = json.loads(json_str)
-            return cls(**data)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON: {e}")
-
-    def to_display_format(self) -> str:
-        lines = [f"📊 {self.lesson_title} ({self.total_slides} slides)", "=" * 50, ""]
-        for i, slide in enumerate(self.slides, 1):
-            icon = {"title": "🎯", "content": "📖", "exercise": "✏️",
-                    "image": "🖼️", "summary": "📋"}.get(slide.slide_type, "📄")
-            lines.append(f"--- Slide {i} [{icon} {slide.slide_type}] ---")
-            lines.append(f"  {slide.title}")
-            for b in slide.bullets:
-                lines.append(f"  • {b}")
-            if slide.questions:
-                lines.append(f"  📝 {len(slide.questions)} câu hỏi bài tập")
-            lines.append("")
-        return "\n".join(lines)
-
-
 __all__ = [
     "MCQOption",
     "MCQQuestion",
@@ -451,7 +399,4 @@ __all__ = [
     # Phase 2 — Validation
     "QuestionValidation",
     "ValidationResult",
-    # Phase 2 — Slide
-    "SlideItem",
-    "SlideGenerationOutput",
 ]

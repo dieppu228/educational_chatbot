@@ -17,7 +17,7 @@ The system aims to provide a tool that automates complex academic tasks, serving
 
 ## 2. Detailed System Pipeline
 
-The system is engineered around a Clean Architecture approach with a **Thin Pipeline Controller (Orchestrator v3)** dynamically resolving requests without hardcoupled domain logic. The data flows encapsulated within a `RequestContext` through the following End-to-End steps:
+The system is engineered around a Clean Architecture approach with a **Thin Pipeline Controller (Orchestrator)** and **Multi-Intent Agentic Planning**, dynamically resolving up to 3 concurrent user intents per query without hardcoupled domain logic. The data flows encapsulated within a `RequestContext` through the following End-to-End steps:
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -32,70 +32,80 @@ The system is engineered around a Clean Architecture approach with a **Thin Pipe
 │ [QueryRewriter (LLM)] ─────▶ (If needed) Generates multi-queries for RAG  │
 │          │                                                                │
 │          ▼             [  1st LLM Call  ]                                 │
-│ [IntentRouter (LLM)] ──────▶ (Extracts: Intent, Task Type, Topic, Grade)  │
+│ [IntentRouter.detect_multi()] ─▶ Returns List[IntentResult] — max 3       │
+│                                  (Intent, Task Type, Topic, Grade, Order) │
 └────────────────────────────────────┬──────────────────────────────────────┘
                                      ▼
 ┌───────────────────────────────────────────────────────────────────────────┐
-│                2. Core Pipeline Controller (Pure Code)                    │
+│              2. Core Pipeline Controller (Pure Code)                      │
 │                                                                           │
 │ [SessionManager] ──▶ Resolves Current Session State (Memory & Store)      │
 │          │                                                                │
-│ [ActionPlanner] ───▶ Decides Action Plan (GenerateQuiz, Slide, Score...)  │
+│ [ActionPlanner.plan_all()] ─▶ Returns List[ActionPlan] (deduped)          │
 └────────────────────────────────────┬──────────────────────────────────────┘
                                      ▼
-                ┌───────── Execution Dispatcher ─────────┐
-                │     (Dictionary-based Registry)        │
-                └─────────┬────────────────────┬─────────┘   
-                          ▼                    ▼             
-    ┌───────────────────────────┐       ┌───────────────────────────────┐
-    │     Domain Services       │──────▶│         3. RAG Service        │
-    │                           │       │                               │
-    │ • QuizService (Generate,  │       │ • AdaptiveRAGAgent (Strategy) │
-    │   Score, Review, Stats)   │       │   ──▶ STANDARD / BROAD /      │
-    │ • SlideService (Slides),  │       │       CURRICULUM / HRAG       │
-    │ • Specialized Handlers    │       │                               │
-    │   (Explain, Chat)         │       │ • Handles Multi-query Dedup   │
-    └──────────────┬────────────┘       │ • Cross-Encoder Reranking     │
-                   │                    └───────────────────────────────┘
-                   ▼                                         
-    ┌───────────────────────────┐                            
-    │ 4. Generation & Validator │                            
-    │                           │                            
-    │ • Generator LLM Call      │                            
-    │ • Validator Agent         │                            
-    └──────────────┬────────────┘                            
-                   ▼                                         
+        ┌──────────── Agentic Multi-Action Loop ────────────┐
+        │  for each ActionPlan in List[ActionPlan]:         │
+        │    ctx.intent_result ← swap to current sub-task   │
+        │    [ExecutionDispatcher] ──▶ Domain Service        │
+        │    Separator injected between multi-action outputs│
+        └────────────────────┬──────────────────────────────┘
+                             ▼
+    ┌────────────────────────────────┐   ┌───────────────────────────────┐
+    │       Domain Services          │──▶│        3. RAG Service         │
+    │                                │   │                               │
+    │ • QuizService  (Generate,      │   │ • AdaptiveRAGAgent (Strategy) │
+    │   Score, Review, Stats)        │   │   ──▶ STANDARD / BROAD /      │
+    │ • SlideService (Slides,        │   │       CURRICULUM / HRAG       │
+    │   Lesson Plans)                │   │                               │
+    │ • Handlers: Explain, Chat,     │   │ • ContextCombiner (task-aware │
+    │   Fallback                     │   │   context formatting)         │
+    │                                │   │ • Multi-query Dedup           │
+    │                                │   │ • Cross-Encoder Reranking     │
+    └───────────────┬────────────────┘   └───────────────────────────────┘
+                    │
+                    ▼
+    ┌───────────────────────────┐
+    │  4. Generation & Validator│
+    │                           │
+    │ • Generator LLM Call      │
+    │ • QuestionValidator Agent │
+    │   (Self-Reflection loop)  │
+    └──────────────┬────────────┘
+                   ▼
 ┌───────────────────────────────────────────────────────────────────────────┐
-│   Final Response Output  ──▶  TraceService log  ──▶  Session Auto-Save    │
+│   Streamed Response  ──▶  TraceService log  ──▶  SessionStore Auto-Save   │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.1. Context Extraction & Intent Routing
 
-When the system receives a natural language query, it invokes a `RequestContext` spanning the entire operation:
+When the system receives a natural language query, it initializes a `RequestContext` object that flows through the entire pipeline:
 
 1. **ContextAnalyzer**: Evaluates if the query requires historical session context. If true, it extracts past conversations using a Keyword/Recency hybrid scoring algorithm.
-2. **QueryRewriter Agent**: When context enrichment occurs, it rewrites the single natural query into 2-3 transparent queries optimized exclusively for deep semantic retrieval.
-3. **IntentRouter Agent**: Performs the first major **LLM Call** to run semantic analysis extracting key entities: `intent`, `task_type`, `topic`, and `grade`. It also detects topic switching logic (`is_new_topic`).
+2. **QueryRewriter Agent**: When context enrichment occurs, it rewrites the single natural query into 2-3 semantically rich sub-queries optimized exclusively for deep RAG retrieval.
+3. **IntentRouter Agent** (`detect_multi()`): Performs the first major **LLM Call** to run semantic analysis. Returns a `List[IntentResult]` (up to 3 items), each containing: `primary_intent`, `task_type`, `topic`, `grade`, `book`, and `is_new_topic`. Includes confidence-based filtering and a self-correction retry loop on parse failure.
 
 ### 2.2. Thin Pipeline Controller (Pure Code)
 
-To optimize latency, the core pipeline acts as a non-mutating router purely passing states:
+To optimize latency, all post-routing logic is entirely rule-based — zero additional LLM calls:
 
-1. **SessionManager**: Resolves and syncs the current session context via Memory Manager or persistent JSON Storage based on intent compatibility.
-2. **ActionPlanner**: Consumes the context to construct an `ActionPlan` mapping accurately to a predefined action sequence (e.g., `GENERATE_QUIZ`, `EXPLAIN_CONCEPT`).
-3. **ExecutionDispatcher**: Uses a dictionary-based registry (Strategy Pattern) bridging the pipeline layer directly down to domain-specific services, maintaining single-responsibility and highly scalable code abstraction.
+1. **SessionManager**: Resolves and syncs the current session context via Memory Manager or persistent JSON Storage (`session_store.py`) based on intent and topic compatibility.
+2. **ActionPlanner** (`plan_all()`): Maps the full `List[IntentResult]` → `List[ActionPlan]` using pure rule-based logic. Deduplicates consecutive identical actions. Each `ActionPlan` contains an `Action` enum (e.g., `GENERATE_QUIZ`, `GENERATE_SLIDE`, `EXPLAIN_CONCEPT`) and execution metadata.
+3. **Agentic Multi-Action Loop**: The Orchestrator iterates over all `ActionPlan`s. For each iteration, `ctx.intent_result` is swapped to align with the current sub-task before delegating to the `ExecutionDispatcher`. Multi-action outputs are separated by a visual delimiter in the streamed response.
 
 ### 2.3. Domain Services & Adaptive RAG
 
-Action plans flow dynamically into the respective **Domain Services** (`QuizService`, `SlideService`). Operations requiring textbook knowledge pass through the decoupled **RAGService**.
+Each dispatched action flows into its respective **Domain Service** (`QuizService`, `SlideService`) or **Handler** (`ExplainHandler`, `ChatHandler`). Operations requiring textbook knowledge pass through the decoupled `RAGService`.
 
-The internal `AdaptiveRAGAgent` observes the query intent and dynamically decides the most performant retrieval strategy using heuristic-based `QueryClassifier`:
+The internal `AdaptiveRAGAgent` classifies the query using a heuristic-based `QueryClassifier` (no LLM) and selects the optimal retrieval strategy:
 
-- **STANDARD**: For regular specific queries, implementing Hybrid Search (Lexical Custom BM25 + Semantic Cosine) followed by RRF normalization.
-- **BROAD**: For large systemic queries, exclusively querying Metadata properties extracting top-level "objective" chunks.
-- **CURRICULUM**: Rapid metadata aggregation over the curriculum textbook structure returning mapped out lessons.
-- **HIERARCHICAL (HRAG)**: A complex Two-Phase semantic hierarchy. Phase 1 runs semantic search purely on Coarse chunks (Level 1-2). Phase 2 executes a scoped Hybrid Search localized only on the Fine chunks (Level 3+) directly descending from Phase 1 parents.
+- **STANDARD**: For specific queries — Hybrid Search (Custom BM25 + Semantic Cosine) with RRF normalization → Cross-Encoder Reranking.
+- **BROAD**: For overview queries — Metadata-only filter on `objective` chunks (1 per lesson). Falls back to STANDARD if fewer than 3 chunks returned.
+- **CURRICULUM**: For curriculum-structure queries — Metadata aggregation returning deduplicated lesson list (topic + lesson name), no vector search.
+- **HIERARCHICAL (HRAG)**: For specific queries with grade/topic context — Two-phase retrieval: Phase 1 semantic search on Level 1-2 (coarse) chunks to identify relevant lessons; Phase 2 scoped Hybrid+RRF search only on Level 3+ (fine) child chunks of selected parents → Reranker.
+
+After retrieval, a **ContextCombiner** formats the retrieved chunks in a task-aware manner: grouping by topic/lesson for generative tasks (slides, lesson plans) or sorting by relevance score for targeted tasks (MCQ, explanation).
 
 ### 2.4. Generation & Self-Reflection
 
@@ -117,47 +127,66 @@ The project's codebase focuses on a highly modular architecture, mapping perfect
 
 ```text
 src/
-├── llm/                     # CORE LLM & MULTI-AGENT ORCHESTRATION
-│   ├── orchestrator.py      # Main Dispatcher: Receives queries and coordinates the entire system workflow.
-│   ├── intent_router.py     # Intent Sensor: Classifies queries (Generate, Interact, Explain, Analyze, Chat).
-│   ├── action_planner.py    # High-level Brain: Plans multi-step tasks (e.g., slide generation workflow).
-│   ├── context_analyzer.py  # Context Extractor: Retrieves historical context using Hybrid scoring (Keyword + Recency).
-│   ├── prompts.py           # Prompt Hub: Centralizes and manages all LLM prompts with metadata.
-│   ├── memory.py            # & session_manager/store: Manages conversation state and context tracking.
-│   ├── validators/          # Self-Reflection Module:
-│   │   └── question_validator.py # Auto cross-checks generated answers against ground-truth context.
-│   └── handlers/            # Specialist Agents: Executes specific domain tasks.
-│       ├── base_handler.py  # Common interface for all handlers.
-│       ├── chat_handler.py  # Performs free-form chat conversations.
-│       ├── explain_handler.py # Provides in-depth explanations for concepts.
-│       ├── question/        # Agent cluster specialized in generating & grading educational questions:
+├── llm/                        # CORE LLM & MULTI-AGENT ORCHESTRATION
+│   ├── orchestrator.py         # Thin Pipeline Controller: coordinates the full E2E workflow & multi-action loop.
+│   ├── intent_router.py        # Multi-Intent Router: detect_multi() returns List[IntentResult] (max 3 intents).
+│   ├── action_planner.py       # Rule-based Planner: plan_all() maps List[IntentResult] → List[ActionPlan].
+│   ├── execution_dispatcher.py # Registry Dispatcher: routes ActionPlan to the correct Domain Service.
+│   ├── context_analyzer.py     # Context Extractor: Hybrid Keyword+Recency scoring on conversation history.
+│   ├── query_rewriter.py       # Query Rewriter: expands query into 2-3 RAG-optimized sub-queries.
+│   ├── prompts.py              # Prompt Hub: centralized repository of all LLM system prompts.
+│   ├── memory.py               # In-memory Session Manager: tracks live session state per user.
+│   ├── session_manager.py      # Session Resolver: determines continuity vs. new session creation.
+│   ├── session_store.py        # Persistent Storage: serializes/deserializes sessions as JSON files.
+│   ├── knowledge_map.py        # Knowledge Map: maps topic/lesson metadata for curriculum queries.
+│   ├── student_profile.py      # Student Profile: tracks per-user learning history & performance stats.
+│   ├── student_tracker.py      # Tracker: lightweight wrapper for profile update events.
+│   ├── validators/             # Self-Reflection Module:
+│   │   └── question_validator.py  # Validates generated questions against source context & rubrics.
+│   ├── services/               # Domain Services (high-level orchestration per task type):
+│   │   ├── quiz_service.py     # QuizService: orchestrates Generate, Score, Review, Stats workflows.
+│   │   └── slide_service.py    # SlideService: orchestrates Slide & Lesson Plan generation workflows.
+│   └── handlers/               # Atomic Task Executors:
+│       ├── base_handler.py     # Abstract base: shared interface for all handlers.
+│       ├── chat_handler.py     # Free-form conversational chat.
+│       ├── explain_handler.py  # In-depth concept explanation with RAG context.
+│       ├── fallback_handler.py # Graceful fallback for unrecognized or ambiguous intents.
+│       ├── question/           # Question-type cluster:
 │       │   ├── mcq_handler.py, essay_handler.py, fill_handler.py, true_false_handler.py
-│       │   └── scorer.py    # Grading module based on Context and predefined Rubrics.
-│       └── content/         # Generation module for extensive content (slide_handler.py, slide_template.py)...
+│       │   └── scorer.py       # Context-aware answer grading with rubric comparison.
+│       └── content/            # Long-form content generation:
+│           ├── slide_handler.py        # Generates structured HTML slide presentations.
+│           ├── slide_template.py       # HTML/CSS template engine for slides.
+│           └── lesson_plan_handler.py  # Generates structured lesson plans.
 │
-├── rag/                     # ADVANCED RAG PIPELINE
-│   ├── adaptive_rag.py      # Dynamic Retrieval Router: Chooses strategies (Standard, Broad, Curriculum, Hierarchical).
-│   ├── retrieve_rebuild.py  # Core Search Engine: Combines Custom pure Python BM25, Semantic, RRF & Scoped Search.
-│   ├── embedding.py         # Embedding Module: Loads & infers specialized Vietnamese HuggingFace models.
-│   ├── reranker.py          # Cross-Encoder Reranking: Filters noise and re-ranks chunks post-retrieval.
-│   └── chunking.py          # Data Engineering Module: Decomposes Markdown text into a Hierarchical tree structure.
+├── rag/                        # ADVANCED RAG PIPELINE
+│   ├── rag_service.py          # RAGService: public interface consumed by Domain Services.
+│   ├── adaptive_rag.py         # AdaptiveRAGAgent: heuristic QueryClassifier + 4-strategy retrieval.
+│   ├── context_combiner.py     # ContextCombiner: task-aware post-retrieval formatting of chunks.
+│   ├── retrieve_rebuild.py     # Core Search Engine: Custom BM25, Semantic Cosine, RRF, Scoped Search.
+│   ├── embedding.py            # Embedding Module: Vietnamese HuggingFace SentenceTransformer (768-dim).
+│   ├── reranker.py             # Cross-Encoder Reranker: noise filtering & relevance re-scoring.
+│   └── chunking.py             # Data Engineering: Markdown → Hierarchical chunk tree (Level 1-4).
 │
-├── evaluation/              # RAGAS EVALUATION PIPELINE
-│   ├── run_eval.py          # CLI Controller: Executes entire testing & RAGAS pipeline.
-│   ├── testset_generator.py # Synthetic Generator: Auto-generates QA Ground Truth from textbook chunks.
-│   ├── ragas_eval.py        # Assessment Framework: Calculates 4 RAG metrics (Faithfulness, Relevance, Precision, Recall).
-│   ├── report.py            # Reporting Module: Transforms and visualizes RAGAS evaluation metrics.
-│   └── data_collector.py    # Data Preparation: Parses logs and datasets to feed the eval pipeline.
+├── schemas/                    # DATA CONTRACTS & TYPE DEFINITIONS
+│   ├── context.py              # RequestContext: the central state object flowing through the pipeline.
+│   ├── llm_outputs.py          # Typed LLM output schemas (Quiz, Slide, LessonPlan structures).
+│   └── rag_outputs.py          # Typed RAG output schemas (RAGResult, QueryProfile).
 │
-├── config/                  # CONFIGURATION HUB
-│   └── config.py            # Central Config: Environment variables, LLM params (Gemini), and DB/File paths.
+├── evaluation/                 # RAGAS EVALUATION PIPELINE
+│   ├── run_eval.py             # CLI Controller: executes the full evaluation pipeline.
+│   ├── testset_generator.py    # Synthetic QA generator from textbook chunk corpus.
+│   ├── ragas_eval.py           # RAGAS metrics: Faithfulness, Relevancy, Precision, Recall.
+│   ├── report.py               # Report Generator: visualizes RAGAS metric results.
+│   └── data_collector.py       # Data Preparation: parses logs and datasets.
 │
-├── schemas/                 # DATA TYPES & STANDARDS
-│   ├── message.py, session.py # Object Modeling Architecture (Session, Message, User).
-│   └── state.py             # State Management Pattern across the Multi-Agent Pipeline.
+├── config/                     # CONFIGURATION HUB
+│   └── config.py               # Central Config: API keys, LLM params (Gemini), paths.
 │
-└── utils/                   # UTILITIES & HELPER
-    └── ...                  # Helper libraries: File IO, formatting, custom logging, and struct parsing.
+└── utils/                      # UTILITIES & INFRASTRUCTURE
+    ├── trace_service.py        # TraceService: structured request/response logging.
+    ├── logger.py               # Logger setup and configuration.
+    └── error_handling.py       # Centralized error handling utilities.
 ```
 
 ---

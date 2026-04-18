@@ -37,6 +37,7 @@ from src.llm.orchestrator import Orchestrator
 searcher = None
 reranker = None
 orchestrator = None
+current_user_id = None  # Track current user_id from Gradio session hash
 
 
 # ============================================================
@@ -82,8 +83,10 @@ def init_components():
 # CHAT HANDLER
 # ============================================================
 
-def chat_response(message, history, book_option):
+def chat_response(message, history, book_option, request: gr.Request):
     """Process message through Orchestrator pipeline."""
+    global current_user_id
+    
     if not message or not message.strip():
         return history, ""
 
@@ -96,9 +99,13 @@ def chat_response(message, history, book_option):
 
     history = history + [{"role": "user", "content": message}]
 
+    # Stable identity per browser tab/session
+    user_id = getattr(request, "session_hash", None) or "anonymous"
+    current_user_id = user_id
+
     full_response = ""
     try:
-        for chunk in orchestrator.ask(message, ui_book=ui_book):
+        for chunk in orchestrator.ask(message, ui_book=ui_book, user_id=user_id):
             full_response += chunk
         history = history + [{"role": "assistant", "content": full_response}]
     except Exception as e:
@@ -211,11 +218,41 @@ def format_debug_info(debug_info: dict) -> str:
     return "\n".join(lines)
 
 
-def clear_chat():
-    """Reset orchestrator — tạo lại instance mới, clean toàn bộ state."""
-    global orchestrator
-    orchestrator = Orchestrator(retriever=searcher, reranker=reranker)
+def clear_chat(request: gr.Request):
+    """Clear current user's active session mapping only."""
+    global current_user_id
+    user_id = getattr(request, "session_hash", None) or "anonymous"
+    orchestrator.memory.clear_user_session(user_id)
+    if current_user_id == user_id:
+        current_user_id = None
     return [], "*Reset — chưa có debug info*"
+
+
+def get_student_stats():
+    """Get current student's profile stats from shared tracker."""
+    if not current_user_id:
+        return "*Chưa có dữ liệu học tập*"
+
+    profile = orchestrator.quiz_service.student_tracker.profile_manager.get(current_user_id)
+    if not profile or not profile.lessons_studied:
+        return "*Chưa có dữ liệu học tập*"
+    
+    # Format stats
+    lines = []
+    lines.append("## 📊 Thống kê học tập")
+    lines.append("")
+    
+    summary = profile.get_summary()
+    for line in summary.split("\n"):
+        lines.append(f"- {line}")
+    
+    lines.append("")
+    lines.append("### Chi tiết từng chủ đề:")
+    for topic, progress in profile.lesson_progress.items():
+        mastered_icon = "✅" if progress.mastered else "📚"
+        lines.append(f"- **{topic}** {mastered_icon} — {progress.attempts} lần, {progress.avg_score:.0%}, {progress.difficulty}")
+    
+    return "\n".join(lines)
 
 
 # ============================================================
@@ -336,6 +373,17 @@ def build_ui():
             debug_output = gr.Markdown(
                 value="*Chờ xử lý tin nhắn đầu tiên...*",
                 elem_classes=["debug-panel"],
+            )
+
+        # ── Student Stats (✨ NEW) ──
+        with gr.Accordion("📊 Thống kê cá nhân", open=False):
+            student_stats_output = gr.Markdown(
+                value="*Chưa có dữ liệu học tập*",
+            )
+            refresh_stats_btn = gr.Button("🔄 Cập nhật", size="sm")
+            refresh_stats_btn.click(
+                fn=get_student_stats,
+                outputs=student_stats_output,
             )
 
         # ── Quick Actions (gợi ý nhanh) ──
