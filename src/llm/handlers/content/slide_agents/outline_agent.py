@@ -1,0 +1,106 @@
+"""
+OutlineAgent — Agent 2: Thiết kế dàn ý (outline) slide.
+
+Vai trò: CRITICAL — fail thì abort toàn bộ pipeline.
+Output: OutlinePayload (lesson_title + 8-12 slides skeleton)
+Timeout: 6000ms | Retry: 2
+"""
+
+import logging
+from src.llm.handlers.content.slide_agents.base_slide_agent import BaseSlideAgent
+from src.llm.prompts import SLIDE_OUTLINE_TEMPLATE
+
+logger = logging.getLogger("chatbot.slide_agent.outline")
+
+
+class OutlineAgent(BaseSlideAgent):
+
+    agent_name = "outline"
+    max_retries = 2
+    error_code = "OUTLINE_FAILED"
+
+    def _execute(self, *, context_map: str, topic: str, grade: str, book: str, **kwargs) -> dict:
+        """
+        Sinh outline bài giảng từ context map.
+
+        Args:
+            context_map: Context đã format theo grouped structure (với chunk_ids)
+            topic: Chủ đề bài học
+            grade: Lớp (10/11/12)
+            book: Bộ sách (CD/KNTT)
+
+        Returns:
+            dict — OutlinePayload format
+        """
+        prompt = SLIDE_OUTLINE_TEMPLATE.format(
+            topic=topic,
+            grade=grade,
+            book=book,
+            context_map=context_map,
+        )
+
+        response = self._call_llm(prompt, temperature=0.3)
+        payload = self._parse_json(response)
+
+        # Validate cơ bản
+        slides = payload.get("slides", [])
+        if not slides:
+            raise ValueError("Outline trống — không có slide nào")
+
+        # Kiểm tra có đủ loại slide bắt buộc
+        slide_types = {s.get("slide_type") for s in slides}
+        required_types = {"title", "summary", "exercise"}
+        missing = required_types - slide_types
+        if missing:
+            logger.warning(f"Outline thiếu slide types: {missing}")
+            # Tự bổ sung nếu thiếu
+            slides = self._patch_missing_types(slides, missing, payload.get("lesson_title", ""))
+
+        payload["slides"] = slides
+
+        logger.info(
+            f"Outline agent: '{payload.get('lesson_title')}' — "
+            f"{len(slides)} slides, types={[s.get('slide_type') for s in slides]}"
+        )
+        return payload
+
+    def _patch_missing_types(self, slides: list, missing: set, lesson_title: str) -> list:
+        """Tự thêm slide bắt buộc nếu LLM quên."""
+        next_id = len(slides) + 1
+
+        if "title" in missing:
+            slides.insert(0, {
+                "slide_id": f"s{next_id}",
+                "slide_type": "title",
+                "title": lesson_title or "Bài học",
+                "objective": "Giới thiệu bài học",
+                "key_points": ["Mục tiêu bài học"],
+                "source_chunk_ids": [],
+            })
+            next_id += 1
+
+        if "exercise" in missing:
+            slides.append({
+                "slide_id": f"s{next_id}",
+                "slide_type": "exercise",
+                "title": "Bài tập luyện tập",
+                "objective": "Củng cố kiến thức",
+                "key_points": ["Bài tập trắc nghiệm"],
+                "source_chunk_ids": [],
+            })
+            next_id += 1
+
+        if "summary" in missing:
+            slides.append({
+                "slide_id": f"s{next_id}",
+                "slide_type": "summary",
+                "title": "Tóm tắt bài học",
+                "objective": "Tổng kết kiến thức",
+                "key_points": ["Kiến thức cần nhớ"],
+                "source_chunk_ids": [],
+            })
+
+        return slides
+
+
+__all__ = ["OutlineAgent"]

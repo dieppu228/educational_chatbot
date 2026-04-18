@@ -207,12 +207,13 @@ class QuizService:
                     score=result.score,
                 )
 
-                # Track stats
-                self.student_tracker.update_stats_v2(
-                    session=session,
+                # Track to StudentProfile
+                # score: 0-10 or 0-1, StudentProfile auto-normalizes
+                score = result.score if result.score is not None else (1.0 if result.is_correct else 0.0)
+                self.student_tracker.record_attempt(
+                    user_id=session.user_id,
                     topic=session.topic or "Chung",
-                    question_type=record.question_type,
-                    is_correct=result.is_correct or False,
+                    score=score,
                 )
 
             # Response

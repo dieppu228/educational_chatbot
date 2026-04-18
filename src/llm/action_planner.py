@@ -1,7 +1,7 @@
 import re
 import logging
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
 from dataclasses import dataclass
 
 from src.llm.memory import Session
@@ -128,6 +128,38 @@ class ActionPlanner:
 
         else:  # chat
             return ActionPlan(action=Action.CHAT, reason="Default chat intent")
+
+    def plan_all(
+        self,
+        intent_results: List[IntentResult],
+        session: Optional[Session],
+        message: str,
+    ) -> List[ActionPlan]:
+        """
+        Map List[IntentResult] → List[ActionPlan].
+
+        Deduplicates consecutive identical actions to avoid
+        running the same handler twice in a row.
+
+        Args:
+            intent_results: All detected intents (max 3)
+            session: Current session
+            message: Original user message
+
+        Returns:
+            List[ActionPlan] — 1 to N plans in execution order
+        """
+        plans = []
+        for intent_result in intent_results:
+            plan = self.plan(intent_result, session, message)
+            # Deduplicate: skip if same action as previous
+            if plans and plans[-1].action == plan.action:
+                logger.debug(
+                    f"Skipping duplicate action: {plan.action.value}"
+                )
+                continue
+            plans.append(plan)
+        return plans
 
     # ── Generate ────────────────────────────────────────────
 

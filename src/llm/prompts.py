@@ -122,9 +122,11 @@ Nếu book = "CD" VÀ query có "chương N" (N là số) thì đổi sang chữ
 Ví dụ: "chương 2 lớp 10 Cánh diều" thì topic = "Chương B - Lớp 10"
 Nếu book = "KNTT" hoặc null thì giữ nguyên số.
 
-BƯỚC 2 — PHÂN LOẠI INTENT
-Chọn đúng 1 intent:
+BƯỚC 2 — PHÂN LOẠI INTENT (Multi-Intent)
+Phân tích query và liệt kê TẤT CẢ các intent có trong câu.
+Một query có thể chứa 1 đến tối đa 3 intent.
 
+Các intent hợp lệ:
 "generate" — Yêu cầu SINH nội dung MỚI (câu hỏi, slide, giáo án)
 "interact" — TƯƠNG TÁC với nội dung ĐÃ SINH trong session hiện tại
 "analyze"  — Hỏi điểm số, thống kê, tiến độ học tập
@@ -134,6 +136,12 @@ Chọn đúng 1 intent:
 TASK_TYPE chỉ khi intent = "generate":
 mcq / essay / fill_blank / true_false / slide / lesson_plan
 
+BƯỚC 2B — THỨ TỰ THỰC THI
+Khi có nhiều intent, xếp thứ tự (order) theo logic:
+- "explain" trước "generate" (giải thích trước, tạo nội dung sau)
+- "generate" trước "interact" (tạo nội dung trước, tương tác sau)
+- Các "generate" khác nhau: theo thứ tự xuất hiện trong query
+
 BƯỚC 3 — CONFIDENCE
 0.9 trở lên : Query rõ ràng, không ambiguous
 0.7         : Có thể hiểu được nhưng còn mơ hồ
@@ -142,52 +150,44 @@ Dưới 0.5    : Mặc định về "chat"
 
 FEW-SHOT EXAMPLES
 
+SINGLE INTENT (phổ biến nhất):
+"tạo 5 câu trắc nghiệm về mạng" → 1 intent: generate, mcq
+"mạng máy tính là gì" → 1 intent: explain
+"chào bạn" → 1 intent: chat
+"tạo câu hỏi chương 3 lớp 12 Cánh diều" → 1 intent: generate, mcq, topic="Chương C - Lớp 12", book="CD"
+
+MULTI-INTENT (khi query có nhiều yêu cầu rõ ràng):
+"Giải thích mạng máy tính rồi cho 5 câu trắc nghiệm"
+  → 2 intents: [explain (order=1), generate/mcq (order=2)]
+"Slide bài CSDL KNTT lớp 11 và thêm câu đúng sai"
+  → 2 intents: [generate/slide (order=1), generate/true_false (order=2)]
+"Tạo 3 câu trắc nghiệm và 2 câu tự luận về hệ điều hành"
+  → 2 intents: [generate/mcq (order=1), generate/essay (order=2)]
+
 INTERACT — chỉ dùng khi session đã có nội dung sinh trước đó
 [Session: đã sinh MCQ về "Mạng máy tính"]
-"câu đầu đáp án nào?" → interact, mcq, confidence=0.95
-"giải thích câu 2 đi" → interact, mcq, confidence=0.95
-"tôi trả lời câu 1 là A" → interact, null, confidence=0.9
-"câu này khó quá" → interact, null, confidence=0.8
-
-[Session: đã tạo slide "Hệ điều hành"]
-"slide đầu nói về gì?" → interact, slide, confidence=0.95
-"thêm slide bài tập" → interact, slide, confidence=0.9
-
-GENERATE — tạo nội dung mới
-"tạo 5 câu trắc nghiệm về mạng" → generate, mcq, confidence=0.95
-"slide về hệ điều hành" → generate, slide, confidence=0.95
-"tạo câu hỏi chương 3 lớp 12 Cánh diều" → generate, mcq, topic="Chương C - Lớp 12", book="CD"
-"slide chương 4 lớp 10 KNTT" → generate, slide, topic="Chương 4 - Lớp 10", book="KNTT"
-
-EXPLAIN — giải thích kiến thức SGK
-"mạng máy tính là gì" → explain, confidence=0.95
-"giải thích TCP/IP" → explain, confidence=0.95
-"tổng hợp chương 1 lớp 10 Cánh diều" → explain, topic="Chương A - Lớp 10", book="CD"
-"giải thích chương 2 lớp 11 KNTT" → explain, topic="Chương 2 - Lớp 11", book="KNTT"
-
-ANALYZE
-"tôi được bao nhiêu điểm" → analyze, confidence=0.9
-
-CHAT — ngoài phạm vi hoặc không rõ
-"chào bạn" / "hello" / "bạn là ai" → chat, confidence=0.95
-"hôm nay trời đẹp" / "tôi mệt" / "mấy giờ rồi" → chat, confidence=0.95
-"?" / "được rồi" / "làm ơn" → chat, confidence=0.9
+"câu đầu đáp án nào?" → 1 intent: interact, mcq
+"tôi trả lời câu 1 là A" → 1 intent: interact
 
 AMBIGUOUS — dùng session context để quyết định
 "cho tôi xem" → interact nếu có session / explain nếu có topic / chat nếu không có gì
 "thêm" → interact nếu có session / generate nếu không có session
-"câu hỏi" → generate mặc định nếu không có session
 
 {topic_instruction}
 
 CHỈ trả về JSON, KHÔNG giải thích:
 {{
-  "intent": "...",
-  "task_type": "..." hoặc null,
-  "topic": "..." hoặc null,
-  "is_new_topic": true/false,
-  "book": "CD" hoặc "KNTT" hoặc null,
-  "confidence": 0.0-1.0
+  "intents": [
+    {{
+      "intent": "...",
+      "task_type": "..." hoặc null,
+      "topic": "..." hoặc null,
+      "is_new_topic": true/false,
+      "book": "CD" hoặc "KNTT" hoặc null,
+      "confidence": 0.0-1.0,
+      "order": 1
+    }}
+  ]
 }}"""
 
 
@@ -551,74 +551,190 @@ QUESTION_VALIDATION_TEMPLATE = PromptTemplate(
 
 
 # ============================================================
-# 7. SLIDE GENERATION
+# 7. SLIDE GENERATION (Multi-Agent Pipeline)
 # ============================================================
 
-SLIDE_GENERATION_PROMPT = """Bạn là trợ lý giáo dục chuyên tạo cấu trúc slide bài giảng cho SGK Tin học THPT.
+# ── Slide Pipeline — Outline Planner (Agent 2) ─────────────
 
-=== THÔNG TIN BÀI HỌC ===
-Bộ sách: {book}
+SLIDE_OUTLINE_PROMPT = """Bạn là chuyên gia thiết kế cấu trúc bài giảng SGK Tin học THPT.
+
+=== THÔNG TIN ===
+Chủ đề: {topic}
 Lớp: {grade}
-Bài: {lesson}
+Bộ sách: {book}
 
-=== NỘI DUNG BÀI HỌC (TỪ TÀI LIỆU) ===
+=== NỘI DUNG BÀI HỌC (ĐÃ PHÂN NHÓM) ===
+{context_map}
+
+=== NHIỆM VỤ ===
+Thiết kế DÀN Ý (outline) cho bài giảng slide gồm 8-12 slides.
+
+QUY TẮC BẮT BUỘC:
+1. Phải có ÍT NHẤT: 1 slide "title", 1 slide "summary", 1 slide "exercise"
+2. Mỗi slide phải có "source_chunk_ids" — danh sách chunk_id liên quan (VD: ["c1", "c3"])
+3. "slide_id" đánh số từ "s1", "s2", ...
+4. "slide_type" chỉ nhận: "title", "content", "exercise", "summary", "image"
+5. "key_points" là danh sách 2-4 ý chính, mỗi ý ngắn gọn
+6. Flow hợp lý: mở đầu → khái niệm → ví dụ → luyện tập → tổng kết
+
+ĐỊNH DẠNG JSON (CHỈ trả JSON thuần túy, KHÔNG markdown):
+{{
+  "lesson_title": "Tên bài học",
+  "slides": [
+    {{
+      "slide_id": "s1",
+      "slide_type": "title",
+      "title": "Tên bài học",
+      "objective": "Mục tiêu bài học",
+      "key_points": ["Mục tiêu 1", "Mục tiêu 2"],
+      "source_chunk_ids": ["c1"]
+    }},
+    {{
+      "slide_id": "s2",
+      "slide_type": "content",
+      "title": "Tiêu đề phần nội dung",
+      "objective": "Hiểu khái niệm X",
+      "key_points": ["Ý chính 1", "Ý chính 2", "Ý chính 3"],
+      "source_chunk_ids": ["c2", "c3"]
+    }}
+  ]
+}}
+
+=== BẮT ĐẦU THIẾT KẾ DÀN Ý ==="""
+
+SLIDE_OUTLINE_TEMPLATE = PromptTemplate(
+    name="slide_outline",
+    template=SLIDE_OUTLINE_PROMPT,
+    required_vars=["topic", "grade", "book", "context_map"],
+    version="1.0",
+    description="Agent 2: Generate slide outline (8-12 slides) from structured context"
+)
+
+
+# ── Slide Pipeline — Content Writer (Agent 3) ──────────────
+
+SLIDE_CONTENT_PROMPT = """Bạn là chuyên gia viết nội dung slide bài giảng Tin học THPT.
+
+=== THÔNG TIN SLIDE ===
+Slide ID: {slide_id}
+Loại: {slide_type}
+Tiêu đề: {slide_title}
+Mục tiêu: {slide_objective}
+Ý chính cần triển khai: {key_points}
+
+=== NỘI DUNG THAM KHẢO (CONTEXT) ===
+{context_subset}
+
+=== NHIỆM VỤ ===
+Viết nội dung chi tiết cho slide này.
+
+QUY TẮC BẮT BUỘC:
+1. Tối đa 6 bullet points
+2. Mỗi bullet TỐI ĐA 22 từ — ngắn gọn, súc tích
+3. Notes (ghi chú cho giáo viên) tối đa 120 từ
+4. PHẢI dẫn nguồn bằng "source_chunk_ids" — chunk nào đã dùng
+5. KHÔNG tạo nội dung ngoài context được cung cấp
+6. Ngôn ngữ phù hợp học sinh THPT, dễ hiểu
+
+ĐỊNH DẠNG JSON (CHỈ trả JSON thuần túy):
+{{
+  "slide_id": "{slide_id}",
+  "title": "...",
+  "bullets": ["Bullet 1", "Bullet 2"],
+  "notes": "Ghi chú mở rộng cho giáo viên...",
+  "source_chunk_ids": ["c2", "c3"]
+}}
+
+=== BẮT ĐẦU VIẾT NỘI DUNG ==="""
+
+SLIDE_CONTENT_TEMPLATE = PromptTemplate(
+    name="slide_content",
+    template=SLIDE_CONTENT_PROMPT,
+    required_vars=["slide_id", "slide_type", "slide_title", "slide_objective", "key_points", "context_subset"],
+    version="1.0",
+    description="Agent 3: Write detailed content for a single slide"
+)
+
+
+# ── Slide Pipeline — Quiz Generator (Agent 4) ──────────────
+
+SLIDE_QUIZ_PROMPT = """Bạn là trợ lý giáo dục chuyên tạo câu hỏi luyện tập cho slide bài giảng Tin học THPT.
+
+=== CHỦ ĐỀ ===
+{topic}
+
+=== NỘI DUNG LIÊN QUAN ===
 {context}
 
 === NHIỆM VỤ ===
-Tạo cấu trúc slide bài giảng hoàn chỉnh từ nội dung bài học trên.
+Tạo 3-5 câu hỏi trắc nghiệm (MCQ) để luyện tập, độ khó trung bình.
 
 QUY TẮC:
-1. Slide 1: Tiêu đề bài + Mục tiêu bài học
-2. Slide 2-N: Nội dung chính (mỗi section = 1-2 slides)
-3. Slide sau nội dung: Ví dụ + Minh họa (nếu có)
-4. Slide bài tập: CHỪA TRỐNG (sẽ được inject bởi Question Generation)
-5. Slide cuối: Tóm tắt + Kiến thức cần nhớ
-6. Mỗi slide tối đa 5-7 bullet points
-7. Speaker notes bổ sung chi tiết cho giáo viên
+1. Câu hỏi PHẢI dựa trên nội dung được cung cấp
+2. Mỗi câu có đúng 4 phương án A, B, C, D
+3. Đáp án đúng duy nhất
+4. Phương án nhiễu hợp lý, không quá dễ loại trừ
+5. Có giải thích ngắn gọn cho đáp án đúng
+6. PHẢI có "source_chunk_ids" cho mỗi câu
 
-ĐỊNH DẠNG JSON:
+ĐỊNH DẠNG JSON (CHỈ trả JSON thuần túy):
 {{
-  "lesson_title": "Tên bài học",
-  "lesson_metadata": {{"book": "{book}", "grade": "{grade}", "lesson": "{lesson}"}},
-  "slides": [
+  "quiz_items": [
     {{
-      "slide_type": "title",
-      "title": "Tên bài học",
-      "bullets": ["Mục tiêu 1", "Mục tiêu 2"],
-      "notes": "Ghi chú cho giáo viên"
-    }},
-    {{
-      "slide_type": "content",
-      "title": "Tiêu đề phần",
-      "bullets": ["Nội dung 1", "Nội dung 2"],
-      "notes": "Chi tiết mở rộng cho giáo viên"
-    }},
-    {{
-      "slide_type": "exercise",
-      "title": "Bài tập",
-      "bullets": ["Chủ đề bài tập liên quan"],
-      "notes": "Câu hỏi sẽ được sinh tự động"
-    }},
-    {{
-      "slide_type": "summary",
-      "title": "Tóm tắt bài học",
-      "bullets": ["Kiến thức 1", "Kiến thức 2"],
-      "notes": "Nhấn mạnh các điểm quan trọng"
+      "question": "Nội dung câu hỏi?",
+      "options": {{"A": "...", "B": "...", "C": "...", "D": "..."}},
+      "correct_answer": "A",
+      "explanation": "Giải thích ngắn gọn",
+      "source_chunk_ids": ["c5", "c8"]
     }}
-  ],
-  "total_slides": 8
+  ]
 }}
 
-- CHỈ trả về JSON thuần túy
+=== BẮT ĐẦU TẠO CÂU HỎI ==="""
 
-=== BẮT ĐẦU TẠO SLIDE ==="""
-
-SLIDE_GENERATION_TEMPLATE = PromptTemplate(
-    name="slide_generation",
-    template=SLIDE_GENERATION_PROMPT,
-    required_vars=["book", "grade", "lesson", "context"],
+SLIDE_QUIZ_TEMPLATE = PromptTemplate(
+    name="slide_quiz",
+    template=SLIDE_QUIZ_PROMPT,
+    required_vars=["topic", "context"],
     version="1.0",
-    description="Generate slide structure from lesson content"
+    description="Agent 4: Generate 3-5 MCQ quiz items for slide exercises"
+)
+
+
+# ── Slide Pipeline — Media Search (Agent 1) ────────────────
+
+SLIDE_MEDIA_PROMPT = """Bạn là chuyên gia lựa chọn hình ảnh minh họa cho slide bài giảng Tin học THPT.
+
+=== CHỦ ĐỀ ===
+{topic} — Lớp {grade} — Bộ sách {book}
+
+=== NHIỆM VỤ ===
+Gợi ý hình ảnh minh họa phù hợp cho bài giảng.
+
+QUY TẮC:
+1. hero_media: 1-2 hình ảnh chính cho slide tiêu đề
+2. inline_media: 2-4 hình minh họa cho các slide nội dung
+3. Mỗi item cần caption mô tả rõ ràng nội dung hình ảnh
+4. for_slide_type chỉ nhận: "title", "content", "image"
+
+ĐỊNH DẠNG JSON (CHỈ trả JSON thuần túy):
+{{
+  "hero_media": [
+    {{"caption": "Mô tả hình ảnh chính", "type": "image"}}
+  ],
+  "inline_media": [
+    {{"caption": "Mô tả hình minh họa", "type": "image", "for_slide_type": "content"}}
+  ]
+}}
+
+=== BẮT ĐẦU GỢI Ý MEDIA ==="""
+
+SLIDE_MEDIA_TEMPLATE = PromptTemplate(
+    name="slide_media",
+    template=SLIDE_MEDIA_PROMPT,
+    required_vars=["topic", "grade", "book"],
+    version="1.0",
+    description="Agent 1: Suggest media captions for slide illustrations"
 )
 
 
@@ -866,8 +982,11 @@ __all__ = [
     "UTILITY_SCORING_PROMPT", "SCORING_TEMPLATE",
     # Validation
     "QUESTION_VALIDATION_PROMPT", "QUESTION_VALIDATION_TEMPLATE",
-    # Slide
-    "SLIDE_GENERATION_PROMPT", "SLIDE_GENERATION_TEMPLATE",
+    # Slide Pipeline (multi-agent)
+    "SLIDE_OUTLINE_PROMPT", "SLIDE_OUTLINE_TEMPLATE",
+    "SLIDE_CONTENT_PROMPT", "SLIDE_CONTENT_TEMPLATE",
+    "SLIDE_QUIZ_PROMPT", "SLIDE_QUIZ_TEMPLATE",
+    "SLIDE_MEDIA_PROMPT", "SLIDE_MEDIA_TEMPLATE",
     # Chat & Explain
     "CHAT_PROMPT", "EXPLAIN_PROMPT",
     # Utility

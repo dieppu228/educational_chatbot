@@ -184,6 +184,7 @@ class SessionStore:
 
         entry = {
             "session_id": session.session_id,
+            "user_id": session.user_id,
             "topic": session.topic,
             "intent": session.intent,
             "created_at": session.created_at,

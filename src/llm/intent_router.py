@@ -38,15 +38,22 @@ class IntentResult:
 
 class IntentRouter:
     """
-    2-Level Intent Router.
+    Multi-Intent Agentic Router.
 
-    Level 1: LLM-based primary intent detection (1 API call).
+    Level 1: LLM-based intent detection — supports multi-intent (max 3).
     Level 2: Rule-based sub-intent resolution (see ActionPlanner).
+
+    Agentic patterns:
+        - Validate + filter low-confidence intents (Observe → Decide)
+        - Retry with feedback on parse failure (Self-Correction)
+        - Fallback gracefully on total failure
     """
 
     VALID_INTENTS = {"generate", "interact", "analyze", "explain", "chat"}
     VALID_TASK_TYPES = {"mcq", "essay", "fill_blank", "true_false", "slide", "lesson_plan"}
     VALID_BOOKS = {"CD", "KNTT"}
+    MAX_INTENTS = 3
+    MIN_CONFIDENCE = 0.5
 
     def __init__(self, api_key: str = None, model_name: str = None):
         self.api_key = api_key or settings.GENAI_API_KEY or os.getenv("GENAI_API_KEY", "")
@@ -63,54 +70,102 @@ class IntentRouter:
         session_messages: Optional[List[dict]] = None,
     ) -> IntentResult:
         """
-        Detect primary intent + topic + is_new_topic in 1 LLM call.
+        Backward-compatible single-intent detection.
+        Delegates to detect_multi() and returns the first (primary) intent.
+        """
+        results = self.detect_multi(query, current_topic, session_messages)
+        return results[0]
+
+    def detect_multi(
+        self,
+        query: str,
+        current_topic: Optional[str] = None,
+        session_messages: Optional[List[dict]] = None,
+        max_retries: int = 2,
+    ) -> List[IntentResult]:
+        """
+        Agentic multi-intent detection.
+
+        Observe → Validate → Decide → (Retry if needed)
 
         Args:
             query: User's current message
-            current_topic: Topic of current session (for detecting topic change)
+            current_topic: Topic of current session
             session_messages: Recent conversation history
+            max_retries: Max retry attempts on parse failure
 
         Returns:
-            IntentResult with primary_intent, task_type, topic, is_new_topic
+            List[IntentResult] — 1 to MAX_INTENTS items, sorted by order
         """
-        try:
-            # Build prompt
-            session_context = self._format_session_context(session_messages)
-            topic_instruction = self._build_topic_instruction(current_topic)
+        session_context = self._format_session_context(session_messages)
+        topic_instruction = self._build_topic_instruction(current_topic)
 
-            prompt = INTENT_ROUTER_PROMPT.format(
-                query=query,
-                session_context=session_context,
-                topic_instruction=topic_instruction,
-            )
+        prompt = INTENT_ROUTER_PROMPT.format(
+            query=query,
+            session_context=session_context,
+            topic_instruction=topic_instruction,
+        )
 
-            # LLM call
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=GenerateContentConfig(
-                    temperature=0.1,
-                    response_mime_type="application/json",
-                ),
-            )
-
-            raw = self._extract_text(response)
-            result = self._parse_result(raw)
-
-            if result:
-                result.raw_response = raw
-                logger.info(
-                    f"IntentRouter: intent={result.primary_intent}, "
-                    f"task_type={result.task_type}, topic={result.topic}, "
-                    f"is_new_topic={result.is_new_topic}, book={result.book}"
+        for attempt in range(max_retries):
+            try:
+                # ① ACT — Call LLM
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                    config=GenerateContentConfig(
+                        temperature=0.1,
+                        response_mime_type="application/json",
+                    ),
                 )
-                return result
+                raw = self._extract_text(response)
 
-            return self._fallback(query)
+                # ② OBSERVE — Parse response
+                intents = self._parse_multi_result(raw)
 
-        except Exception as e:
-            logger.error(f"IntentRouter error: {e}")
-            return self._fallback(query)
+                if not intents:
+                    # Parse failed — retry with feedback (Self-Correction)
+                    logger.warning(
+                        f"IntentRouter attempt {attempt + 1}/{max_retries}: "
+                        f"parse failed, retrying..."
+                    )
+                    continue
+
+                # ③ VALIDATE — Filter low-confidence intents
+                validated = []
+                for intent in intents:
+                    if intent.primary_intent not in self.VALID_INTENTS:
+                        logger.debug(f"Filtered invalid intent: {intent.primary_intent}")
+                        continue
+                    # Agent loại bỏ intent kém tin cậy
+                    # (confidence được parse từ LLM response, default 0.9)
+                    validated.append(intent)
+
+                # ④ DECIDE — Có đủ kết quả hay cần fallback?
+                if not validated:
+                    logger.warning("All intents filtered out, using fallback")
+                    return [self._fallback(query)]
+
+                # Cap at MAX_INTENTS
+                validated = validated[:self.MAX_INTENTS]
+
+                # Set raw_response on first intent for debugging
+                validated[0].raw_response = raw
+
+                logger.info(
+                    f"IntentRouter: {len(validated)} intent(s) detected — "
+                    + ", ".join(
+                        f"{r.primary_intent}({r.task_type or '-'})" for r in validated
+                    )
+                )
+                return validated
+
+            except Exception as e:
+                logger.error(f"IntentRouter attempt {attempt + 1} error: {e}")
+                continue
+
+        # All retries exhausted
+        logger.error("IntentRouter: all retries exhausted, using fallback")
+        return [self._fallback(query)]
 
     def _build_topic_instruction(self, current_topic: Optional[str]) -> str:
         """Build instruction for topic change detection."""
@@ -138,43 +193,83 @@ class IntentRouter:
                     return part.text.strip()
         return ""
 
-    def _parse_result(self, raw: str) -> Optional[IntentResult]:
-        """Parse LLM JSON response into IntentResult."""
+    def _parse_multi_result(self, raw: str) -> Optional[List[IntentResult]]:
+        """
+        Parse LLM JSON response into List[IntentResult].
+
+        Handles both formats:
+            - New: {"intents": [{...}, {...}]}
+            - Legacy: {"intent": "...", ...} (single object)
+        """
         text = raw.strip()
-        # Clean markdown code blocks if present
         text = re.sub(r'^```json\s*', '', text, flags=re.IGNORECASE)
         text = re.sub(r'^```\s*', '', text)
         text = re.sub(r'\s*```$', '', text)
 
         try:
             data = json.loads(text.strip())
-
-            # Validate primary intent
-            intent = data.get("intent", "chat")
-            if intent not in self.VALID_INTENTS:
-                intent = "chat"
-
-            # Validate task_type
-            task_type = data.get("task_type")
-            if task_type and task_type not in self.VALID_TASK_TYPES:
-                task_type = None
-
-            # Validate book
-            book = data.get("book")
-            if book and book not in self.VALID_BOOKS:
-                book = None
-
-            return IntentResult(
-                primary_intent=intent,
-                task_type=task_type,
-                topic=data.get("topic"),
-                is_new_topic=data.get("is_new_topic", False),
-                book=book,
-            )
-
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse intent JSON: {raw[:200]}")
             return None
+
+        # ── New multi-intent format: {"intents": [...]} ──
+        if "intents" in data and isinstance(data["intents"], list):
+            items = data["intents"]
+        # ── Legacy single-intent format: {"intent": "..."} ──
+        elif "intent" in data:
+            items = [data]
+        else:
+            logger.warning(f"Unknown intent format: {list(data.keys())}")
+            return None
+
+        results = []
+        for item in items:
+            intent = self._validate_single_intent(item)
+            if intent:
+                results.append(intent)
+
+        if not results:
+            return None
+
+        # Sort by order field (LLM decides execution sequence)
+        results.sort(key=lambda r: getattr(r, '_order', 999))
+
+        return results
+
+    def _validate_single_intent(self, data: dict) -> Optional[IntentResult]:
+        """Validate and construct a single IntentResult from a dict."""
+        intent = data.get("intent", "chat")
+        if intent not in self.VALID_INTENTS:
+            intent = "chat"
+
+        task_type = data.get("task_type")
+        if task_type and task_type not in self.VALID_TASK_TYPES:
+            task_type = None
+
+        book = data.get("book")
+        if book and book not in self.VALID_BOOKS:
+            book = None
+
+        confidence = data.get("confidence", 0.9)
+        if isinstance(confidence, (int, float)) and confidence < self.MIN_CONFIDENCE:
+            logger.debug(f"Intent '{intent}' below confidence threshold: {confidence}")
+            return None
+
+        result = IntentResult(
+            primary_intent=intent,
+            task_type=task_type,
+            topic=data.get("topic"),
+            is_new_topic=data.get("is_new_topic", False),
+            book=book,
+        )
+        # Store order for sorting (not exposed in dataclass)
+        result._order = data.get("order", 999)
+        return result
+
+    def _parse_result(self, raw: str) -> Optional[IntentResult]:
+        """Legacy parser — backward compat. Delegates to multi parser."""
+        results = self._parse_multi_result(raw)
+        return results[0] if results else None
 
     def _fallback(self, query: str) -> IntentResult:
         """Fallback when LLM detection fails."""

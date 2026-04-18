@@ -113,7 +113,13 @@ class Orchestrator:
     # MAIN ENTRY POINT
     # ============================================================
 
-    def ask(self, query: str, ui_book: Optional[str] = None, **kwargs) -> Generator[str, None, None]:
+    def ask(
+        self,
+        query: str,
+        ui_book: Optional[str] = None,
+        user_id: Optional[str] = None,
+        **kwargs,
+    ) -> Generator[str, None, None]:
         """
         Main processing pipeline.
 
@@ -125,10 +131,14 @@ class Orchestrator:
             str: Response chunks (for streaming display)
         """
         # ① Tạo RequestContext — thay thế toàn bộ global state
-        ctx = RequestContext(query=query, ui_book=ui_book)
+        ctx = RequestContext(query=query, ui_book=ui_book, user_id=user_id or "anonymous")
 
         logger.info("=" * 60)
-        logger.info(f"QUERY [{ctx.request_id}]: '{query[:80]}'" if len(query) > 80 else f"QUERY [{ctx.request_id}]: '{query}'")
+        logger.info(
+            f"QUERY [{ctx.request_id}] (user={ctx.user_id}): '{query[:80]}'"
+            if len(query) > 80
+            else f"QUERY [{ctx.request_id}] (user={ctx.user_id}): '{query}'"
+        )
 
         # ② Context enrichment + Query Rewriting
         self._enrich_context(ctx)
@@ -150,16 +160,28 @@ class Orchestrator:
         logger.info(f"Book: ui={ui_book}, llm={ctx.intent_result.book if ctx.intent_result else None}, "
                      f"session={ctx.session.book} -> effective={ctx.effective_book}")
 
-        # Block if action requires RAG but no book
-        if ctx.action_plan.action in self.ACTIONS_REQUIRING_BOOK and not ctx.effective_book:
-            yield from self._handle_no_book(ctx)
-            return
-
-        # ⑦ Execute via Dispatcher
+        # ⑦ Execute via Dispatcher — Agentic multi-action loop
         response_chunks = []
-        for chunk in self.dispatcher.dispatch(ctx.action_plan, ctx):
-            response_chunks.append(chunk)
-            yield chunk
+        for i, plan in enumerate(ctx.action_plans):
+            # OBSERVE: Swap context to match current sub-task
+            ctx.action_plan = plan
+            if i < len(ctx.intent_results):
+                ctx.intent_result = ctx.intent_results[i]
+
+            # DECIDE: Check if this action can proceed
+            if plan.action in self.ACTIONS_REQUIRING_BOOK and not ctx.effective_book:
+                yield from self._handle_no_book(ctx)
+                continue  # Skip this action, try next
+
+            # ACT: Insert separator between multi-action outputs
+            if i > 0:
+                separator = "\n\n---\n\n"
+                response_chunks.append(separator)
+                yield separator
+
+            for chunk in self.dispatcher.dispatch(plan, ctx):
+                response_chunks.append(chunk)
+                yield chunk
 
         # ⑧ Auto-save
         full_response = "".join(response_chunks)
@@ -183,7 +205,7 @@ class Orchestrator:
 
     def _enrich_context(self, ctx: RequestContext):
         """Stage 1: ContextAnalyzer + QueryRewriter."""
-        current_session = self.memory.current_session_v2
+        current_session = self.memory.get_current_session(ctx.user_id)
         history_text = ""
         if current_session:
             history_text = "\n".join(
@@ -216,46 +238,59 @@ class Orchestrator:
         )
 
     def _detect_intent(self, ctx: RequestContext):
-        """Stage 2: IntentRouter (1 LLM call)."""
-        current_session = self.memory.current_session_v2
+        """Stage 2: IntentRouter — Agentic multi-intent detection."""
+        current_session = self.memory.get_current_session(ctx.user_id)
         current_topic = current_session.topic if current_session else None
         session_messages = current_session.get_context_messages() if current_session else None
 
         t1 = time.time()
-        intent_result = self.intent_router.detect(
+        intent_results = self.intent_router.detect_multi(
             query=ctx.enriched_query,
             current_topic=current_topic,
             session_messages=session_messages,
         )
         intent_time = time.time() - t1
 
-        ctx.intent_result = intent_result
+        # Populate both list and singular field (backward-compat)
+        ctx.intent_results = intent_results
+        ctx.intent_result = intent_results[0] if intent_results else None
+
         logger.info(
             f"IntentRouter ({intent_time:.2f}s): "
-            f"intent={intent_result.primary_intent}, "
-            f"task_type={intent_result.task_type}, "
-            f"topic={intent_result.topic}"
+            f"{len(intent_results)} intent(s) — "
+            + ", ".join(
+                f"{r.primary_intent}({r.task_type or '-'})" for r in intent_results
+            )
         )
 
         ctx.add_debug_step(
             "IntentRouter",
-            primary_intent=intent_result.primary_intent,
-            task_type=intent_result.task_type,
-            topic=intent_result.topic,
-            is_new_topic=intent_result.is_new_topic,
-            book=intent_result.book,
+            total_intents=len(intent_results),
+            intents=[
+                {
+                    "intent": r.primary_intent,
+                    "task_type": r.task_type,
+                    "topic": r.topic,
+                    "is_new_topic": r.is_new_topic,
+                    "book": r.book,
+                }
+                for r in intent_results
+            ],
             time_s=round(intent_time, 2),
         )
 
     def _resolve_session(self, ctx: RequestContext):
         """Stage 3: SessionManager (pure code)."""
-        session = self.session_manager.resolve_session(ctx.intent_result)
+        session = self.session_manager.resolve_session(ctx.intent_result, user_id=ctx.user_id)
         ctx.session = session
-        logger.info(f"Session: id={session.session_id}, topic='{session.topic}', msgs={len(session.messages)}")
+        logger.info(
+            f"Session: id={session.session_id}, user={session.user_id}, topic='{session.topic}', msgs={len(session.messages)}"
+        )
 
         ctx.add_debug_step(
             "SessionManager",
             session_id=session.session_id,
+            user_id=session.user_id,
             topic=session.topic,
             intent=session.intent,
             book=session.book,
@@ -265,16 +300,31 @@ class Orchestrator:
         )
 
     def _plan_action(self, ctx: RequestContext):
-        """Stage 4: ActionPlanner (pure code)."""
-        action_plan = self.action_planner.plan(ctx.intent_result, ctx.session, ctx.query)
-        ctx.action_plan = action_plan
-        logger.info(f"ActionPlan: {action_plan.action.value} ({action_plan.reason})")
+        """Stage 4: ActionPlanner — multi-intent aware."""
+        action_plans = self.action_planner.plan_all(
+            ctx.intent_results, ctx.session, ctx.query
+        )
+
+        # Populate both list and singular field (backward-compat)
+        ctx.action_plans = action_plans
+        ctx.action_plan = action_plans[0] if action_plans else None
+
+        logger.info(
+            f"ActionPlanner: {len(action_plans)} plan(s) — "
+            + ", ".join(f"{p.action.value}" for p in action_plans)
+        )
 
         ctx.add_debug_step(
             "ActionPlanner",
-            action=action_plan.action.value,
-            reason=action_plan.reason,
-            round_id=action_plan.round_id,
+            total_plans=len(action_plans),
+            plans=[
+                {
+                    "action": p.action.value,
+                    "reason": p.reason,
+                    "round_id": p.round_id,
+                }
+                for p in action_plans
+            ],
         )
 
     def _handle_no_book(self, ctx: RequestContext) -> Generator[str, None, None]:

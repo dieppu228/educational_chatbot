@@ -33,74 +33,7 @@ class Message:
         return cls(role=data["role"], content=data["content"])
 
 
-# ============================================================
-# BACKWARD-COMPATIBLE: QuizStats, TopicStats, SessionState
-# ============================================================
 
-@dataclass
-class TopicStats:
-    """Thống kê cho 1 chủ đề cụ thể trong session."""
-    total: int = 0
-    correct: int = 0
-
-    @property
-    def accuracy(self) -> float:
-        return self.correct / self.total if self.total > 0 else 0.0
-
-
-@dataclass
-class QuizStats:
-    """DEPRECATED: Dùng QuizSessionState thay thế."""
-    total_questions: int = 0
-    correct_answers: int = 0
-    by_topic: Dict[str, TopicStats] = field(default_factory=dict)
-    by_type: Dict[str, int] = field(default_factory=dict)
-
-    @property
-    def accuracy(self) -> float:
-        return self.correct_answers / self.total_questions if self.total_questions > 0 else 0.0
-
-    def record_answer(self, topic: str, question_type: str, is_correct: bool):
-        self.total_questions += 1
-        if is_correct:
-            self.correct_answers += 1
-        if topic not in self.by_topic:
-            self.by_topic[topic] = TopicStats()
-        self.by_topic[topic].total += 1
-        if is_correct:
-            self.by_topic[topic].correct += 1
-        self.by_type[question_type] = self.by_type.get(question_type, 0) + 1
-
-    def get_weak_topics(self, threshold: float = 0.5) -> List[str]:
-        return [t for t, s in self.by_topic.items() if s.total >= 2 and s.accuracy < threshold]
-
-    def get_strong_topics(self, threshold: float = 0.8) -> List[str]:
-        return [t for t, s in self.by_topic.items() if s.total >= 2 and s.accuracy >= threshold]
-
-    def get_summary(self) -> str:
-        if self.total_questions == 0:
-            return "Chua co cau hoi nao."
-        lines = [f"Tong ket: {self.correct_answers}/{self.total_questions} dung ({self.accuracy:.0%})"]
-        weak = self.get_weak_topics()
-        if weak:
-            lines.append(f"Can on tap: {', '.join(weak)}")
-        strong = self.get_strong_topics()
-        if strong:
-            lines.append(f"Tot o: {', '.join(strong)}")
-        return "\n".join(lines)
-
-
-@dataclass
-class SessionState:
-    """DEPRECATED: Dùng Session thay thế cho code mới."""
-    session_id: int
-    intent: str = "chat"
-    task_type: Optional[str] = None
-    topic: Optional[str] = None
-    items: List[TaskItem] = field(default_factory=list)
-    messages: List[Message] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    quiz_stats: QuizStats = field(default_factory=QuizStats)
 
 
 # ============================================================
@@ -131,7 +64,7 @@ class QuestionRecord:
     # Source tracking
     source: str = "quiz"                # "quiz" | "slide_exercise" | "review"
 
-    def record_attempt(self, user_answer: Any, is_correct: bool, score: float = None):
+    def record_attempt(self, user_answer: Any, is_correct: bool, score: Optional[float] = None):
         """Record a user's attempt at answering this question."""
         self.user_answer = user_answer
         self.is_correct = is_correct
@@ -291,7 +224,7 @@ class QuizSessionState:
         """Get wrong questions filtered by question type."""
         return [q for q in self.get_wrong_questions() if q.question_type == q_type]
 
-    def create_review_round(self, source_round_ids: List[int] = None) -> Optional[QuizRound]:
+    def create_review_round(self, source_round_ids: Optional[List[int]] = None) -> Optional[QuizRound]:
         """
         Create a review round from wrong questions of specified rounds.
         source_round_ids=None → collect from all rounds.
@@ -361,7 +294,7 @@ class SlideSessionState:
     State chuyên biệt cho slide session.
     Kế thừa quiz mechanism cho exercise questions trong slide.
     """
-    slide_output: Optional[Dict] = None     # SlideGenerationOutput serialized
+    slide_output: Optional[Dict] = None     # Graph output (slides, status, HITL data)
     slide_html: Optional[str] = None        # HTML rendered
 
     # Exercise tracking (inherits quiz mechanism)
@@ -426,6 +359,7 @@ class Session:
     Replaces the old SessionState for new code.
     """
     session_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    user_id: str = "anonymous"        # Owner user id (from UI/client)
     topic: str = ""
     intent: str = "chat"                # Primary intent: generate|interact|analyze|explain|chat
     book: Optional[str] = None          # "CD" | "KNTT" | None (book series filter)
@@ -480,6 +414,7 @@ class Session:
     def to_dict(self) -> dict:
         return {
             "session_id": self.session_id,
+            "user_id": self.user_id,
             "topic": self.topic,
             "intent": self.intent,
             "book": self.book,
@@ -498,6 +433,7 @@ class Session:
         slide_state = SlideSessionState.from_dict(data["slide_state"]) if data.get("slide_state") else None
         return cls(
             session_id=data.get("session_id", str(uuid.uuid4())[:8]),
+            user_id=data.get("user_id") or data.get("metadata", {}).get("user_id", "anonymous"),
             topic=data.get("topic", ""),
             intent=data.get("intent", "chat"),
             book=data.get("book"),
@@ -517,96 +453,83 @@ class Session:
 class MemoryManager:
     """
     Quản lý sessions và conversation context.
-    v2: Hỗ trợ cả Session mới và SessionState cũ.
+    v3: Chỉ dùng Session mới (v2). Legacy SessionState removed.
     """
 
     def __init__(self, max_context_messages: int = 10):
-        # New v2 sessions
+        # Sessions v2
         self.sessions_v2: List[Session] = []
         self.current_session_v2: Optional[Session] = None
+        self.current_sessions_by_user: Dict[str, Session] = {}
         self.max_context_messages = max_context_messages
 
-        # Legacy (backward-compat for conversation.py cũ)
-        self.sessions: List[SessionState] = []
-        self.current_session: Optional[SessionState] = None
+    def _normalize_user_id(self, user_id: Optional[str]) -> str:
+        return user_id or "anonymous"
 
     # ── v2 Methods ──────────────────────────────────────────
 
-    def create_session_v2(self, topic: str = "", intent: str = "chat") -> Session:
+    def create_session(
+        self,
+        topic: str = "",
+        intent: str = "chat",
+        user_id: Optional[str] = None,
+    ) -> Session:
         """Create a new v2 session."""
-        session = Session(topic=topic, intent=intent)
+        uid = self._normalize_user_id(user_id)
+        session = Session(topic=topic, intent=intent, user_id=uid)
         self.sessions_v2.append(session)
         self.current_session_v2 = session
+        self.current_sessions_by_user[uid] = session
         return session
 
-    def get_session_v2(self, session_id: str) -> Optional[Session]:
+    def get_session(self, session_id: str, user_id: Optional[str] = None) -> Optional[Session]:
         """Get a v2 session by ID."""
         for s in self.sessions_v2:
             if s.session_id == session_id:
+                uid = self._normalize_user_id(user_id or s.user_id)
                 self.current_session_v2 = s
+                self.current_sessions_by_user[uid] = s
                 return s
         return None
 
-    def get_or_create_session_v2(self, topic: str = "", intent: str = "chat") -> Session:
-        """Get current session or create new one."""
-        if self.current_session_v2 is not None:
-            return self.current_session_v2
-        return self.create_session_v2(topic=topic, intent=intent)
+    def get_current_session(self, user_id: Optional[str] = None) -> Optional[Session]:
+        """Get current active session for a specific user."""
+        uid = self._normalize_user_id(user_id)
+        return self.current_sessions_by_user.get(uid)
 
-    def switch_session_v2(self, topic: str, intent: str) -> Session:
+    def set_current_session(self, user_id: Optional[str], session: Session) -> None:
+        """Set current active session for a specific user."""
+        uid = self._normalize_user_id(user_id or session.user_id)
+        self.current_session_v2 = session
+        self.current_sessions_by_user[uid] = session
+
+    def get_or_create_session(
+        self,
+        topic: str = "",
+        intent: str = "chat",
+        user_id: Optional[str] = None,
+    ) -> Session:
+        """Get current session or create new one."""
+        current = self.get_current_session(user_id)
+        if current is not None:
+            return current
+        return self.create_session(topic=topic, intent=intent, user_id=user_id)
+
+    def switch_session(self, topic: str, intent: str, user_id: Optional[str] = None) -> Session:
         """Save current session and create a new one."""
-        new_session = self.create_session_v2(topic=topic, intent=intent)
+        new_session = self.create_session(topic=topic, intent=intent, user_id=user_id)
         return new_session
 
-    def get_context_v2(self) -> List[dict]:
+    def get_context(self, user_id: Optional[str] = None) -> List[dict]:
         """Get context window from current v2 session."""
-        if not self.current_session_v2:
+        current = self.get_current_session(user_id)
+        if not current:
             return []
-        return self.current_session_v2.get_context_messages(self.max_context_messages)
+        return current.get_context_messages(self.max_context_messages)
 
-    # ── Legacy Methods (giữ cho conversation.py cũ) ────────
-
-    def start_session(self, intent: str, task_type: str = None,
-                      topic: str = None, metadata: dict = None) -> SessionState:
-        session = SessionState(
-            session_id=len(self.sessions),
-            intent=intent, task_type=task_type,
-            topic=topic, metadata=metadata or {},
-        )
-        self.sessions.append(session)
-        self.current_session = session
-        return session
-
-    def add_message(self, role: str, content: str):
-        if self.current_session:
-            self.current_session.messages.append(Message(role=role, content=content))
-
-    def add_item(self, item_type: str, content: dict):
-        if self.current_session:
-            item = TaskItem(type=item_type, content=content, index=len(self.current_session.items))
-            self.current_session.items.append(item)
-            return item
-
-    def get_context(self) -> List[dict]:
-        if not self.current_session:
-            return []
-        recent = self.current_session.messages[-self.max_context_messages:]
-        return [{"role": m.role, "content": m.content} for m in recent]
-
-    def get_session(self, session_id: int) -> Optional[SessionState]:
-        for s in self.sessions:
-            if s.session_id == session_id:
-                self.current_session = s
-                return s
-        return None
-
-    def create_session(self, intent: str = "chat", **kwargs) -> SessionState:
-        return self.start_session(intent=intent, **kwargs)
-
-    def get_items(self, item_type: str = None) -> List[TaskItem]:
-        if not self.current_session:
-            return []
-        items = self.current_session.items
-        if item_type:
-            items = [i for i in items if i.type == item_type]
-        return items
+    def clear_user_session(self, user_id: Optional[str] = None) -> None:
+        """Detach current active session mapping for one user (keeps stored history)."""
+        uid = self._normalize_user_id(user_id)
+        current = self.current_sessions_by_user.pop(uid, None)
+        if current and self.current_session_v2 and self.current_session_v2.session_id == current.session_id:
+            self.current_session_v2 = None
