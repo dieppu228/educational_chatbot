@@ -3,11 +3,12 @@
 
 \section{Môi trường và dữ liệu thực nghiệm}
 \subsection{Môi trường phát triển}
-Hệ thống được xây dựng chủ yếu dựa trên ngôn ngữ lập trình Python, kết hợp cùng các thư viện xử lý toán học như Numpy và Pandas để xử lý ma trận vector nhúng. 
-Việc truy xuất và sinh ngôn ngữ tự nhiên được thực hiện thông qua API của mô hình ngôn ngữ lớn Google Gemini 2.5 Flash, qua thư viện \textit{google-genai}. 
-Đối với tác vụ giải thuật đánh giá sự tương đồng, hệ thống sử dụng mô hình nhúng \textit{dangvantuan/vietnamese-document-embedding} có chiều dài 768 chiều. 
-Giai đoạn tái xếp hạng được đảm nhiệm bởi mô hình Cross-Encoder \textit{AITeamVN/Vietnamese\_Reranker}. 
-Khác với các hệ thống phụ thuộc thư viện kín, logic tìm kiếm từ khoá (Custom BM25) được code tay tinh chỉnh ở mức toán học (TF, DF, IDF), tạo sự chủ động tuỳ biến cho đặc thù tiếng Việt.
+Hệ thống được xây dựng chủ yếu dựa trên ngôn ngữ lập trình Python, kết hợp cùng các thư viện xử lý toán học như Numpy và Pandas để thao tác với ma trận vector nhúng (Embedding Vector Matrix). 
+Các tác vụ lớn và phức tạp trong hệ thống được định tuyến và phân rã nhờ mô hình đa tác tử (Multi-Agent System) xây dựng trên nền tảng tiến trình của thư viện \textit{LangGraph}. 
+Việc truy xuất (Retrieval) và sinh ngôn ngữ tự nhiên (Natural Language Generation) được thực hiện thông qua API của mô hình ngôn ngữ lớn (Large Language Model) Google Gemini 2.5 Flash, qua thư viện \textit{google-genai}. 
+Đối với giải thuật đo lường sự tương đồng (Similarity Search), hệ thống sử dụng mô hình nhúng (Embedding Model) \textit{dangvantuan/vietnamese-document-embedding} cho ra kết quả vector 768 chiều. 
+Giai đoạn tái xếp hạng (Reranking) ở bước cuối quy trình truy xuất được đảm nhiệm chuyên biệt bởi mô hình học máy Cross-Encoder \textit{AITeamVN/Vietnamese\_Reranker}. 
+Khác với các hệ thống phụ thuộc thư viện đóng gói sẵn, nền tảng logic tìm kiếm từ khoá (Keyword Search) với thuật toán Custom BM25 được lập trình thủ công và tinh chỉnh linh hoạt ở mức công thức toán học (TF, DF, IDF), tạo sự chủ động tuyệt đối trong quá trình tối ưu văn bản tiếng Việt.
 
 \subsection{Dữ liệu thực nghiệm}
 Nguồn dữ liệu gốc được khai thác từ toàn bộ tài liệu Sách Giáo Khoa Tin học lớp 10, 11 và 12, thuộc cả hai bộ sách Cánh Diều và Kết Nối Tri Thức. 
@@ -15,14 +16,15 @@ Qua quá trình tiền xử lý, văn bản được làm sạch và dán nhãn 
 Tổng cộng, dữ liệu được phân rã thành 2348 khối dữ liệu (chunks) và có chứa thuộc tính level để biểu diễn độ sâu, phục vụ trực tiếp cho vòng phục hồi phân cấp (Hierarchical RAG).
 
 \section{Tổng quan kiến trúc toàn bộ hệ thống}
-Kiến trúc tổng thể của dự án được thiết kế thành một pipeline (Data Pipeline) từ bước xử lý tài liệu thô ban đầu cho tới bước sinh câu trả lời hoàn thiện phục vụ người dùng. Quá trình này được chia làm các cụm thành phần nối tiếp nhau:
+Kiến trúc tổng thể của dự án được thiết kế thành một pipeline (Data Pipeline) từ bước xử lý tài liệu thô ban đầu cho tới bước sinh câu trả lời hoàn thiện phục vụ người dùng. Quá trình này được chia làm các cụm thành phần nối tiếp nhau. 
 
-\begin{itemize}
-    \item \textbf{Cụm Tiền xử lý dữ liệu (Data Ingestion \& OCR):} Nguồn dữ liệu dạng giáo trình (PDF) được nạp vào và đi qua mô hình khai phá OCR để nhận dạng, chuyển đổi văn bản sang định dạng Markdown theo chuẩn của LlamaParse. Việc này nhằm bóc tách cấu trúc phân cấp tinh vi (chương, bài, tiểu mục) của giáo trình.
-    \item \textbf{Cụm Xây dựng Cơ sở tri thức (Knowledge Base Construction):} Văn bản Markdown sau quá trình làm sạch sẽ được phân rã (Chunking) theo đúng phân cấp. Mỗi khối dữ liệu (chunk) được nhúng (Embedding) thành ma trận vector và lưu trữ vĩnh viễn ở Cơ sở tri thức (Knowledge Base / Vector DB) cùng với metadata (\textit{hệ cấp} và \textit{ID cha con}).
-    \item \textbf{Cụm Phân hệ Truy xuất (Retrieval \& Reranking):} Ở chặng run-time, hệ thống đón nhận truy vấn (User Query) từ người dùng. Cụm RAG làm nhiệm vụ định tuyến hướng đi, tìm kiếm không gian vector, tìm kiếm từ khoá và lai ghép (Hybrid Search + Reranker) nhằm đánh giá và rút trích các khối tri thức chứa ngữ cảnh sát nhất.
-    \item \textbf{Cụm Sinh ngôn ngữ (LLM Generation):} Nhận Top-K ngữ cảnh cô đặc ở đầu ra của cụm Truy xuất, kết hợp cùng Prompt (câu hỏi gốc) để truyền vào mô hình ngôn ngữ lớn (Google Gemini). LLM sẽ phân tích, đối chiếu nội dung ngữ cảnh từ tri thức và sinh ra câu trả lời theo ngôn ngữ tự nhiên.
-\end{itemize}
+\textbf{Cụm Tiền xử lý dữ liệu (Data Ingestion \& OCR):} Nguồn dữ liệu dạng giáo trình (PDF) được nạp vào và đi qua mô hình khai phá OCR để nhận dạng, chuyển đổi văn bản sang định dạng Markdown theo chuẩn của LlamaParse. Việc này nhằm bóc tách cấu trúc phân cấp tinh vi (chương, bài, tiểu mục) của giáo trình.
+
+\textbf{Cụm Xây dựng Cơ sở tri thức (Knowledge Base Construction):} Văn bản Markdown sau quá trình làm sạch sẽ được phân rã (Chunking) theo đúng phân cấp. Mỗi khối dữ liệu (chunk) được nhúng (Embedding) thành ma trận vector và lưu trữ vĩnh viễn ở Cơ sở tri thức (Knowledge Base / Vector DB) cùng với metadata (\textit{hệ cấp} và \textit{ID cha con}).
+
+\textbf{Cụm Phân hệ Truy xuất (Retrieval \& Reranking):} Ở chặng run-time, hệ thống đón nhận truy vấn (User Query) từ người dùng. Cụm RAG làm nhiệm vụ định tuyến hướng đi, tìm kiếm không gian vector, tìm kiếm từ khoá và lai ghép (Hybrid Search + Reranker) nhằm đánh giá và rút trích các khối tri thức chứa ngữ cảnh sát nhất.
+
+\textbf{Cụm Sinh ngôn ngữ (LLM Generation):} Nhận Top-K ngữ cảnh cô đặc ở đầu ra của cụm Truy xuất, kết hợp cùng Prompt (câu hỏi gốc) để truyền vào mô hình ngôn ngữ lớn (Google Gemini). LLM sẽ phân tích, đối chiếu nội dung ngữ cảnh từ tri thức và sinh ra câu trả lời theo ngôn ngữ tự nhiên.
 
 Sơ đồ tổng quan được biểu diễn tại Hình \ref{fig:overall_architecture_repo}, mô tả toàn bộ quy trình xử lý từ khi tiếp nhận truy vấn của người dùng (Query / UI Request) cho đến khi sinh ra câu trả lời cuối cùng. Kiến trúc hệ thống theo mô hình tuổi thọ yêu cầu (request lifecycle) được nâng cấp và tối ưu hóa thành 6 lớp (layer) xử lý liên tục: Context \& Intent Layer (Ngữ cảnh \& Ý định), Planning Layer (Lập kế hoạch), Execution Layer (Thực thi), Knowledge Layer (Truy xuất Tri thức), Generation Layer (Sinh đa phương thức) và Response \& Memory (Phản hồi \& Ghi nhớ). 
 
@@ -144,11 +146,13 @@ Dựa trên sơ đồ kiến trúc tổng quát tại Hình \ref{fig:overall_arc
 \end{figure}
 
 Lớp Ngữ cảnh và Ý định hoạt động tuân theo trình tự ba bước cốt lõi:
-\begin{itemize}
-    \item \textbf{ContextAnalyzer (Phân tích ngữ cảnh):} Đánh giá mức độ phụ thuộc của truy vấn hiện tại vào lịch sử hội thoại trước đó (Session History). Mô-đun này được viết bằng mã nguồn logic xác định xem câu hỏi có chứa các đại từ ngữ nghĩa ẩn ý cần khôi phục ngữ cảnh hay không.
-    \item \textbf{QueryRewriter (Viết lại truy vấn - LLM):} Khi phát hiện truy vấn không đầy đủ ngữ nghĩa hoặc hệ thống cần tìm kiếm diện rộng trong RAG, LLM được gọi để sinh ra các câu hỏi hoàn chỉnh, và có thể tạo đa truy vấn (multi-queries).
-    \item \textbf{IntentRouter (Định tuyến ý định):} Là thành phần cốt lõi, sử dụng hàm \textit{detect\_multi()} để xác định đồng thời tối đa 3 ý định (Intent) từ người dùng. Đầu ra là một danh sách \textit{List[IntentResult]} bao gồm siêu dữ liệu: Ý định (Intent), Loại tác vụ (Task Type), Chủ đề (Topic), Cấp bậc/Lớp (Grade), và Thứ tự ưu tiên (Order).
-\end{itemize}
+
+\textbf{ContextAnalyzer (Phân tích ngữ cảnh):} Đánh giá mức độ phụ thuộc của truy vấn hiện tại vào lịch sử hội thoại trước đó (Session History). Mô-đun này được thiết kế bằng mã nguồn logic nhằm xác định xem câu hỏi có chứa các đại từ ngữ nghĩa ẩn ý cần khôi phục ngữ cảnh hay không.
+
+\textbf{QueryRewriter (Viết lại truy vấn - LLM):} Khi quá trình phân tích phát hiện truy vấn không đầy đủ ngữ nghĩa hoặc hệ thống cần mở rộng diện tìm kiếm trong RAG, LLM sẽ được gọi để sinh ra các câu hỏi hoàn chỉnh, đồng thời có thể tạo ra đa truy vấn (multi-queries).
+
+\textbf{IntentRouter (Định tuyến ý định):} Đóng vai trò là thành phần định hướng cốt lõi. Thành phần này sử dụng hàm \textit{detect\_multi()} để xác định đồng thời tối đa 3 ý định (Intent) từ người dùng. Đầu ra thu được là một danh sách \textit{List[IntentResult]} bao gồm các siêu dữ liệu quan trọng như Ý định (Intent), Loại tác vụ (Task Type), Chủ đề (Topic), Cấp bậc/Lớp (Grade) và Thứ tự ưu tiên (Order).
+
 Nhờ kiến trúc này, hệ thống giải quyết xuất sắc các yêu cầu phức hợp (multi-intent) trong khi vẫn duy trì đúng đường định tuyến thiết kế cho các tác vụ tiếp theo.
 
 \subsection{Thiết kế Lớp Lập kế hoạch (Planning Layer)}
@@ -204,10 +208,11 @@ Nhờ kiến trúc này, hệ thống giải quyết xuất sắc các yêu cầ
 \end{figure}
 
 Dữ liệu đầu vào của lớp là tập hợp các \textit{Intent} cùng câu truy vấn nguyên thủy (Query). Lớp Lập kế hoạch phân bổ chu trình qua hai thành phần cốt lõi:
-\begin{itemize}
-    \item \textbf{SessionManager:} Nhận truy vấn và xác định người dùng đang tiếp nối một chuỗi hội thoại cũ (cần tải lại ngữ cảnh quá khứ) hay khởi tạo tác vụ mới hoàn toàn. Khối này sẽ trực tiếp duy trì không gian \textit{Session} phù hợp.
-    \item \textbf{ActionPlanner:} Dựa trên cấu trúc Session nhận được từ SessionManager và các đặc trưng từ danh sách Intent, mô-đun này sẽ ánh xạ các ý định chung chung thành cấu trúc \textit{ActionPlans} (Danh sách Lệnh hành động) rõ cấp bậc và không trùng lặp (deduplicated).
-\end{itemize}
+
+\textbf{SessionManager:} Nhận truy vấn và xác định người dùng đang tiếp nối một chuỗi hội thoại cũ (cần tải lại ngữ cảnh quá khứ) hay khởi tạo tác vụ mới hoàn toàn. Khối này sẽ trực tiếp duy trì không gian \textit{Session} phù hợp.
+
+\textbf{ActionPlanner:} Dựa trên cấu trúc Session nhận được từ SessionManager và các đặc trưng từ danh sách Intent, mô-đun này sẽ ánh xạ các ý định chung chung thành cấu trúc \textit{ActionPlans} (Danh sách Lệnh hành động) rõ cấp bậc và không trùng lặp (deduplicated).
+
 Đầu ra cuối cùng là danh sách tác vụ rành mạch, kết thúc vai trò nền tảng để đẩy sang Lớp Thực thi (Execution Layer).
 
 \subsection{Thiết kế Lớp Thực thi (Execution Layer)}
@@ -281,10 +286,11 @@ Lớp Thực thi đóng vai trò trung tâm trong chuỗi xử lý đa nhiệm c
 \end{figure}
 
 Quá trình thực thi trong lớp này gồm các thành phần cốt lõi:
-\begin{itemize}
-    \item \textbf{Multi-Action Loop:} Hệ thống sẽ duyệt qua mảng hành động (ActionPlans) theo phương thức lặp vòng. Vòng lặp đóng vai trò như một bộ đếm trạng thái, dừng lại khi tất cả Action đã được bóc tách hoàn chỉnh.
-    \item \textbf{Execution Dispatcher:} Dựa vào khóa định danh của mỗi tác vụ, Dispatcher sử dụng cơ chế nối kết từ điển (Registry-based) để chọn ra dịch vụ thích hợp gồm các module lớn như: Tạo Quiz/Slide, Xử lý Chấm điểm tương tác, hay Chat tự do (không cần RAG).
-\end{itemize}
+
+\textbf{Multi-Action Loop:} Hệ thống sẽ duyệt qua mảng hành động (ActionPlans) theo phương thức lặp vòng. Vòng lặp đóng vai trò như một bộ đếm trạng thái, dừng lại khi tất cả Action đã được bóc tách hoàn chỉnh.
+
+\textbf{Execution Dispatcher:} Dựa vào khóa định danh của mỗi tác vụ, Dispatcher sử dụng cơ chế định tuyến thông qua nối kết từ điển (Registry-based) để chọn ra dịch vụ thích hợp gồm các module lớn như: Tạo Quiz/Slide, Xử lý Chấm điểm tương tác, hay Chat tự do (không cần RAG).
+
 Kết thúc một luồng lệnh đơn lẻ, dữ liệu sẽ được trả về dạng Stream thời gian thực ra giao diện và gọi sâu xuống tầng Tri thức. Sau đó, tín hiệu sẽ vòng ngược lại Multi-Action Loop để tiếp tục gỡ lệnh kế tiếp.
 
 \subsection{Thiết kế Lớp Tri thức (Knowledge Layer)}
@@ -401,11 +407,12 @@ Lớp Tri thức (Knowledge Layer) đóng vai trò nòng cốt trong việc gi�
 \end{figure}
 
 Đầu vào là mảng kết quả \textit{queries} và các luồng lọc (filters) nhận được từ Lớp trước đó. Quy trình chiết xuất thông tin tuần tự như sau:
-\begin{itemize}
-    \item \textbf{1. Adaptive RAG Agent:} Bộ phân loại (Classifier) phân tích ý định sâu của truy vấn (hỏi nhanh, hỏi tổng quan hay cần bối cảnh sâu) để định tuyến sang dạng RAG tiêu chuẩn hoặc HRAG. Một thiết kế chốt chặn (Fallback Agent) sẽ tự động quay hồi về quy trình thông thường nếu việc rà soát trước đó rơi vào ngõ cụt (tìm được quá ít ngữ cảnh).
-    \item \textbf{2. Context Processing:} Sau khi các Agent nhả ra đa dạng mảnh nguyên liệu (Raw chunks), quy trình sẽ gom tập trung và lọc đi các đoạn trùng lặp (Deduplication).
-    \item \textbf{3. Reranking:} Cuối cùng, rổ tài liệu sau chuẩn hóa đi qua mô hình học máy (Cross-Encoder) để chấm điểm và tái xếp hạng. Top 5 Chunk giá trị nhất sẽ xuất ra làm thành phần ghép cốt lõi vào prompt để mô hình Generative phản hồi.
-\end{itemize}
+
+\textbf{1. Adaptive RAG Agent:} Bộ phân loại (Classifier) phân tích ý định sâu của truy vấn (hỏi nhanh, hỏi tổng quan hay cần bối cảnh sâu) để định tuyến sang dạng RAG tiêu chuẩn hoặc HRAG. Một thiết kế chốt chặn (Fallback Agent) sẽ tự động quay hồi về quy trình thông thường nếu việc rà soát trước đó rơi vào ngõ cụt do tìm kiếm được quá ít ngữ cảnh.
+
+\textbf{2. Context Processing:} Sau khi các Agent nhả ra đa dạng mảnh nguyên liệu (Raw chunks), quy trình sẽ gom tập trung toàn bộ khối dữ liệu này và lọc đi các đoạn trùng lặp (Deduplication).
+
+\textbf{3. Reranking:} Cuối cùng, rổ tài liệu sau chuẩn hóa sẽ đi qua mô hình học máy chéo (Cross-Encoder) để chấm điểm và tái xếp hạng. Top 5 Chunk giá trị nhất ở kết quả xuất ra sẽ làm thành phần ghép cốt lõi bổ trợ cho Prompt truyền vào mô hình Generative phản hồi.
 
 \subsection{Thiết kế Lớp Sinh phản hồi và Hậu kiểm (Generation \& Validation)}
 Cuối cùng, Response Generation nhận ngữ cảnh tinh lọc để biên soạn câu trả lời. Điểm khác biệt quan trọng là sự xuất hiện của Validator Agent, một lớp hậu kiểm phân luồng thực hiện đối soát câu trả lời vừa sinh ra với nguồn tri thức gốc để phát hiện các lỗi "hallucination", đảm bảo rằng mọi thông tin gửi tới người dùng đều đạt độ chính xác cao nhất (Hình \ref{fig:generation_layer_detail}).
@@ -592,12 +599,14 @@ Cuối cùng, Response Generation nhận ngữ cảnh tinh lọc để biên so�
 Hệ thống sử dụng phương pháp đánh giá định lượng (Quantitative Evaluation) dành riêng cho hệ thống Retrieval-Augmented Generation (RAG) thông qua Ragas framework. Tập dữ liệu kiểm thử (Testset) bao gồm 246 mẫu câu hỏi và đáp án tham chiếu (Reference) được trích xuất từ dữ liệu giáo khoa, tập trung vào nhiều cấp độ hành vi nhận thức từ Nhận biết, Thông hiểu đến Vận dụng.
 
 Quá trình đánh giá được thực hiện trên 4 độ đo (Metrics) cốt lõi của Ragas:
-\begin{itemize}
-    \item \textbf{Faithfulness (Độ trung thực):} Đo lường mức độ câu trả lời của mô hình bám sát vào ngữ cảnh (context) mà hệ thống truy xuất được. Mức điểm cao chứng tỏ mô hình không bịa đặt thông tin (Hallucination).
-    \item \textbf{Answer Relevancy (Độ phù hợp):} Đánh giá xem câu trả lời có giải quyết trực tiếp truy vấn ban đầu của người dùng hay không, tránh việc trả lời lan man, sai trọng tâm.
-    \item \textbf{Context Precision (Độ chính xác ngữ cảnh):} Đánh giá khả năng xếp hạng của cụm truy xuất. Điểm số cao đồng nghĩa với việc các tài liệu liên quan nhất được xếp ở các thứ hạng đầu (Top-K).
-    \item \textbf{Context Recall (Độ bao phủ ngữ cảnh):} Đo lường khả năng hệ thống tìm ra đầy đủ các thông tin cần thiết từ Cơ sở tri thức (Knowledge Base) so với đáp án tiêu chuẩn (Reference).
-\end{itemize}
+
+\textbf{Faithfulness (Độ trung thực):} Đo lường mức độ câu trả lời của mô hình bám sát vào ngữ cảnh (context) mà hệ thống truy xuất được. Mức điểm cao chứng tỏ mô hình không bịa đặt thông tin (Hallucination).
+
+\textbf{Answer Relevancy (Độ phù hợp):} Đánh giá xem câu trả lời có giải quyết trực tiếp truy vấn ban đầu của người dùng hay không, tránh việc trả lời lan man, sai trọng tâm.
+
+\textbf{Context Precision (Độ chính xác ngữ cảnh):} Đánh giá khả năng xếp hạng của cụm truy xuất. Điểm số cao đồng nghĩa với việc các tài liệu liên quan nhất được xếp ở các thứ hạng đầu (Top-K).
+
+\textbf{Context Recall (Độ bao phủ ngữ cảnh):} Đo lường khả năng hệ thống tìm ra đầy đủ các thông tin cần thiết từ Cơ sở tri thức (Knowledge Base) so với đáp án tiêu chuẩn (Reference).
 
 \subsection{Kết quả thực nghiệm phân hệ RAG}
 Sau quá trình chạy tự động 246 mẫu thử trên toàn bộ pipeline của hệ thống, kết quả điểm số đánh giá trung bình trên các độ đo như sau:

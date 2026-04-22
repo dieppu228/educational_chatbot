@@ -1,15 +1,121 @@
 """
-Slide Pipeline Schemas — Multi-Agent Slide Generation I/O.
+Slide Pipeline Schemas — Multi-Agent Content Generation I/O.
 
-Định nghĩa data contract cho toàn bộ slide pipeline:
-    - Pipeline input/output
+Định nghĩa data contract cho toàn bộ content pipeline (slide + lesson plan):
+    - ContentPipelineInput (narrow interface DTO)
     - Agent envelope (kết quả mỗi agent)
     - Payload riêng cho từng agent (outline, content, media, quiz)
     - Merged slide (output cuối cùng)
 """
 
+import re
+from dataclasses import dataclass, field
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Literal
+
+
+# ============================================================
+# CONTENT PIPELINE INPUT — Narrow Interface DTO
+# ============================================================
+
+@dataclass
+class ContentPipelineInput:
+    """
+    Narrow interface DTO — chỉ chứa INPUT cần thiết cho ContentSupervisor graph.
+
+    Adapter pattern:
+        RequestContext (broad, ~20 fields)
+        → ContentPipelineInput (narrow, 7 fields)
+        → ContentSupervisorState (graph dict)
+
+    Usage:
+        pipeline_input = ContentPipelineInput.from_context(ctx, rag_chunks, "slide")
+        initial_state = pipeline_input.to_graph_state()
+    """
+    task_type: str          # "slide" | "lesson_plan"
+    query: str              # enriched query
+    topic: str              # topic bài học
+    grade: str              # "10" | "11" | "12"
+    book: str               # "CD" | "KNTT"
+    rag_chunks: list = field(default_factory=list)
+    request_id: str = ""
+
+    @classmethod
+    def from_context(cls, ctx, rag_chunks: list, task_type: str = "slide") -> "ContentPipelineInput":
+        """
+        Factory: extract chỉ fields cần thiết từ RequestContext.
+
+        Args:
+            ctx: RequestContext — broad context object
+            rag_chunks: RAG retrieved chunks (đã qua retrieval + rerank)
+            task_type: "slide" hoặc "lesson_plan"
+        """
+        # Extract topic
+        topic = (
+            (ctx.intent_result.topic if ctx.intent_result else None)
+            or (ctx.session.topic if ctx.session else None)
+            or "Bài học"
+        )
+
+        # Extract grade
+        grade = cls._extract_grade(topic, rag_chunks)
+
+        # Extract book
+        book = ctx.effective_book or "KNTT"
+
+        return cls(
+            task_type=task_type,
+            query=ctx.enriched_query,
+            topic=topic,
+            grade=grade,
+            book=book,
+            rag_chunks=rag_chunks,
+            request_id=ctx.request_id or "",
+        )
+
+    def to_graph_state(self) -> dict:
+        """
+        Serialize thành ContentSupervisorState initial dict.
+
+        Chỉ set INPUT fields + required defaults.
+        Intermediate/output fields dùng None/empty defaults.
+        """
+        return {
+            # ── Input (from DTO) ──
+            "task_type": self.task_type,
+            "request_id": self.request_id,
+            "query": self.query,
+            "topic": self.topic,
+            "grade": self.grade,
+            "book": self.book,
+            "rag_chunks": self.rag_chunks,
+            "messages": [],
+            # ── Intermediate (graph sẽ populate) ──
+            "context_map": "",
+            "chunk_map": {},
+            "outline_payload": None,
+            "content_payload": None,
+            "media_payload": None,
+            "quiz_payload": None,
+            # ── Output (graph sẽ populate) ──
+            "merged_slides": None,
+            "final_output": None,
+            "status": "pending",
+            "error_message": None,
+        }
+
+    @staticmethod
+    def _extract_grade(topic: str, contexts: list) -> str:
+        """Extract grade từ topic hoặc context metadata."""
+        match = re.search(r'(?:lớp|lop|grade)\s*(10|11|12)', topic.lower())
+        if match:
+            return match.group(1)
+        for ctx in contexts[:5]:
+            meta = ctx.get("metadata", {}) if isinstance(ctx, dict) else {}
+            grade = meta.get("grade")
+            if grade in ("10", "11", "12"):
+                return grade
+        return "10"
 
 
 # ============================================================
@@ -126,6 +232,7 @@ class MergedSlide(BaseModel):
 
 
 __all__ = [
+    "ContentPipelineInput",
     "AgentResult",
     "MediaItem", "MediaPayload",
     "OutlineSlide", "OutlinePayload",

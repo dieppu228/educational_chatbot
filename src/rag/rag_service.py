@@ -32,6 +32,7 @@ class RAGService:
         self,
         ctx: RequestContext,
         intent_hint: Optional[str] = None,
+        task_type: Optional[str] = None,
     ) -> List[Dict]:
         """
         Adaptive RAG — tự chọn chiến lược retrieval.
@@ -79,7 +80,38 @@ class RAGService:
                     filter=result.metadata_filter,
                     reason=result.reason,
                 )
-                return result.chunks
+
+                # Task-aware rerank: slide/lesson_plan giữ nhiều chunks hơn
+                rerank_top_n = self._get_rerank_top_n(task_type)
+                if len(result.chunks) > rerank_top_n:
+                    result_chunks = self.reranker.rerank(
+                        queries[0] if queries else ctx.query,
+                        result.chunks,
+                        top_n=rerank_top_n,
+                    )
+                else:
+                    result_chunks = result.chunks
+
+                # Score cutoff: loại chunks chất lượng thấp
+                min_score = getattr(settings, 'RERANKER_MIN_SCORE', 0.15)
+                before_count = len(result_chunks)
+                filtered = self.reranker.filter_context(
+                    result_chunks, min_score=min_score,
+                )
+                # Safety net: nếu cutoff loại hết, giữ top 3
+                if not filtered and result_chunks:
+                    filtered = result_chunks[:3]
+                    logger.warning(
+                        f"Score cutoff dropped ALL {before_count} chunks "
+                        f"(min_score={min_score}), keeping top 3 as fallback"
+                    )
+                elif len(filtered) < before_count:
+                    logger.info(
+                        f"Score cutoff: {before_count} -> {len(filtered)} chunks "
+                        f"(min_score={min_score})"
+                    )
+
+                return filtered
 
             # ── Multi-query: loop → gom → deduplicate ──
             all_chunks = []
@@ -108,14 +140,34 @@ class RAGService:
                 f"{len(all_chunks)} unique chunks ({total_time:.2f}s)"
             )
 
-            # Rerank tổng hợp nếu nhiều chunks
-            rerank_top_n = getattr(settings, 'RERANKER_TOP_N', 5)
+            # Task-aware rerank: slide/lesson_plan giữ nhiều chunks hơn
+            rerank_top_n = self._get_rerank_top_n(task_type)
             if len(all_chunks) > rerank_top_n:
                 primary_query = queries[0]
                 all_chunks = self.reranker.rerank(
                     primary_query, all_chunks,
                     top_n=rerank_top_n,
                 )
+
+            # Score cutoff: loại chunks chất lượng thấp
+            min_score = getattr(settings, 'RERANKER_MIN_SCORE', 0.15)
+            before_count = len(all_chunks)
+            filtered = self.reranker.filter_context(
+                all_chunks, min_score=min_score,
+            )
+            # Safety net
+            if not filtered and all_chunks:
+                filtered = all_chunks[:3]
+                logger.warning(
+                    f"Score cutoff dropped ALL {before_count} chunks "
+                    f"(min_score={min_score}), keeping top 3 as fallback"
+                )
+            elif len(filtered) < before_count:
+                logger.info(
+                    f"Score cutoff: {before_count} -> {len(filtered)} chunks "
+                    f"(min_score={min_score})"
+                )
+            all_chunks = filtered
 
             ctx.add_debug_step(
                 "RAG",
@@ -154,6 +206,18 @@ class RAGService:
         if match:
             return match.group(1)
         return None
+
+    @staticmethod
+    def _get_rerank_top_n(task_type: Optional[str] = None) -> int:
+        """Trả về rerank limit phù hợp với task type.
+
+        Slide/lesson_plan cần nhiều chunks hơn để phủ toàn bộ nội dung bài.
+        """
+        if task_type in ("slide", "slide_generate"):
+            return getattr(settings, 'RERANKER_TOP_N_SLIDE', 15)
+        elif task_type in ("lesson_plan", "giao_an"):
+            return getattr(settings, 'RERANKER_TOP_N_LESSON_PLAN', 20)
+        return getattr(settings, 'RERANKER_TOP_N', 5)
 
 
 __all__ = ["RAGService"]

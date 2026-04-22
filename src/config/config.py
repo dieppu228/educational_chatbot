@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # ===== Retrieval Configuration =====
     RETRIEVER_TOP_K: int = 25
     RERANKER_TOP_N: int = 5
+    RERANKER_TOP_N_SLIDE: int = 15        # Slide cần phủ toàn bộ bài
+    RERANKER_TOP_N_LESSON_PLAN: int = 10  # Giáo án cần nhiều nhất
+    RERANKER_MIN_SCORE: float = 0.00      # Cutoff chunks score quá thấp
     RRF_K_WEIGHT: int = 60
     
     # ===== Question Generation =====

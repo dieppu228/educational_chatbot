@@ -196,7 +196,7 @@ class Orchestrator:
         }
         trace_service.write_trace(ctx, full_response)
 
-        logger.info(f"Total time: {ctx.elapsed_time}s")
+        logger.info(f"Total tigit stame: {ctx.elapsed_time}s")
         logger.info("=" * 60)
 
     # ============================================================
