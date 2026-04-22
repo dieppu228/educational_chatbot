@@ -24,6 +24,7 @@ class IntentResult:
     sub_intent: Optional[str] = None   # Filled by ActionPlanner
     task_type: Optional[str] = None    # "mcq" | "essay" | "fill_blank" | "true_false" | "slide" | ...
     topic: Optional[str] = None        # Detected topic
+    lesson_reference: Optional[str] = None # Detected lesson structural ref like "Bài 1 Chủ đề A"
     is_new_topic: bool = False         # Whether topic changed from current session
     book: Optional[str] = None         # "CD" | "KNTT" | None (detected book series)
     raw_response: Optional[str] = None # Raw LLM response for debugging
@@ -56,12 +57,14 @@ class IntentRouter:
     MIN_CONFIDENCE = 0.5
 
     def __init__(self, api_key: str = None, model_name: str = None):
+        from src.llm.knowledge_map import KnowledgeMap
         self.api_key = api_key or settings.GENAI_API_KEY or os.getenv("GENAI_API_KEY", "")
         if not self.api_key:
             raise ValueError("GENAI_API_KEY not set.")
 
         self.model_name = model_name or settings.LLM_MODEL or "gemini-2.5-flash-lite"
         self.client = genai.Client(api_key=self.api_key)
+        self.k_map = KnowledgeMap()
 
     def detect(
         self,
@@ -136,6 +139,16 @@ class IntentRouter:
                     if intent.primary_intent not in self.VALID_INTENTS:
                         logger.debug(f"Filtered invalid intent: {intent.primary_intent}")
                         continue
+                    
+                    # Mapping lesson_reference to exact Topic
+                    if intent.lesson_reference:
+                        semantic_topic = self.k_map.lookup_semantic_topic(intent.book, intent.lesson_reference)
+                        if semantic_topic:
+                            if intent.topic:
+                                intent.topic = f"{intent.topic} ({semantic_topic})"
+                            else:
+                                intent.topic = semantic_topic
+                                
                     # Agent loại bỏ intent kém tin cậy
                     # (confidence được parse từ LLM response, default 0.9)
                     validated.append(intent)
@@ -259,6 +272,7 @@ class IntentRouter:
             primary_intent=intent,
             task_type=task_type,
             topic=data.get("topic"),
+            lesson_reference=data.get("lesson_reference"),
             is_new_topic=data.get("is_new_topic", False),
             book=book,
         )

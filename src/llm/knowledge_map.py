@@ -39,6 +39,10 @@ class KnowledgeMap(BaseHandler):
     Giúp gợi ý bài học cũ hoặc mở rộng kiến thức mới.
     """
     
+    def __init__(self, table_of_contents_path="data/table_of_contents.md"):
+        self.toc_path = table_of_contents_path
+        self.lessons = self._parse_toc()
+        
     def find_relations(self, context: str) -> List[Dict[str, str]]:
         """
         Tìm kiếm các chủ đề liên quan từ nội dung bài học.
@@ -62,6 +66,96 @@ class KnowledgeMap(BaseHandler):
             return data.get("related_topics", [])
         except:
             return []
+
+    def _parse_toc(self) -> List[Dict[str, Any]]:
+        import os
+        import re
+        lessons = []
+        if not os.path.exists(self.toc_path):
+            return lessons
+            
+        with open(self.toc_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            
+        current_book = None
+        current_grade = None
+        current_topic_ref = None
+        current_topic_name = None
+        
+        for line in lines:
+            line = line.strip()
+            if not line: continue
+            
+            # Match book
+            if "Cánh Diều" in line or "(CD)" in line:
+                current_book = "CD"
+            elif "Kết Nối Tri Thức" in line or "(KNTT)" in line:
+                current_book = "KNTT"
+            
+            # Match grade
+            m_grade = re.match(r'^## Lớp (\d+)', line)
+            if m_grade:
+                current_grade = m_grade.group(1)
+            
+            # Match Topic
+            m_topic = re.search(r'CHỦ ĐỀ ([A-Z0-9]+)[:.]?\s*(.*)', line, re.IGNORECASE)
+            if m_topic:
+                current_topic_ref = m_topic.group(1).upper()
+                current_topic_name = m_topic.group(2).strip()
+                
+            # Match Lesson
+            m_lesson = re.match(r'^Bài (\d+)[\.\:]\s*(.*)', line, re.IGNORECASE)
+            if m_lesson and current_book:
+                lessons.append({
+                    "book": current_book,
+                    "grade": current_grade,
+                    "topic_ref": current_topic_ref,
+                    "topic_name": current_topic_name,
+                    "lesson_num": m_lesson.group(1),
+                    "lesson_name": m_lesson.group(2).strip()
+                })
+        return lessons
+
+    def lookup_semantic_topic(self, book_hint: Optional[str], lesson_reference: str) -> Optional[str]:
+        if not lesson_reference:
+            return None
+            
+        import re
+        topic_ref = None
+        lesson_num = None
+        
+        m_topic = re.search(r'chủ đề\s*([a-zA-Z0-9]+)', lesson_reference, re.IGNORECASE)
+        if m_topic:
+            topic_ref = m_topic.group(1).upper()
+            
+        m_lesson = re.search(r'bài\s*(\d+)', lesson_reference, re.IGNORECASE)
+        if m_lesson:
+            lesson_num = m_lesson.group(1)
+            
+        # Nhan dien rieng re
+        if not topic_ref and not lesson_num:
+            return None
+            
+        matches = []
+        for l in self.lessons:
+            if book_hint and l["book"] != book_hint:
+                continue
+            
+            match = True
+            if topic_ref and l["topic_ref"] != topic_ref:
+                match = False
+            if lesson_num and l["lesson_num"] != lesson_num:
+                match = False
+                
+            if match:
+                matches.append(l)
+                
+        if not matches:
+            return None
+            
+        best = matches[0]
+        # Return Semantic Topic (Topic Name + Lesson Name)
+        return f"{best['topic_name']} - {best['lesson_name']}"
 
     def handle(self, query: str, **kwargs):
         """KnowledgeMap không dùng handle trực tiếp."""

@@ -152,7 +152,7 @@ def supervisor_node(state: ContentSupervisorState) -> dict:
     Supervisor: LLM đọc messages, quyết định gọi tool nào tiếp.
     Nếu không cần gọi tool → trả lời cuối → END.
     """
-    from src.config import settings
+    from src.config.config import settings
 
     llm = ChatGoogleGenerativeAI(
         model=settings.LLM_MODEL,
@@ -161,7 +161,34 @@ def supervisor_node(state: ContentSupervisorState) -> dict:
     )
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
-    response = llm_with_tools.invoke(state["messages"])
+    messages = list(state["messages"])
+
+    # ── Post-HITL nudge: nếu đã có outline nhưng chưa có content → nhắc supervisor ──
+    has_outline = state.get("outline_payload") is not None
+    has_content = state.get("content_payload") is not None
+    has_merged = state.get("merged_slides") is not None
+
+    if has_outline and not has_content:
+        messages.append(HumanMessage(
+            content=(
+                "Outline đã được duyệt. Bây giờ hãy tiếp tục workflow: "
+                "1) Gọi generate_content() để viết nội dung chi tiết, "
+                "2) Gọi generate_media() và generate_quiz() nếu cần, "
+                "3) Gọi merge_results() để ghép slides, "
+                "4) Gọi check_quality() để kiểm tra. "
+                "KHÔNG trả lời text — hãy gọi generate_content() NGAY."
+            )
+        ))
+    elif has_content and not has_merged:
+        messages.append(HumanMessage(
+            content=(
+                "Content đã sẵn sàng. Hãy gọi merge_results() để ghép "
+                "outline + content thành slides hoàn chỉnh. "
+                "KHÔNG trả lời text — hãy gọi merge_results() NGAY."
+            )
+        ))
+
+    response = llm_with_tools.invoke(messages)
 
     return {"messages": [response]}
 
@@ -267,6 +294,7 @@ def build_content_supervisor(checkpointer=None):
     graph = builder.compile(checkpointer=checkpointer)
 
     logger.info("ContentSupervisor graph compiled successfully")
+    
     return graph
 
 

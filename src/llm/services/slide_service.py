@@ -1,10 +1,13 @@
 """
-SlideService — Domain logic cho Slide generation.
+SlideService — Domain logic cho Slide & Lesson Plan generation.
 
-v3: Tích hợp LangGraph ContentSupervisor thay SlidePipeline custom.
-    - generate_slide() → gọi graph.invoke() (sync)
-    - resume_outline() → resume HITL sau khi user review outline
-    - answer_exercise() → giữ nguyên logic chấm bài tập slide
+v4: Tích hợp ContentPipelineInput (narrow interface DTO)
+    + generate_lesson_plan() cho giáo án.
+
+    - generate_slide()       → gọi graph.invoke() với task_type="slide"
+    - generate_lesson_plan() → gọi graph.invoke() với task_type="lesson_plan"
+    - resume_outline()       → resume HITL sau khi user review outline
+    - answer_exercise()      → giữ nguyên logic chấm bài tập slide
 """
 
 import time
@@ -14,6 +17,7 @@ import re
 from typing import Generator, Optional, Dict, Any
 
 from src.schemas.context import RequestContext
+from src.schemas.slide_schemas import ContentPipelineInput
 from src.llm.memory import Session, QuestionRecord
 from src.llm.handlers.question.scorer import QuestionScorer
 from src.rag.rag_service import RAGService
@@ -26,8 +30,9 @@ logger = logging.getLogger("chatbot.slide_service")
 
 class SlideService:
     """
-    Quản lý domain logic liên quan đến Slide:
+    Quản lý domain logic liên quan đến Content Generation:
         - Sinh slide bài giảng (LangGraph supervisor)
+        - Sinh giáo án (LangGraph supervisor, task_type="lesson_plan")
         - Resume HITL sau outline review
         - Chấm bài tập slide
     """
@@ -38,7 +43,7 @@ class SlideService:
         self.scorer = QuestionScorer()
 
     # ────────────────────────────────────────────────────────
-    # GENERATE SLIDE (v3 — LangGraph Supervisor)
+    # GENERATE SLIDE (v4 — Narrow Interface)
     # ────────────────────────────────────────────────────────
 
     @safe_execute(fallback_message="Lỗi tạo slide", log_prefix="SlideService.generate")
@@ -46,50 +51,54 @@ class SlideService:
         self, ctx: RequestContext
     ) -> Generator[str, None, None]:
         """Sinh slide bài giảng bằng LangGraph ContentSupervisor."""
-        session = ctx.session
-        query = ctx.enriched_query
+        yield from self._run_content_pipeline(ctx, task_type="slide")
 
-        yield "Đang phân tích nội dung để thiết kế bài giảng..."
+    # ────────────────────────────────────────────────────────
+    # GENERATE LESSON PLAN
+    # ────────────────────────────────────────────────────────
+
+    @safe_execute(fallback_message="Lỗi tạo giáo án", log_prefix="SlideService.lesson_plan")
+    def generate_lesson_plan(
+        self, ctx: RequestContext
+    ) -> Generator[str, None, None]:
+        """Sinh giáo án bằng LangGraph ContentSupervisor (task_type=lesson_plan)."""
+        yield from self._run_content_pipeline(ctx, task_type="lesson_plan")
+
+    # ────────────────────────────────────────────────────────
+    # SHARED PIPELINE (slide + lesson_plan)
+    # ────────────────────────────────────────────────────────
+
+    def _run_content_pipeline(
+        self, ctx: RequestContext, task_type: str = "slide"
+    ) -> Generator[str, None, None]:
+        """
+        Shared pipeline cho cả slide và lesson_plan.
+
+        Args:
+            ctx: RequestContext từ orchestrator
+            task_type: "slide" hoặc "lesson_plan"
+        """
+        session = ctx.session
+        task_label = "giáo án" if task_type == "lesson_plan" else "slide"
+
+        yield f"Đang phân tích nội dung để thiết kế {task_label}..."
 
         # ① RAG Search
-        contexts = self.rag_service.get_context(ctx, intent_hint="generate")
+        contexts = self.rag_service.get_context(ctx, intent_hint="generate", task_type=task_type)
         if not contexts:
-            yield "Không tìm thấy nội dung bài học phù hợp."
+            yield f"Không tìm thấy nội dung bài học phù hợp."
             return
 
         if len(contexts) < 3:
-            yield "Không đủ tài liệu để tạo slide (cần ít nhất 3 nguồn)."
+            yield f"Không đủ tài liệu để tạo {task_label} (cần ít nhất 3 nguồn)."
             return
 
         yield f"Đã tìm thấy {len(contexts)} nguồn tài liệu. Đang khởi tạo pipeline..."
 
-        # ② Build initial state
-        topic = (ctx.intent_result.topic if ctx.intent_result else None) or session.topic or "Bài học"
-        grade = self._extract_grade(topic, contexts)
-        book = ctx.effective_book or "KNTT"
-        thread_id = f"slide-{ctx.request_id or uuid.uuid4().hex[:8]}"
-
-        initial_state = {
-            "task_type": "slide",
-            "request_id": ctx.request_id or thread_id,
-            "query": query,
-            "topic": topic,
-            "grade": grade,
-            "book": book,
-            "rag_chunks": contexts,
-            "messages": [],
-            # Initialize optional fields
-            "context_map": "",
-            "chunk_map": {},
-            "outline_payload": None,
-            "content_payload": None,
-            "media_payload": None,
-            "quiz_payload": None,
-            "merged_slides": None,
-            "final_output": None,
-            "status": "pending",
-            "error_message": None,
-        }
+        # ② Build input via narrow DTO
+        pipeline_input = ContentPipelineInput.from_context(ctx, contexts, task_type=task_type)
+        thread_id = f"{task_type}-{pipeline_input.request_id or uuid.uuid4().hex[:8]}"
+        initial_state = pipeline_input.to_graph_state()
 
         config = {
             "configurable": {"thread_id": thread_id},
@@ -97,7 +106,7 @@ class SlideService:
         }
 
         # ③ Run graph (sync)
-        yield "Đang chạy supervisor pipeline..."
+        yield f"Đang chạy supervisor pipeline ({task_label})..."
 
         t0 = time.time()
         result = invoke_graph_sync(self.graph, initial_state, config)
@@ -112,6 +121,7 @@ class SlideService:
                 "_graph_thread_id": thread_id,
                 "_graph_config": config,
                 "_interrupt": True,
+                "_task_type": task_type,
             }
 
             # Lấy interrupt payload
@@ -121,30 +131,30 @@ class SlideService:
                 msg = interrupt_value.get("message", "Review outline")
 
                 # Hiển thị outline cho user
-                yield f"\n\n📋 **Dàn ý bài giảng đã tạo xong** (⏱️ {pipeline_time:.1f}s)"
+                yield f"\n\n📋 **Dàn ý {task_label} đã tạo xong** (⏱️ {pipeline_time:.1f}s)"
                 yield f"\n{msg}"
 
                 if isinstance(outline, dict):
                     slides = outline.get("slides", [])
-                    yield f"\n📊 '{outline.get('lesson_title', topic)}' — {len(slides)} slides:"
+                    yield f"\n📊 '{outline.get('lesson_title', pipeline_input.topic)}' — {len(slides)} sections:"
                     for i, s in enumerate(slides, 1):
                         icon = {"title": "🎯", "content": "📖", "exercise": "✏️",
                                 "summary": "📋"}.get(s.get("slide_type", ""), "📄")
                         yield f"\n  {i}. [{icon} {s.get('slide_type', '')}] {s.get('title', '')}"
 
-                yield "\n\n💡 Gửi 'ok' để duyệt, hoặc mô tả chỉnh sửa bạn muốn."
+                yield f"\n\n💡 Gửi 'ok' để duyệt, hoặc mô tả chỉnh sửa bạn muốn."
             else:
                 yield f"\n⏸️ Pipeline đang chờ input: {interrupt_value}"
 
             ctx.add_debug_step(
-                "Handler", action="generate_slide", status="hitl_waiting",
+                "Handler", action=f"generate_{task_type}", status="hitl_waiting",
                 pipeline_time_s=round(pipeline_time, 2),
                 thread_id=thread_id,
             )
             return
 
         # ⑤ No interrupt — pipeline hoàn thành
-        yield from self._process_completed_result(result, session, ctx, pipeline_time)
+        yield from self._process_completed_result(result, session, ctx, pipeline_time, task_type)
 
     # ────────────────────────────────────────────────────────
     # RESUME HITL (sau khi user review outline)
@@ -169,6 +179,7 @@ class SlideService:
 
         thread_id = stored["_graph_thread_id"]
         config = stored["_graph_config"]
+        task_type = stored.get("_task_type", "slide")
 
         # Parse user feedback
         feedback_lower = user_feedback.strip().lower()
@@ -189,7 +200,7 @@ class SlideService:
             yield "⏸️ Pipeline cần thêm input..."
             return
 
-        yield from self._process_completed_result(result, session, ctx, pipeline_time)
+        yield from self._process_completed_result(result, session, ctx, pipeline_time, task_type)
 
     # ────────────────────────────────────────────────────────
     # PROCESS COMPLETED RESULT
@@ -201,8 +212,12 @@ class SlideService:
         session,
         ctx: RequestContext,
         pipeline_time: float,
+        task_type: str = "slide",
     ) -> Generator[str, None, None]:
         """Xử lý kết quả khi graph hoàn thành (không interrupt)."""
+
+        task_label = "giáo án" if task_type == "lesson_plan" else "slide"
+        action_name = f"generate_{task_type}"
 
         status = result.get("status", "unknown")
         merged = result.get("merged_slides")
@@ -211,9 +226,9 @@ class SlideService:
 
         if not merged or status == "failed":
             error_msg = result.get("error_message", "Pipeline không trả về kết quả")
-            yield f"Không thể tạo slide: {error_msg}"
+            yield f"Không thể tạo {task_label}: {error_msg}"
             ctx.add_debug_step(
-                "Handler", action="generate_slide", status="failed",
+                "Handler", action=action_name, status="failed",
                 error_message=error_msg,
                 pipeline_time_s=round(pipeline_time, 2),
             )
@@ -231,40 +246,50 @@ class SlideService:
             "slides": slides_data,
             "total_slides": total_slides,
             "_interrupt": False,
+            "_task_type": task_type,
         }
 
-        # Extract exercises
+        # Extract exercises (chỉ cho slide, lesson plan không cần quiz state)
         exercise_count = 0
-        for slide in (slides_data if isinstance(slides_data, list) else []):
-            if isinstance(slide, dict) and slide.get("slide_type") == "exercise":
-                questions = slide.get("questions", [])
-                if questions:
-                    for j, q_data in enumerate(questions):
-                        slide_state.add_exercise(
-                            question_type="mcq",
-                            content=q_data if isinstance(q_data, dict) else {},
-                            slide_idx=slides_data.index(slide),
-                            q_idx=j,
-                        )
-                        exercise_count += 1
+        if task_type == "slide":
+            for slide in (slides_data if isinstance(slides_data, list) else []):
+                if isinstance(slide, dict) and slide.get("slide_type") == "exercise":
+                    questions = slide.get("questions", [])
+                    if questions:
+                        for j, q_data in enumerate(questions):
+                            slide_state.add_exercise(
+                                question_type="mcq",
+                                content=q_data if isinstance(q_data, dict) else {},
+                                slide_idx=slides_data.index(slide),
+                                q_idx=j,
+                            )
+                            exercise_count += 1
 
         # Display
-        display = self._format_slides_display(lesson_title, slides_data)
+        if task_type == "lesson_plan":
+            display = self._format_lesson_plan_display(lesson_title, slides_data)
+        else:
+            display = self._format_slides_display(lesson_title, slides_data)
+
         session.add_message("assistant", display)
 
-        yield f"\n\n✅ Đã tạo {total_slides} slides cho '{lesson_title}' (⏱️ {pipeline_time:.1f}s)"
+        yield f"\n\n✅ Đã tạo {total_slides} {task_label} sections cho '{lesson_title}' (⏱️ {pipeline_time:.1f}s)"
         yield "\n\n" + display
 
-        if slide_state.has_exercises:
+        if task_type == "slide" and slide_state.has_exercises:
             yield f"\n📝 Slide có {slide_state.total_exercises} câu hỏi bài tập. Bạn có thể trả lời ngay!"
 
         ctx.add_debug_step(
-            "Handler", action="generate_slide", status="success",
+            "Handler", action=action_name, status="success",
             pipeline_time_s=round(pipeline_time, 2),
             total_slides=total_slides,
             lesson_title=lesson_title,
             exercises_extracted=exercise_count,
         )
+
+    # ────────────────────────────────────────────────────────
+    # DISPLAY FORMATTERS
+    # ────────────────────────────────────────────────────────
 
     def _format_slides_display(self, lesson_title: str, slides: list) -> str:
         """Format slides thành text display."""
@@ -284,6 +309,30 @@ class SlideService:
                 lines.append(f"  • {b}")
             if slide.get("questions"):
                 lines.append(f"  📝 {len(slide['questions'])} câu hỏi bài tập")
+            lines.append("")
+        return "\n".join(lines)
+
+    def _format_lesson_plan_display(self, lesson_title: str, sections: list) -> str:
+        """Format giáo án thành text display."""
+        if not sections:
+            return "Không có nội dung giáo án."
+
+        lines = [f"📝 {lesson_title} ({len(sections)} phần)", "═" * 50, ""]
+        for i, section in enumerate(sections, 1):
+            if not isinstance(section, dict):
+                continue
+            slide_type = section.get("slide_type", "content")
+            icon = {"title": "📋", "content": "📖", "exercise": "✏️",
+                    "summary": "📝"}.get(slide_type, "📄")
+            lines.append(f"╔══ Phần {i} [{icon} {slide_type.upper()}] ══╗")
+            lines.append(f"  📌 {section.get('title', '')}")
+            for b in section.get("bullets", []):
+                lines.append(f"  ▸ {b}")
+            notes = section.get("notes")
+            if notes:
+                lines.append(f"  📎 Ghi chú GV: {notes[:150]}{'...' if len(notes) > 150 else ''}")
+            if section.get("questions"):
+                lines.append(f"  🎯 {len(section['questions'])} tiêu chí đánh giá")
             lines.append("")
         return "\n".join(lines)
 
@@ -335,20 +384,6 @@ class SlideService:
     # ────────────────────────────────────────────────────────
     # HELPERS
     # ────────────────────────────────────────────────────────
-
-    def _extract_grade(self, topic: str, contexts: list) -> str:
-        """Extract grade từ topic hoặc context metadata."""
-        match = re.search(r'(?:lớp|lop|grade)\s*(10|11|12)', topic.lower())
-        if match:
-            return match.group(1)
-
-        for ctx in contexts[:5]:
-            meta = ctx.get("metadata", {})
-            grade = meta.get("grade")
-            if grade in ("10", "11", "12"):
-                return grade
-
-        return "10"
 
     def is_waiting_hitl(self, session) -> bool:
         """Check xem pipeline có đang chờ HITL input không."""

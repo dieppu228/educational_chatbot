@@ -1,16 +1,26 @@
 """
-OutlineAgent — Agent 2: Thiết kế dàn ý (outline) slide.
+OutlineAgent — Agent 2: Thiết kế dàn ý (outline) slide / giáo án.
 
 Vai trò: CRITICAL — fail thì abort toàn bộ pipeline.
-Output: OutlinePayload (lesson_title + 8-12 slides skeleton)
+Output: OutlinePayload (lesson_title + 8-12 slides/sections skeleton)
 Timeout: 6000ms | Retry: 2
+
+Hỗ trợ 2 task_type:
+    - "slide" → SLIDE_OUTLINE_TEMPLATE
+    - "lesson_plan" → LESSON_PLAN_OUTLINE_TEMPLATE
 """
 
 import logging
 from src.llm.handlers.content.slide_agents.base_slide_agent import BaseSlideAgent
-from src.llm.prompts import SLIDE_OUTLINE_TEMPLATE
+from src.llm.prompts import SLIDE_OUTLINE_TEMPLATE, LESSON_PLAN_OUTLINE_TEMPLATE
 
 logger = logging.getLogger("chatbot.slide_agent.outline")
+
+# Map task_type → prompt template
+_OUTLINE_TEMPLATES = {
+    "slide": SLIDE_OUTLINE_TEMPLATE,
+    "lesson_plan": LESSON_PLAN_OUTLINE_TEMPLATE,
+}
 
 
 class OutlineAgent(BaseSlideAgent):
@@ -19,20 +29,24 @@ class OutlineAgent(BaseSlideAgent):
     max_retries = 2
     error_code = "OUTLINE_FAILED"
 
-    def _execute(self, *, context_map: str, topic: str, grade: str, book: str, **kwargs) -> dict:
+    def _execute(self, *, context_map: str, topic: str, grade: str, book: str,
+                 task_type: str = "slide", **kwargs) -> dict:
         """
-        Sinh outline bài giảng từ context map.
+        Sinh outline bài giảng / giáo án từ context map.
 
         Args:
             context_map: Context đã format theo grouped structure (với chunk_ids)
             topic: Chủ đề bài học
             grade: Lớp (10/11/12)
             book: Bộ sách (CD/KNTT)
+            task_type: "slide" hoặc "lesson_plan" — chọn prompt tương ứng
 
         Returns:
             dict — OutlinePayload format
         """
-        prompt = SLIDE_OUTLINE_TEMPLATE.format(
+        template = _OUTLINE_TEMPLATES.get(task_type, SLIDE_OUTLINE_TEMPLATE)
+
+        prompt = template.format(
             topic=topic,
             grade=grade,
             book=book,
@@ -59,7 +73,7 @@ class OutlineAgent(BaseSlideAgent):
         payload["slides"] = slides
 
         logger.info(
-            f"Outline agent: '{payload.get('lesson_title')}' — "
+            f"Outline agent [{task_type}]: '{payload.get('lesson_title')}' — "
             f"{len(slides)} slides, types={[s.get('slide_type') for s in slides]}"
         )
         return payload
@@ -104,3 +118,4 @@ class OutlineAgent(BaseSlideAgent):
 
 
 __all__ = ["OutlineAgent"]
+

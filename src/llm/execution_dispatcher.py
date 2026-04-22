@@ -152,7 +152,8 @@ class ExecutionDispatcher:
     def _dispatch_lesson_plan(
         self, plan: ActionPlan, ctx: RequestContext
     ) -> Generator[str, None, None]:
-        yield "Chức năng tạo giáo án đang được phát triển."
+        """Sinh giáo án bài giảng qua ContentSupervisor pipeline."""
+        yield from self.slide_service.generate_lesson_plan(ctx)
 
     def _dispatch_answer_exercise(
         self, plan: ActionPlan, ctx: RequestContext

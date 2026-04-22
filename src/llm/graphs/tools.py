@@ -31,13 +31,15 @@ def generate_outline(
     book: str,
     state: Annotated[dict, InjectedState],
 ) -> str:
-    """Thiết kế dàn ý (outline) bài giảng gồm 8-12 slides.
+    """Thiết kế dàn ý (outline) bài giảng / giáo án gồm 7-12 slides/sections.
     Gọi tool này ĐẦU TIÊN trước bất kỳ tool nào khác.
     Sau khi tạo outline, user sẽ được review và có thể chỉnh sửa."""
 
     from src.llm.handlers.content.slide_agents import OutlineAgent
 
     context_map = state.get("context_map", "")
+    task_type = state.get("task_type", "slide")
+
     if not context_map:
         return json.dumps({"error": "Chưa có context_map. Cần preprocess trước.", "status": "failed"})
 
@@ -47,6 +49,7 @@ def generate_outline(
         topic=topic,
         grade=grade,
         book=book,
+        task_type=task_type,
     )
 
     if result.status == "failed":
@@ -54,11 +57,11 @@ def generate_outline(
         return json.dumps({"error": result.error_message, "status": "failed"})
 
     # ── HITL: pause cho user review ──
-    # Khi resume, node re-execute → agent.run() chạy lại (acceptable cost)
+    task_label = "giáo án" if task_type == "lesson_plan" else "bài giảng"
     feedback = interrupt({
         "type": "outline_review",
         "outline": result.payload,
-        "message": "Dàn ý bài giảng đã được tạo. Bạn có muốn chỉnh sửa không?",
+        "message": f"Dàn ý {task_label} đã được tạo. Bạn có muốn chỉnh sửa không?",
     })
 
     # User có thể approve (True) hoặc gửi edited outline (dict)
@@ -78,13 +81,14 @@ def generate_outline(
 def generate_content(
     state: Annotated[dict, InjectedState],
 ) -> str:
-    """Viết nội dung chi tiết cho từng slide dựa trên outline đã được duyệt.
+    """Viết nội dung chi tiết cho từng slide/section dựa trên outline đã được duyệt.
     CHỈ gọi tool này SAU KHI generate_outline đã hoàn thành."""
 
     from src.llm.handlers.content.slide_agents import ContentAgent
 
     outline_payload = state.get("outline_payload")
     chunk_map = state.get("chunk_map", {})
+    task_type = state.get("task_type", "slide")
 
     if not outline_payload:
         return json.dumps({"error": "Chưa có outline. Gọi generate_outline trước.", "status": "failed"})
@@ -97,6 +101,7 @@ def generate_content(
     result = agent.run(
         outline_slides=outline_slides,
         chunk_map=chunk_map,
+        task_type=task_type,
     )
 
     if result.status == "failed":

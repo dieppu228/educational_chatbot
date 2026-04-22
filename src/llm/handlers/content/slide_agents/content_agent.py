@@ -1,10 +1,14 @@
 """
-ContentAgent — Agent 3: Viết nội dung chi tiết cho từng slide.
+ContentAgent — Agent 3: Viết nội dung chi tiết cho từng slide / section giáo án.
 
 Vai trò: CRITICAL — phụ thuộc vào outline từ Agent 2.
-Output: ContentPayload (bullets + notes cho mỗi slide)
+Output: ContentPayload (bullets + notes cho mỗi slide/section)
 Timeout per slide: 2500ms | Retry per slide: 1
 Worker pool: max 3 concurrent slides.
+
+Hỗ trợ 2 task_type:
+    - "slide" → SLIDE_CONTENT_TEMPLATE
+    - "lesson_plan" → LESSON_PLAN_CONTENT_TEMPLATE
 """
 
 import logging
@@ -12,13 +16,19 @@ from typing import Dict, List, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from src.llm.handlers.content.slide_agents.base_slide_agent import BaseSlideAgent
-from src.llm.prompts import SLIDE_CONTENT_TEMPLATE
+from src.llm.prompts import SLIDE_CONTENT_TEMPLATE, LESSON_PLAN_CONTENT_TEMPLATE
 from src.schemas.slide_schemas import OutlineSlide
 
 logger = logging.getLogger("chatbot.slide_agent.content")
 
 # ── Maximum concurrent slide writers ──
 MAX_CONTENT_WORKERS = 3
+
+# Map task_type → prompt template
+_CONTENT_TEMPLATES = {
+    "slide": SLIDE_CONTENT_TEMPLATE,
+    "lesson_plan": LESSON_PLAN_CONTENT_TEMPLATE,
+}
 
 
 class ContentAgent(BaseSlideAgent):
@@ -32,20 +42,24 @@ class ContentAgent(BaseSlideAgent):
         *,
         outline_slides: List[Dict[str, Any]],
         chunk_map: Dict[str, str],
+        task_type: str = "slide",
         **kwargs,
     ) -> dict:
         """
-        Viết nội dung cho tất cả slides (parallel, max 3 workers).
+        Viết nội dung cho tất cả slides/sections (parallel, max 3 workers).
 
         Args:
             outline_slides: List outline slides từ Agent 2
             chunk_map: Dict[chunk_id → chunk_content] để lấy context subset
+            task_type: "slide" hoặc "lesson_plan" — chọn prompt tương ứng
 
         Returns:
             dict — ContentPayload format: {slides: [...]}
         """
         content_slides = []
         failed_slides = []
+
+        template = _CONTENT_TEMPLATES.get(task_type, SLIDE_CONTENT_TEMPLATE)
 
         # Dùng ThreadPoolExecutor cho parallel slide writing
         with ThreadPoolExecutor(max_workers=MAX_CONTENT_WORKERS) as executor:
@@ -59,6 +73,7 @@ class ContentAgent(BaseSlideAgent):
                     self._write_single_slide,
                     slide_data=slide_data,
                     chunk_map=chunk_map,
+                    template=template,
                 )
                 futures[future] = slide_data
 
@@ -79,7 +94,7 @@ class ContentAgent(BaseSlideAgent):
         content_slides.sort(key=lambda s: s.get("slide_id", ""))
 
         logger.info(
-            f"Content agent: {len(content_slides)} slides written, "
+            f"Content agent [{task_type}]: {len(content_slides)} slides written, "
             f"{len(failed_slides)} fallback"
         )
         return {"slides": content_slides}
@@ -88,8 +103,12 @@ class ContentAgent(BaseSlideAgent):
         self,
         slide_data: Dict[str, Any],
         chunk_map: Dict[str, str],
+        template=None,
     ) -> dict:
-        """Viết nội dung cho 1 slide cụ thể."""
+        """Viết nội dung cho 1 slide/section cụ thể."""
+        if template is None:
+            template = SLIDE_CONTENT_TEMPLATE
+
         slide_id = slide_data.get("slide_id", "s0")
         slide_type = slide_data.get("slide_type", "content")
         title = slide_data.get("title", "")
@@ -104,7 +123,7 @@ class ContentAgent(BaseSlideAgent):
                 context_parts.append(f"[{cid}]: {chunk_map[cid]}")
         context_subset = "\n\n".join(context_parts) if context_parts else "(Không có context cụ thể)"
 
-        prompt = SLIDE_CONTENT_TEMPLATE.format(
+        prompt = template.format(
             slide_id=slide_id,
             slide_type=slide_type,
             slide_title=title,
@@ -135,3 +154,4 @@ class ContentAgent(BaseSlideAgent):
 
 
 __all__ = ["ContentAgent"]
+

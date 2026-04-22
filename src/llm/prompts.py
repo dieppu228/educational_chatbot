@@ -111,13 +111,17 @@ CONTEXT
 Query: "{query}"
 {session_context}
 
-BƯỚC 1 — XÁC ĐỊNH BỘ SÁCH
+BƯỚC 1 — XÁC ĐỊNH BỘ SÁCH VÀ CẤU TRÚC BÀI HỌC
 Nhận diện bộ sách từ query:
 - "CD"   : cánh diều / canhieu / CD / diều
 - "KNTT" : kết nối tri thức / ket noi / KNTT / kết nối
 - null   : không đề cập
 
-Nếu book = "CD" VÀ query có "chương N" (N là số) thì đổi sang chữ:
+Nhận diện cấu trúc bài học (lesson_reference):
+Nếu query có nhắc đến cấu trúc SGK (chương, chủ đề, bài), hãy trích xuất nguyên văn.
+Ví dụ: "bài 1 chủ đề A", "bài 5", "chương 2 bài 3". Nếu không có, để null.
+
+Nếu book = "CD" VÀ query có "chương N" (N là số) thì đổi sang chữ trong topic:
 1=A, 2=B, 3=C, 4=D, 5=E, 6=F, 7=G, 8=H
 Ví dụ: "chương 2 lớp 10 Cánh diều" thì topic = "Chương B - Lớp 10"
 Nếu book = "KNTT" hoặc null thì giữ nguyên số.
@@ -154,15 +158,15 @@ SINGLE INTENT (phổ biến nhất):
 "tạo 5 câu trắc nghiệm về mạng" → 1 intent: generate, mcq
 "mạng máy tính là gì" → 1 intent: explain
 "chào bạn" → 1 intent: chat
-"tạo câu hỏi chương 3 lớp 12 Cánh diều" → 1 intent: generate, mcq, topic="Chương C - Lớp 12", book="CD"
+"tạo câu hỏi bài 1 chủ đề A lớp 12 Cánh diều" → 1 intent: generate, mcq, topic=null, lesson_reference="bài 1 chủ đề A", book="CD"
 
 MULTI-INTENT (khi query có nhiều yêu cầu rõ ràng):
 "Giải thích mạng máy tính rồi cho 5 câu trắc nghiệm"
   → 2 intents: [explain (order=1), generate/mcq (order=2)]
 "Slide bài CSDL KNTT lớp 11 và thêm câu đúng sai"
   → 2 intents: [generate/slide (order=1), generate/true_false (order=2)]
-"Tạo 3 câu trắc nghiệm và 2 câu tự luận về hệ điều hành"
-  → 2 intents: [generate/mcq (order=1), generate/essay (order=2)]
+"Tạo 3 câu trắc nghiệm bài 2 và 2 câu tự luận"
+  → 2 intents: [generate/mcq (order=1, lesson_reference="bài 2"), generate/essay (order=2)]
 
 INTERACT — chỉ dùng khi session đã có nội dung sinh trước đó
 [Session: đã sinh MCQ về "Mạng máy tính"]
@@ -182,6 +186,7 @@ CHỈ trả về JSON, KHÔNG giải thích:
       "intent": "...",
       "task_type": "..." hoặc null,
       "topic": "..." hoặc null,
+      "lesson_reference": "..." hoặc null,
       "is_new_topic": true/false,
       "book": "CD" hoặc "KNTT" hoặc null,
       "confidence": 0.0-1.0,
@@ -738,6 +743,152 @@ SLIDE_MEDIA_TEMPLATE = PromptTemplate(
 )
 
 
+# ── Lesson Plan Pipeline — Outline Planner ──────────────────
+
+LESSON_PLAN_OUTLINE_PROMPT = """Bạn là chuyên gia thiết kế giáo án bài giảng SGK Tin học THPT Việt Nam.
+
+=== THÔNG TIN ===
+Chủ đề: {topic}
+Lớp: {grade}
+Bộ sách: {book}
+
+=== NỘI DUNG BÀI HỌC (ĐÃ PHÂN NHÓM) ===
+{context_map}
+
+=== NHIỆM VỤ ===
+Thiết kế DÀN Ý (outline) cho GIÁO ÁN bài giảng gồm 7-10 sections.
+Giáo án theo chuẩn SGK Tin học THPT Việt Nam.
+
+CẤU TRÚC BẮT BUỘC (theo thứ tự):
+1. "title" — Trang bìa giáo án (tên bài, lớp, bộ sách, thời lượng)
+2. "content" — Mục tiêu bài học (kiến thức, kỹ năng, phẩm chất, năng lực)
+3. "content" — Thiết bị và học liệu (chuẩn bị GV/HS)
+4. "content" — HĐ Khởi động (warm-up, kết nối kiến thức cũ, 5 phút)
+5. "content" — HĐ Hình thành kiến thức mới (nội dung chính, 20-25 phút)
+6. "content" — HĐ Luyện tập (bài tập, thảo luận, 10 phút)
+7. "content" — HĐ Vận dụng (áp dụng thực tế, mở rộng, 5 phút)
+8. "exercise" — Đánh giá (rubric, tiêu chí đánh giá)
+9. "summary" — Rút kinh nghiệm (ghi chú sau tiết dạy)
+
+QUY TẮC BẮT BUỘC:
+1. Phải có ÍT NHẤT: 1 slide "title", 1 slide "summary", 1 slide "exercise"
+2. Mỗi section phải có "source_chunk_ids" — danh sách chunk_id liên quan
+3. "slide_id" đánh số từ "s1", "s2", ...
+4. "slide_type" chỉ nhận: "title", "content", "exercise", "summary"
+5. "key_points" là danh sách 2-4 ý chính
+6. Thời lượng tổng cộng: 1 tiết (45 phút)
+
+ĐỊNH DẠNG JSON (CHỈ trả JSON thuần túy, KHÔNG markdown):
+{{
+  "lesson_title": "Giáo án: Tên bài học",
+  "slides": [
+    {{
+      "slide_id": "s1",
+      "slide_type": "title",
+      "title": "Giáo án: Tên bài học",
+      "objective": "Thông tin tổng quan",
+      "key_points": ["Lớp: ...", "Bộ sách: ...", "Thời lượng: 45 phút"],
+      "source_chunk_ids": ["c1"]
+    }},
+    {{
+      "slide_id": "s2",
+      "slide_type": "content",
+      "title": "I. Mục tiêu bài học",
+      "objective": "Xác định mục tiêu kiến thức, kỹ năng, phẩm chất",
+      "key_points": ["Kiến thức cần đạt", "Kỹ năng cần rèn", "Phẩm chất hướng tới"],
+      "source_chunk_ids": ["c1", "c2"]
+    }}
+  ]
+}}
+
+=== BẮT ĐẦU THIẾT KẾ DÀN Ý GIÁO ÁN ==="""
+
+LESSON_PLAN_OUTLINE_TEMPLATE = PromptTemplate(
+    name="lesson_plan_outline",
+    template=LESSON_PLAN_OUTLINE_PROMPT,
+    required_vars=["topic", "grade", "book", "context_map"],
+    version="1.0",
+    description="Generate lesson plan outline (7-10 sections) following Vietnamese education standards"
+)
+
+
+# ── Lesson Plan Pipeline — Content Writer ───────────────────
+
+LESSON_PLAN_CONTENT_PROMPT = """Bạn là chuyên gia viết giáo án chi tiết cho SGK Tin học THPT Việt Nam.
+
+=== THÔNG TIN SECTION ===
+Section ID: {slide_id}
+Loại: {slide_type}
+Tiêu đề: {slide_title}
+Mục tiêu: {slide_objective}
+Ý chính cần triển khai: {key_points}
+
+=== NỘI DUNG THAM KHẢO (CONTEXT) ===
+{context_subset}
+
+=== NHIỆM VỤ ===
+Viết nội dung chi tiết cho section giáo án này.
+
+QUY TẮC THEO LOẠI SECTION:
+
+Nếu "Mục tiêu bài học":
+- bullets: Liệt kê cụ thể kiến thức, kỹ năng, phẩm chất, năng lực
+- notes: Mô tả chi tiết cách đạt mục tiêu
+
+Nếu "Thiết bị và học liệu":
+- bullets: Danh sách chuẩn bị của GV và HS
+- notes: Gợi ý tài liệu bổ sung
+
+Nếu "HĐ Khởi động":
+- bullets: Các bước hoạt động khởi động (câu hỏi mở, tình huống thực tế)
+- notes: Hướng dẫn GV tổ chức, thời gian ~5 phút
+
+Nếu "HĐ Hình thành kiến thức":
+- bullets: Nội dung chính cần truyền đạt, phương pháp dạy học
+- notes: Hướng dẫn GV giảng dạy chi tiết, thời gian ~20-25 phút
+
+Nếu "HĐ Luyện tập":
+- bullets: Bài tập, câu hỏi thảo luận, hoạt động nhóm
+- notes: Đáp án gợi ý, hướng dẫn chấm, thời gian ~10 phút
+
+Nếu "HĐ Vận dụng":
+- bullets: Bài tập vận dụng thực tế, dự án nhỏ, liên hệ đời sống
+- notes: Gợi ý mở rộng, bài tập về nhà, thời gian ~5 phút
+
+Nếu "Đánh giá":
+- bullets: Tiêu chí đánh giá, rubric, hình thức đánh giá
+- notes: Thang điểm, mô tả mức độ đạt
+
+Nếu "Rút kinh nghiệm":
+- bullets: Các mục cần đánh giá sau tiết dạy
+- notes: Template ghi chú
+
+QUY TẮC CHUNG:
+1. Tối đa 6 bullet points, mỗi bullet TỐI ĐA 30 từ
+2. Notes tối đa 200 từ — chi tiết hơn slide vì dành cho GV
+3. PHẢI dẫn nguồn bằng "source_chunk_ids"
+4. Ngôn ngữ chuyên nghiệp, phù hợp giáo viên THPT
+5. KHÔNG tạo nội dung ngoài context được cung cấp
+
+ĐỊNH DẠNG JSON (CHỈ trả JSON thuần túy):
+{{
+  "slide_id": "{slide_id}",
+  "title": "...",
+  "bullets": ["Nội dung 1", "Nội dung 2"],
+  "notes": "Hướng dẫn chi tiết cho giáo viên...",
+  "source_chunk_ids": ["c2", "c3"]
+}}
+
+=== BẮT ĐẦU VIẾT NỘI DUNG GIÁO ÁN ==="""
+
+LESSON_PLAN_CONTENT_TEMPLATE = PromptTemplate(
+    name="lesson_plan_content",
+    template=LESSON_PLAN_CONTENT_PROMPT,
+    required_vars=["slide_id", "slide_type", "slide_title", "slide_objective", "key_points", "context_subset"],
+    version="1.0",
+    description="Write detailed content for a lesson plan section"
+)
+
 # ============================================================
 # 8. CHAT & EXPLAIN
 # ============================================================
@@ -987,6 +1138,9 @@ __all__ = [
     "SLIDE_CONTENT_PROMPT", "SLIDE_CONTENT_TEMPLATE",
     "SLIDE_QUIZ_PROMPT", "SLIDE_QUIZ_TEMPLATE",
     "SLIDE_MEDIA_PROMPT", "SLIDE_MEDIA_TEMPLATE",
+    # Lesson Plan Pipeline
+    "LESSON_PLAN_OUTLINE_PROMPT", "LESSON_PLAN_OUTLINE_TEMPLATE",
+    "LESSON_PLAN_CONTENT_PROMPT", "LESSON_PLAN_CONTENT_TEMPLATE",
     # Chat & Explain
     "CHAT_PROMPT", "EXPLAIN_PROMPT",
     # Utility
