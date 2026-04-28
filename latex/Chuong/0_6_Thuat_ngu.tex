@@ -1,16 +1,28 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
-\begin{longtable}{l p{14cm}}
-	\hline
-   \textbf{Viết tắt}  & \textbf{Tên tiếng Anh} \\ \hline 
-	\textbf{Browser} & Trình duyệt \\
-	\textbf{Cache memory} & Bộ nhớ đệm \\
-	\textbf{E-commerce} & Thương mại điện tử \\
-	\textbf{Bloatware} & Ứng dụng nhà sản xuất tích hợp vào thiết bị \\
-	\textbf{Interpreter}  &  Trình thông dịch \\
-    \textbf{Compiler}  &  Trình biên dịch \\
 
-    \hline
+\addcontentsline{toc}{chapter}{Danh mục thuật ngữ chuyên ngành}
+\chapter*{Danh mục thuật ngữ chuyên ngành}
+
+\begin{longtable}{ p{3.5cm} p{10cm} }
+\hline
+\textbf{Thuật ngữ} & \textbf{Giải thích ý nghĩa} \\ \hline
+\textbf{Agent} & \textit{(Tác tử)} - Hệ thống tự trị có lõi là trí tuệ nhân tạo, có khả năng diễn dịch yêu cầu, lập suy luận và sử dụng công cụ để thực thi hành động. \\
+\textbf{Chunk} & \textit{(Phân đoạn)} - Một đoạn văn bản có ý nghĩa hoàn chỉnh được cắt nhỏ từ tài liệu gốc, có kích thước vừa vặn với bộ nhớ của mô hình ngôn ngữ. \\
+\textbf{Chunking} & \textit{(Phân mảnh dữ liệu)} - Kỹ thuật chia nhỏ các tài liệu quy mô lớn thành các chunk nhằm thuận tiện cho việc lập chỉ mục và tìm kiếm thông tin. \\
+\textbf{Context Window} & \textit{(Cửa sổ ngữ cảnh)} - Giới hạn tối đa số lượng từ (hoặc token) mà một LLM có thể tiếp nhận và ghi nhớ trong một phiên xử lý duy nhất. \\
+\textbf{Embedding} & \textit{(Biểu diễn Vector/Nhúng)} - Kỹ thuật mã hóa ngôn ngữ tự nhiên thành các vector số học có độ phân giải cao, giúp máy tính có thể tính toán đo lường mức độ tương đồng ý nghĩa. \\
+\textbf{Hallucination} & \textit{(Hiện tượng Ảo giác)} - Trạng thái mà mô hình ngôn ngữ lớn đưa ra những câu trả lời có hệ thống vẻ ngoài rất tự tin nhưng hoàn toàn sai sự thật hoặc thiếu căn cứ. \\
+\textbf{Metadata} & \textit{(Siêu dữ liệu)} - Các thẻ thông tin đi kèm (như Tên bài học, Chương, Chủ đề) nhằm bổ trợ và cung cấp căn cứ nguồn gốc cho các chunk dữ liệu. \\
+\textbf{Multi-Agent} & \textit{(Đa tác tử)} - Một hệ thống phức hợp nơi nhiều tác tử (agent) hoạt động song song hoặc phối hợp nhằm giải tỏa áp lực của một tác vụ quá lớn. \\
+\textbf{Prompt} & \textit{(Chỉ thị)} - Câu lệnh hoặc ngữ cảnh đầu vào hướng dẫn mô hình ngôn ngữ lớn thực hiện trả lời, thiết lập phong cách hay xuất ra bằng định dạng nhất định. \\
+\textbf{Reranker} & \textit{(Bộ xếp hạng lại)} - Mô hình máy học nâng cao làm nhiệm vụ rà soát, tinh chỉnh thứ tự các kết quả tìm ráp ban đầu để đẩy văn bản có liên đới chặt chẽ nhất lên cực đỉnh. \\
+\textbf{Retriever} & \textit{(Bộ truy xuất)} - Thành phần thuật toán thực hiện tìm kiếm, quét qua toàn bộ cơ sở dữ liệu Vector để lấy ra cụm tài liệu thô gần khớp với truy vấn người dùng. \\
+\textbf{Token} & \textit{(Đơn vị cơ sở)} - Thành phần nhỏ nhất của một đoạn văn bản (có thể là một từ, âm tiết, hoặc cụm ký tự) mà máy tính có thể thể tách ra để xử lý. \\
+\textbf{Vector Database} & \textit{(Cơ sở dữ liệu Vector)} - Cơ sở dữ liệu chuyên dụng được thiết kế nhằm lưu giữ và truy vấn tốc độ cao đối với dữ liệu kiểu vector đa chiều. \\
+\textbf{Underthesea} & \textit{(Thư viện NLP tiếng Việt)} - Một bộ công cụ mã nguồn mở phụ vụ mạnh mẽ cho nhiều bài toán xử lý ngôn ngữ tự nhiên tiếng Việt, nổi bật là tách từ (Word Segmentation). \\
+\textbf{Word Segmentation} & \textit{(Tách từ)} - Kỹ thuật phân tách chuỗi văn bản thành hệ thống các từ vựng hợp cấu trúc, đặc biệt quan trọng với ngôn ngữ không có định danh ranh giới sẵn bằng khoảng trắng (ví dụ từ ghép tiếng Việt). \\
+\hline
 \end{longtable}
 
 \end{document}

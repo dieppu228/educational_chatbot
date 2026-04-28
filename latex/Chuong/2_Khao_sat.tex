@@ -1,43 +1,293 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
-Chương này có độ dài từ 9 đến 11 trang.
-
-Với phương pháp phân tích thiết kế hướng đối tượng, sinh viên sử dụng biểu đồ use case theo hướng dẫn của template này. Với các phương pháp khác, sinh viên trao đổi với giáo viên hướng dẫn để đổi tên và sắp xếp lại đề mục cho phù hợp. Ví dụ, thay vì sử dụng biểu đồ use case, sinh viên đi theo hướng tiếp cận Agile có thể dùng User Story.
-
-
-\textbf{Lưu ý}: Mỗi chương nên có thêm 1 đoạn mở đầu chương và kết thúc chương, mở đầu giới thiệu những nội dung sẽ trình bày trong chương, kết thúc tổng kết lại các nội dung đã trình bày
+Chương này sẽ trình bày các nội dung liên quan đến việc khảo sát, phân tích hiện trạng để từ đó làm rõ các yêu cầu bài toán đối với hệ thống giáo dục AI. Các phân tích được dựa trên bối cảnh thực tế trong giảng dạy và học tập môn Tin học, qua đó đề xuất các chức năng chính của ứng dụng và mô hình hóa chúng thông qua các biểu đồ Use Case nhằm đưa ra một cái nhìn tổng quan và hệ thống.
 
 \section{Khảo sát hiện trạng}
 \label{section:2.1}
-Thông thường, khảo sát chi tiết về hiện trạng và yêu cầu của phần mềm sẽ được lấy từ ba nguồn chính, đó là (i) người dùng/khách hàng, (ii) các hệ thống đã có, (iii) và các ứng dụng tương tự.
-Sinh viên cần tiến hành phân tích, so sánh, đánh giá chi tiết ưu nhược điểm của các sản phẩm/nghiên cứu hiện có. Sinh viên có thể lập bảng so sánh nếu cần thiết. Kết hợp với khảo sát người dùng/khách hàng (nếu có), sinh viên nêu và mô tả sơ lược các tính năng phần mềm quan trọng cần phát triển.
+Trong bối cảnh chuyển đổi số giáo dục, việc ứng dụng trí tuệ nhân tạo (AI) mang lại nhiều tiềm năng to lớn, nhưng quá trình dạy và học môn Tin học THPT (các lớp 10, 11, 12 theo chương trình bộ Kết nối tri thức và Cánh diều) vẫn gặp nhiều thách thức.
+
+Về phía học sinh, các em vẫn thiếu một công cụ hỗ trợ tự học bám sát nội dung chương trình trên lớp. Các chatbot AI phổ quát hiện nay (như ChatGPT, Claude) thường cung cấp câu trả lời phân tán, đôi khi sử dụng kiến thức nằm ngoài phạm vi sách giáo khoa Việt Nam, gây khó khăn cho việc ôn tập chuẩn xác. Bên cạnh đó, học sinh cũng thiếu các nguồn bài tập trắc nghiệm đa dạng được thiết kế chuyên biệt và phản hồi tức thời cho từng bài giảng để củng cố kiến thức một cách nhanh chóng.
+
+Về phía giáo viên, công tác chuẩn bị bài giảng (soạn giáo án, thiết kế slide) và biên soạn đề kiểm tra đang tiêu tốn rất nhiều thời gian, công sức. Các thao tác tìm kiếm, chắt lọc tư liệu từ các nguồn rời rạc trên mạng hiện nay vẫn chủ yếu được thực hiện thủ công, lặp đi lặp lại do thiếu vắng các công cụ hỗ trợ tự động hóa chuyên biệt ở mức độ sâu.
+
+Khảo sát các giải pháp e-learning hiện có, phần lớn hệ thống mới chỉ đóng vai trò là kho lưu trữ và phân phối bài giảng số chứ chưa thể chủ động khởi tạo nội dung thông minh. Việc dùng trực tiếp các mô hình ngôn ngữ lớn khổng lồ mà không qua tinh chỉnh lại không đảm bảo được tính chính xác theo khuôn khổ tài liệu chuyên biệt quy định. Vì vậy, nhu cầu cấp thiết hiện nay là xây dựng một hệ thống trợ lý ảo giáo dục ứng dụng công nghệ tăng cường truy xuất dữ liệu (RAG) sử dụng dữ liệu nền tảng là sách giáo khoa. Hệ thống này sẽ đáp ứng trọn vẹn mục tiêu tự động trả lời câu hỏi, sinh bài tập, phát thảo giáo án và cấu trúc slide bài giảng, qua đó tối ưu hóa công việc của cả người dạy lẫn người học.
 
 \section{Tổng quan chức năng}
 \label{section:2.2}
-Phần \ref{section:2.2} này có nhiệm vụ tóm tắt các chức năng của phần mềm. Trong phần này, sinh viên lưu ý chỉ mô tả chức năng mức cao (tổng quan) mà không đặc tả chi tiết cho từng chức năng. Đặc tả chi tiết được trình bày trong phần \ref{section:2.3}.
+Dựa trên các phân tích và các kết quả thu được từ tiến trình khảo sát hiện trạng, phần này sẽ mô tả tổng hợp lại các chức năng chính của phần mềm tương ứng với các phân quyền truy cập của người dùng. Hệ thống được thiết kế xoay quanh việc phục vụ nhóm người dùng cốt lõi nhằm giải quyết ba vấn đề lớn đã được nêu rõ thông qua các chức năng liên quan đến mục hỏi đáp kiến thức bài học, sinh biểu mẫu câu hỏi bài tập, tạo khung giáo án giáo khoa và thiết kế bài giảng trình chiếu tự động. Các chức năng chi tiết này sẽ được thiết kế tập trung để quy trình hóa và thiết lập toàn bộ các kết nối một cách hiệu quả nhất có thể. Dưới đây là các biểu đồ thiết kế để diễn giải một cách chi tiết về chức năng cũng như quy trình.
 
 \subsection{Biểu đồ use case tổng quát}
 \label{subsection:2.2.1}
-Sinh viên vẽ biểu đồ use case tổng quan và giải thích các tác nhân tham gia là gì, nêu vai trò của từng tác nhân, và mô tả ngắn gọn các use case chính.
+Biểu đồ use case tổng quát mô tả các tác nhân và các chức năng chính của hệ thống.
 
-\subsection{Biểu đồ use case phân rã XYZ}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{Hinhve/uc_tongquan.png}
+    \caption{Biểu đồ use case tổng quát}
+    \label{fig:uc_tongquan}
+\end{figure}
+
+\subsection{Biểu đồ use case phân rã}
 \label{subsection:2.2.2}
-Với mỗi use case mức cao trong biểu đồ use case tổng quan, sinh viên tạo một mục riêng như mục \ref{subsection:2.2.2} và tiến hành phân rã use case đó. Lưu ý tên use case cần phân rã trong biểu đồ use case tổng quan phải khớp với tên đề mục.
+Dưới đây là các biểu đồ phân rã cho các chức năng chi tiết trong hệ thống giáo dục AI.
 
-Trong mỗi mục như vậy, sinh viên vẽ và giải thích ngắn gọn các use case phân rã.
+\subsubsection{Phân rã UC02 - Hỏi đáp kiến thức SGK}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Hinhve/uc2.png}
+    \caption{Biểu đồ phân rã Use Case Hỏi đáp kiến thức SGK}
+    \label{fig:uc2}
+\end{figure}
 
-\subsection{Quy trình nghiệp vụ}
-\label{subsection:2.2.3}
-Nếu sản phẩm/hệ thống cần xây dựng có quy trình nghiệp vụ quan trọng/đáng chú ý, sinh viên cần mô tả và vẽ biểu đồ hoạt động minh họa quy trình nghiệp vụ đó. Sinh viên lưu ý đây không phải là luồng sự kiện của từng use case, mà là luồng hoạt động kết hợp nhiều use case để thực hiện một nghiệp vụ nào đó.
+\subsubsection{Phân rã UC03 - Khởi tạo bộ câu hỏi/bài tập}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Hinhve/uc3.png}
+    \caption{Biểu đồ phân rã Use Case Khởi tạo bộ câu hỏi/bài tập}
+    \label{fig:uc3}
+\end{figure}
 
-Ví dụ, một hệ thống quản lý thư viện có quy trình nghiệp vụ mượn trả với mô tả sơ bộ như sau: Sinh viên làm thẻ mượn, sau đó sinh viên đăng ký mượn sách, thủ thư cho mượn, và cuối cùng sinh viên trả lại sách cho thư viện. Một hệ thống có thể có một vài quy trình nghiệp vụ quan trọng như vậy.
+\subsubsection{Phân rã UC04}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Hinhve/uc4.png}
+    \caption{Biểu đồ phân rã Use Case UC04}
+    \label{fig:uc4}
+\end{figure}
+
+\subsubsection{Phân rã UC05 - Sinh slide bài giảng}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Hinhve/uc5.png}
+    \caption{Biểu đồ phân rã Use Case Sinh slide bài giảng}
+    \label{fig:uc5}
+\end{figure}
+
+\subsubsection{Phân rã UC06 - Sinh giáo án}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Hinhve/uc6.png}
+    \caption{Biểu đồ phân rã Use Case Sinh giáo án}
+    \label{fig:uc6}
+\end{figure}
+
 \section{Đặc tả chức năng}
 \label{section:2.3}
-Sinh viên lựa chọn từ 4 đến 7 use case quan trọng nhất của đồ án để đặc tả chi tiết. Mỗi đặc tả bao gồm ít nhất các thông tin sau: (i) Tên use case, (ii) Luồng sự kiện (chính và phát sinh), (iii) Tiền điều kiện, và (iv) Hậu điều kiện. Sinh viên chỉ vẽ bổ sung biểu đồ hoạt động khi đặc tả use case phức tạp.
-\subsection{Đặc tả use case A}
-\hfill
-\subsection{Đặc tả use case B}
-\hfill
+Dưới đây là đặc tả chi tiết cho các use case quan trọng của hệ thống:
+
+\subsection{Đặc tả UC02 - Hỏi đáp kiến thức SGK}
+\renewcommand{\arraystretch}{1.3}
+\begin{longtable}{|p{0.25\textwidth}|p{0.7\textwidth}|}
+    \caption{Đặc tả UC02 - Hỏi đáp kiến thức SGK}
+    \label{tab:uc02} \\
+    \hline
+    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
+    \endfirsthead
+    
+    \hline
+    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
+    \endhead
+    
+    \hline
+    \endfoot
+    
+    \hline
+    \endlastfoot
+
+    \textbf{Tên use case} & UC02 - Hỏi đáp kiến thức SGK \\ \hline
+    \textbf{Tác nhân} & User \\ \hline
+    \textbf{Tiền điều kiện} & (1) Hệ thống hoạt động bình thường; (2) Kho tri thức SGK đã được nạp; (3) User đang ở giao diện chat \\ \hline
+    \textbf{Luồng sự kiện chính} & 
+    1) User nhập câu hỏi kiến thức.\newline
+    2) Hệ thống phân tích ngữ cảnh hội thoại và nhận diện intent.\newline
+    3) Hệ thống truy xuất tri thức (RAG) theo chủ đề/lớp/bộ sách.\newline
+    4) Hệ thống sinh câu trả lời dựa trên ngữ cảnh truy xuất.\newline
+    5) Hiển thị câu trả lời cho User. \\ \hline
+    \textbf{Luồng sự kiện phát sinh} & 
+    \textbf{A1:} Câu hỏi mơ hồ/phụ thuộc ngữ cảnh $\rightarrow$ hệ thống sinh đa truy vấn để tăng chất lượng truy xuất.\newline
+    \textbf{A2:} User chưa chọn bộ sách $\rightarrow$ hệ thống yêu cầu bổ sung thông tin bộ sách trước khi trả lời.\newline
+    \textbf{A3:} Không tìm thấy ngữ cảnh phù hợp $\rightarrow$ hệ thống trả thông báo và gợi ý cách hỏi lại. \\ \hline
+    \textbf{Hậu điều kiện} & (1) Câu trả lời được trả về cho User; (2) Lịch sử hội thoại được cập nhật vào session; (3) Thông tin debug/trace được lưu \\
+\end{longtable}
+
+\subsection{Đặc tả UC03 - Khởi tạo bộ câu hỏi/bài tập}
+\renewcommand{\arraystretch}{1.3}
+\begin{longtable}{|p{0.25\textwidth}|p{0.7\textwidth}|}
+    \caption{Đặc tả UC03 - Khởi tạo bộ câu hỏi/bài tập}
+    \label{tab:uc03} \\
+    \hline
+    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
+    \endfirsthead
+    
+    \hline
+    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
+    \endhead
+    
+    \hline
+    \endfoot
+    
+    \hline
+    \endlastfoot
+
+    \textbf{Tên use case} & UC03 - Khởi tạo bộ câu hỏi/bài tập \\ \hline
+    \textbf{Tác nhân} & User \\ \hline
+    \textbf{Tiền điều kiện} & (1) Hệ thống sẵn sàng; (2) Kho SGK khả dụng; (3) User cung cấp yêu cầu sinh câu hỏi \\ \hline
+    \textbf{Luồng sự kiện chính} & 
+    1) User nhập yêu cầu tạo câu hỏi (chủ đề, dạng câu hỏi, số lượng).\newline
+    2) Hệ thống nhận diện intent sinh câu hỏi.\newline
+    3) Hệ thống truy xuất tri thức liên quan từ SGK.\newline
+    4) Hệ thống sinh bộ câu hỏi theo định dạng yêu cầu.\newline
+    5) Hiển thị danh sách câu hỏi cho User. \\ \hline
+    \textbf{Luồng sự kiện phát sinh} & 
+    \textbf{A1:} User không nêu rõ loại câu hỏi $\rightarrow$ hệ thống dùng mặc định (ví dụ MCQ).\newline
+    \textbf{A2:} User yêu cầu mức độ khó (planned) $\rightarrow$ hệ thống điều chỉnh prompt sinh câu hỏi theo mức độ.\newline
+    \textbf{A3:} User muốn chỉnh sửa/xuất file $\rightarrow$ hệ thống mở rộng thao tác sau khi sinh. \\ \hline
+    \textbf{Hậu điều kiện} & (1) Bộ câu hỏi được tạo thành công hoặc trả lỗi có hướng dẫn; (2) Trạng thái quiz được lưu vào session để phục vụ chấm điểm/ôn tập tiếp theo \\
+\end{longtable}
+
+\subsection{Đặc tả UC05 - Sinh slide bài giảng}
+\renewcommand{\arraystretch}{1.3}
+\begin{longtable}{|p{0.25\textwidth}|p{0.7\textwidth}|}
+    \caption{Đặc tả UC05 - Sinh slide bài giảng}
+    \label{tab:uc05} \\
+    \hline
+    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
+    \endfirsthead
+    
+    \hline
+    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
+    \endhead
+    
+    \hline
+    \endfoot
+    
+    \hline
+    \endlastfoot
+
+    \textbf{Tên use case} & UC05 - Sinh slide bài giảng \\ \hline
+    \textbf{Tác nhân} & User \\ \hline
+    \textbf{Tiền điều kiện} & (1) Hệ thống AI và RAG hoạt động; (2) User cung cấp chủ đề bài giảng; (3) Có thông tin lớp/bộ sách (hoặc xác định được tự động) \\ \hline
+    \textbf{Luồng sự kiện chính} & 
+    1) User nhập yêu cầu sinh slide.\newline
+    2) Hệ thống nhận diện intent tạo slide.\newline
+    3) Hệ thống truy xuất tri thức SGK liên quan.\newline
+    4) Supervisor gọi agent tạo outline.\newline
+    5) Hệ thống sinh nội dung chi tiết từng slide.\newline
+    6) (Tùy chọn) sinh media và câu hỏi luyện tập.\newline
+    7) Hệ thống merge kết quả và kiểm tra chất lượng.\newline
+    8) Trả bộ slide hoàn chỉnh cho User. \\ \hline
+    \textbf{Luồng sự kiện phát sinh} & 
+    \textbf{A1:} User duyệt/chỉnh sửa outline (HITL) trước khi tiếp tục sinh nội dung.\newline
+    \textbf{A2:} Một agent phụ (media/quiz) lỗi $\rightarrow$ hệ thống tiếp tục với output một phần (partial) nếu lõi vẫn đạt.\newline
+    \textbf{A3:} Chưa có bộ sách $\rightarrow$ hệ thống yêu cầu User bổ sung. \\ \hline
+    \textbf{Hậu điều kiện} & (1) Slide được tạo và hiển thị; (2) Dữ liệu slide lưu vào session; (3) Có thể tiếp tục chỉnh sửa/resume trong phiên hiện tại \\
+\end{longtable}
+
+\subsection{Đặc tả UC06 - Sinh giáo án}
+\renewcommand{\arraystretch}{1.3}
+\begin{longtable}{|p{0.25\textwidth}|p{0.7\textwidth}|}
+    \caption{Đặc tả UC06 - Sinh giáo án}
+    \label{tab:uc06} \\
+    \hline
+    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
+    \endfirsthead
+    
+    \hline
+    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
+    \endhead
+    
+    \hline
+    \endfoot
+    
+    \hline
+    \endlastfoot
+
+    \textbf{Tên use case} & UC06 - Sinh giáo án \\ \hline
+    \textbf{Tác nhân} & User \\ \hline
+    \textbf{Tiền điều kiện} & (1) Hệ thống hoạt động ổn định; (2) User cung cấp yêu cầu giáo án (chủ đề/lớp/mục tiêu) \\ \hline
+    \textbf{Luồng sự kiện chính} & 
+    1) User nhập yêu cầu sinh giáo án.\newline
+    2) Hệ thống nhận diện intent sinh giáo án.\newline
+    3) Hệ thống truy xuất tri thức từ SGK.\newline
+    4) Hệ thống tạo cấu trúc giáo án.\newline
+    5) Hệ thống sinh nội dung chi tiết theo cấu trúc.\newline
+    6) Trả giáo án cho User. \\ \hline
+    \textbf{Luồng sự kiện phát sinh} & 
+    \textbf{A1:} User yêu cầu tùy chỉnh độ dài/mức chi tiết $\rightarrow$ hệ thống tái sinh nội dung theo tham số mới.\newline
+    \textbf{A2:} User yêu cầu xuất định dạng Markdown/Text $\rightarrow$ hệ thống thực hiện xuất file.\newline
+    \textbf{A3:} Ngữ cảnh truy xuất chưa đủ $\rightarrow$ hệ thống yêu cầu làm rõ chủ đề. \\ \hline
+    \textbf{Hậu điều kiện} & (1) Giáo án được sinh và trả về; (2) Nội dung được lưu vào session; (3) Sẵn sàng cho chỉnh sửa/xuất bản \\
+\end{longtable}
+
+\subsection{Quy trình nghiệp vụ}
+\label{subsection:2.3.5}
+Phần này mô tả các luồng hoạt động (Activity) cốt lõi của hệ thống thông qua các bước tương tác giữa Người dùng (User), Hệ thống điều phối (System) và các Mô hình ngôn ngữ lớn (LLM). Các quy trình được thiết kế nhằm tối ưu hóa khả năng phản hồi tự nhiên của AI dựa trên kiến thức sách giáo khoa có sẵn.
+
+\subsubsection{Quy trình Hỏi đáp kiến thức SGK}
+Quy trình này diễn tả cách hệ thống xử lý khi học sinh hoặc giáo viên đặt các câu hỏi truy vấn về kiến thức môn học. Đây là quy trình áp dụng trực tiếp kiến trúc RAG (Retrieval-Augmented Generation).
+
+\begin{figure}[H]
+    \centering
+    \textit{(Sinh viên bổ sung sơ đồ Activity Diagram UC02 vào đây)}
+    % \includegraphics[width=0.85\textwidth]{Hinhve/QuyTrinh_HoiDap.png}
+    \caption{Sơ đồ luồng hoạt động chức năng Hỏi đáp kiến thức SGK}
+    \label{fig:activity_hoidap}
+\end{figure}
+
+\textbf{Diễn giải quy trình:}
+\begin{itemize}
+    \item \textbf{Bước 1 (Tiếp nhận):} Người dùng nhập truy vấn vào giao diện chat.
+    \item \textbf{Bước 2 (Đánh giá ngữ cảnh):} Hệ thống lấy câu hỏi hiện tại kết hợp cùng lịch sử hội thoại gần nhất đưa vào module Router (LLM) để nhận diện ý định. Nếu ý định được xác định là hỏi đáp, luồng RAG sẽ được kích hoạt.
+    \item \textbf{Bước 3 (Viết lại truy vấn):} LLM thực hiện thiết kế lại câu hỏi ban đầu (Query Rewriting) hoặc sinh đa truy vấn (Multi-Query) nhằm làm rõ ngữ nghĩa và loại bỏ sự mơ hồ.
+    \item \textbf{Bước 4 (Truy xuất tri thức):} Các câu hỏi sau khi viết lại được chuyển thành các vector đặc trưng (Embedding) và đối chiếu với Vector Database. Hệ thống áp dụng Hybrid Search (Semantic + BM25) để lấy ra các đoạn tài liệu (chunks) SGK liên quan nhất.
+    \item \textbf{Bước 5 (Tổng hợp và xếp hạng):} Tài liệu thô được đưa qua mô hình Reranker để đánh giá chéo độ tương đồng và chọn ra Top K đoạn văn bản chính xác nhất làm ngữ cảnh (Context).
+    \item \textbf{Bước 6 (Sinh văn bản):} Hệ thống xây dựng một prompt chứa câu hỏi gốc và ngữ cảnh Top K, sau đó gửi cho LLM để tạo ra câu trả lời cuối cùng. Câu trả lời gửi về cho người dùng và vòng hội thoại mới bắt đầu.
+\end{itemize}
+
+\subsubsection{Quy trình Khởi tạo bộ câu hỏi/bài tập}
+Giáo viên hoặc học sinh có thể yêu cầu hệ thống tạo ra một bài kiểm tra hoặc danh sách câu hỏi ôn tập dựa trên một chủ đề cụ thể.
+
+\begin{figure}[H]
+    \centering
+    \textit{(Sinh viên bổ sung sơ đồ Activity Diagram UC03 vào đây)}
+    % \includegraphics[width=0.85\textwidth]{Hinhve/QuyTrinh_TaoBaiTap.png}
+    \caption{Sơ đồ luồng hoạt động chức năng Khởi tạo bài tập}
+    \label{fig:activity_taobaitap}
+\end{figure}
+
+\textbf{Diễn giải quy trình:}
+\begin{itemize}
+    \item \textbf{Bước 1 (Tiếp nhận yêu cầu):} Người dùng cung cấp tham số tạo bài tập (ví dụ: "Tạo 5 câu hỏi trắc nghiệm bài Mạng máy tính lớp 10").
+    \item \textbf{Bước 2 (Trích xuất tri thức):} Tương tự quy trình Hỏi đáp, hệ thống dùng RAG để lấy chính xác phần nội dung lý thuyết liên quan đến bài "Mạng máy tính" từ SGK để làm cơ sở.
+    \item \textbf{Bước 3 (Xây dựng Prompt sinh bài tập):} Hệ thống nạp nội dung tài liệu vào cấu trúc prompt đặc thù (nghiêm ngặt về định dạng trả về - Structured Output), yêu cầu LLM đóng vai trò giáo viên để sinh câu hỏi theo độ khó (Bloom's Taxonomy).
+    \item \textbf{Bước 4 (Sinh và kiểm chứng):} LLM sinh bộ câu hỏi định dạng JSON/Markdown. Hệ thống sẽ có bước kiểm tra tự động xem dữ liệu trả về có bị lỗi format hay không, nếu lỗi sẽ yêu cầu LLM tự sửa.
+    \item \textbf{Bước 5 (Trình bày \& Xuất file):} Hệ thống hiển thị danh sách câu hỏi ra giao diện. Người dùng có thể làm trực tiếp hoặc thao tác tải tệp tin về máy.
+\end{itemize}
+
+\subsubsection{Quy trình Sinh slide bài giảng và Giáo án (Kiến trúc Multi-Agent)}
+Đây là quy trình phức tạp nhất nhằm hỗ trợ giáo viên tự động hóa việc chuẩn bị tài liệu giảng dạy. Hệ thống sử dụng cơ chế chia để trị (Fan-out) với mô hình đa tác tử (Multi-Agent).
+
+\begin{figure}[H]
+    \centering
+    \textit{(Sinh viên bổ sung sơ đồ Activity Diagram UC05/06 vào đây)}
+    % \includegraphics[width=0.9\textwidth]{Hinhve/QuyTrinh_SinhGiaoAn.png}
+    \caption{Sơ đồ luồng hoạt động chức năng Sinh slide và giáo án}
+    \label{fig:activity_sinhgiaoan}
+\end{figure}
+
+\textbf{Diễn giải quy trình:}
+\begin{itemize}
+    \item \textbf{Bước 1 (Nhập chủ đề):} Giáo viên nhập tên bài học hoặc một chủ đề mong muốn để tạo slide/giáo án.
+    \item \textbf{Bước 2 (Lập dàn ý - Outline Generation):} Hệ thống dùng RAG lấy mục lục và nội dung cốt lõi của bài học đó, LLM trung tâm (Supervisor) sẽ tiến hành tạo Dàn ý khái quát (Outline) cho giáo án.
+    \item \textbf{Bước 3 (Thực thi song song - Fan-out):} Sơ đồ được chia thành 3 nhánh xử lý độc lập do 3 Sub-Agent đảm nhiệm:
+    \begin{itemize}
+        \item \textit{Agent 1 (Mục tiêu \& Khởi động):} Sinh phần kiến thức trọng tâm, yêu cầu cần đạt.
+        \item \textit{Agent 2 (Lý thuyết chính):} Chia nhỏ dàn ý thành các slide/tiểu mục lý thuyết chuyên sâu, có ví dụ minh họa từ SGK.
+        \item \textit{Agent 3 (Luyện tập \& Vận dụng):} Đảm nhận việc sinh bài tập trắc nghiệm, tình huống thảo luận cuối bài.
+    \end{itemize}
+    \item \textbf{Bước 4 (Tổng hợp - Fan-in):} Ngay khi 3 Agent hoàn thành, module Supervisor sẽ gom tất cả kết quả lại thành một bản nháp hoàn chỉnh duy nhất.
+    \item \textbf{Bước 5 (Trình bày \& Chỉnh sửa):} Trả kết quả hiển thị cho giáo viên dưới dạng Markdown. Giáo viên có thể yêu cầu hiệu chỉnh độ dài hoặc bổ sung chi tiết trước khi xuất thành file hoàn chỉnh.
+\end{itemize}
 
 \section{Yêu cầu phi chức năng}
 \label{section:2.4}
