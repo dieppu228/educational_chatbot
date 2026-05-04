@@ -1,9 +1,3 @@
-"""
-StreamWrapper — Bridge giữa LangGraph graph.stream() và Python generator.
-
-Chuyển đổi output dạng LangGraph chunks thành generator yield
-để tương thích với SlideService interface hiện tại.
-"""
 
 import json
 import logging
@@ -19,23 +13,6 @@ def stream_graph_to_generator(
     input_state: dict,
     config: dict,
 ) -> Generator[Dict[str, Any], None, None]:
-    """
-    Chạy graph.stream() và yield events dạng dict.
-
-    Yields:
-        {"type": "progress", "node": str, "data": dict}
-        {"type": "interrupt", "data": list}  — HITL interrupt
-        {"type": "result", "data": dict}     — final state
-
-    Usage:
-        for event in stream_graph_to_generator(graph, state, config):
-            if event["type"] == "progress":
-                print(f"Running: {event['node']}")
-            elif event["type"] == "interrupt":
-                # Handle HITL
-                user_response = get_user_input(event["data"])
-                # Resume with: graph.invoke(Command(resume=user_response), config)
-    """
     try:
         for chunk in graph.stream(input_state, config=config):
             # Check for interrupt
@@ -72,12 +49,6 @@ def invoke_graph_sync(
     input_state: dict,
     config: dict,
 ) -> Dict[str, Any]:
-    """
-    Chạy graph.invoke() synchronous — đơn giản nhất.
-
-    Returns:
-        Final state dict hoặc dict chứa __interrupt__ nếu HITL.
-    """
     try:
         result = graph.invoke(input_state, config=config)
         return result
@@ -94,13 +65,6 @@ def resume_graph(
     resume_value: Any,
     config: dict,
 ) -> Dict[str, Any]:
-    """
-    Resume graph sau HITL interrupt.
-
-    Args:
-        resume_value: User feedback — True (approve) hoặc dict (edited outline)
-        config: Cùng config (thread_id) với lần invoke trước
-    """
     try:
         result = graph.invoke(Command(resume=resume_value), config=config)
         return result

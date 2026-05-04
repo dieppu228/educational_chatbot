@@ -1,13 +1,9 @@
-"""
-Chat Handler — Hỏi đáp kiến thức chung dựa trên RAG context.
-"""
 
 from src.llm.handlers.base_handler import BaseHandler
 from src.llm.prompts import CHAT_PROMPT
 
 
 class ChatHandler(BaseHandler):
-    """Hỏi đáp kiến thức dựa trên RAG context."""
     
     def handle(self, query: str, context: str = "", **kwargs) -> str:
         if not context:

@@ -34,25 +34,12 @@ VALIDATION:
 === BẮT ĐẦU PHÂN TÍCH ==="""
 
 class KnowledgeMap(BaseHandler):
-    """
-    Xây dựng mối liên hệ giữa các bài học/kiến thức.
-    Giúp gợi ý bài học cũ hoặc mở rộng kiến thức mới.
-    """
     
     def __init__(self, table_of_contents_path="data/table_of_contents.md"):
         self.toc_path = table_of_contents_path
         self.lessons = self._parse_toc()
         
     def find_relations(self, context: str) -> List[Dict[str, str]]:
-        """
-        Tìm kiếm các chủ đề liên quan từ nội dung bài học.
-        
-        Args:
-            context: Nội dung bài học hiện tại (từ RAG)
-            
-        Returns:
-            List[Dict]: Danh sách các chủ đề liên quan
-        """
         prompt = KNOWLEDGE_RELATION_PROMPT.format(context=context)
         
         response = self._call_api(
@@ -158,6 +145,5 @@ class KnowledgeMap(BaseHandler):
         return f"{best['topic_name']} - {best['lesson_name']}"
 
     def handle(self, query: str, **kwargs):
-        """KnowledgeMap không dùng handle trực tiếp."""
         pass
 

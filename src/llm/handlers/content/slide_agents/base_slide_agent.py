@@ -1,12 +1,3 @@
-"""
-BaseSlideAgent — Lớp cơ sở cho mọi agent trong slide pipeline.
-
-Cung cấp:
-    - LLM API call (qua google-genai)
-    - Agent envelope wrapping (AgentResult)
-    - Retry logic với configurable max_retries
-    - Timing / latency tracking
-"""
 
 import time
 import json
@@ -21,14 +12,6 @@ logger = logging.getLogger("chatbot.slide_agent")
 
 
 class BaseSlideAgent(ABC):
-    """
-    Base class cho tất cả slide pipeline agents.
-
-    Subclass chỉ cần implement:
-        - agent_name: str
-        - max_retries: int
-        - _execute(**kwargs) -> dict
-    """
 
     agent_name: str = "base"
     max_retries: int = 1
@@ -44,12 +27,6 @@ class BaseSlideAgent(ABC):
         self.model = settings.LLM_MODEL
 
     def run(self, **kwargs) -> AgentResult:
-        """
-        Run agent với retry logic và envelope wrapping.
-
-        Returns:
-            AgentResult — luôn trả về, không raise exception.
-        """
         t0 = time.time()
         last_error = None
 
@@ -90,15 +67,6 @@ class BaseSlideAgent(ABC):
 
     @abstractmethod
     def _execute(self, **kwargs) -> dict:
-        """
-        Subclass implements actual agent logic.
-
-        Returns:
-            dict — payload data (sẽ được wrap vào AgentResult.payload)
-
-        Raises:
-            Exception — sẽ trigger retry
-        """
         pass
 
     def _call_llm(
@@ -107,7 +75,6 @@ class BaseSlideAgent(ABC):
         temperature: float = 0.3,
         response_mime: str = "application/json",
     ) -> str:
-        """Call LLM API — shared across all agents."""
         if not self.client:
             raise RuntimeError("GenAI client not initialized")
 
@@ -127,7 +94,6 @@ class BaseSlideAgent(ABC):
         return response.text
 
     def _parse_json(self, text: str) -> dict:
-        """Parse JSON response từ LLM, xử lý markdown fences."""
         cleaned = text.strip()
         # Remove markdown code fences if present
         if cleaned.startswith("```"):

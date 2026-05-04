@@ -1,4 +1,3 @@
-"""Configuration management using Pydantic Settings"""
 
 from pydantic_settings import BaseSettings
 from pydantic import Field
@@ -7,7 +6,6 @@ import os
 
 
 class Settings(BaseSettings):
-    """Main application settings"""
     
     # ===== API Configuration =====
     GENAI_API_KEY: str = Field(default="", env="GENAI_API_KEY")

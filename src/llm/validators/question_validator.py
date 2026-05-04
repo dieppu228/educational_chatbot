@@ -6,14 +6,6 @@ from src.schemas.llm_outputs import ValidationResult
 from src.config.config import settings
 
 class QuestionValidator(BaseHandler):
-    """
-    LLM Node #2 — Kiểm duyệt chất lượng câu hỏi.
-    
-    Nhiệm vụ:
-    - Đối chiếu câu hỏi với context (kiểm tra tính chính xác).
-    - Kiểm tra đáp án và giải thích.
-    - Sửa lỗi nhỏ (nếu có thể) hoặc đánh dấu không đạt.
-    """
     
     def validate(
         self, 
@@ -21,17 +13,6 @@ class QuestionValidator(BaseHandler):
         context: str, 
         questions_json: str
     ) -> ValidationResult:
-        """
-        Kiểm duyệt một batch câu hỏi.
-        
-        Args:
-            question_type: Loại câu hỏi (mcq, essay, fill_blank, true_false)
-            context: Nội dung bài học gốc
-            questions_json: JSON string chứa các câu hỏi cần kiểm tra
-            
-        Returns:
-            ValidationResult: Kết quả kiểm duyệt (all_valid, validations, approved_questions)
-        """
         # 1. Build prompt
         prompt = QUESTION_VALIDATION_TEMPLATE.format(
             question_type=question_type,
@@ -55,5 +36,4 @@ class QuestionValidator(BaseHandler):
             return ValidationResult(all_valid=False, validations=[], approved_questions=[])
             
     def handle(self, query: str, **kwargs):
-        """QuestionValidator không dùng handle trực tiếp như các handler thông thường."""
         pass

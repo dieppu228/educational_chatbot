@@ -1,4 +1,3 @@
-"""Logger initialization and setup"""
 
 import logging
 import logging.handlers
@@ -7,15 +6,6 @@ from src.config.config import settings
 
 
 def setup_logger(name: str) -> logging.Logger:
-    """
-    Setup logger with file and console handlers
-    
-    Args:
-        name: Logger name (usually __name__)
-    
-    Returns:
-        Configured logger instance
-    """
     
     # Create logs directory if it doesn't exist
     log_dir = Path(settings.LOG_DIR)

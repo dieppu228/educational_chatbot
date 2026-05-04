@@ -1,12 +1,3 @@
-"""
-Slide Pipeline Schemas — Multi-Agent Content Generation I/O.
-
-Định nghĩa data contract cho toàn bộ content pipeline (slide + lesson plan):
-    - ContentPipelineInput (narrow interface DTO)
-    - Agent envelope (kết quả mỗi agent)
-    - Payload riêng cho từng agent (outline, content, media, quiz)
-    - Merged slide (output cuối cùng)
-"""
 
 import re
 from dataclasses import dataclass, field
@@ -20,18 +11,6 @@ from typing import List, Optional, Dict, Any, Literal
 
 @dataclass
 class ContentPipelineInput:
-    """
-    Narrow interface DTO — chỉ chứa INPUT cần thiết cho ContentSupervisor graph.
-
-    Adapter pattern:
-        RequestContext (broad, ~20 fields)
-        → ContentPipelineInput (narrow, 7 fields)
-        → ContentSupervisorState (graph dict)
-
-    Usage:
-        pipeline_input = ContentPipelineInput.from_context(ctx, rag_chunks, "slide")
-        initial_state = pipeline_input.to_graph_state()
-    """
     task_type: str          # "slide" | "lesson_plan"
     query: str              # enriched query
     topic: str              # topic bài học
@@ -42,14 +21,6 @@ class ContentPipelineInput:
 
     @classmethod
     def from_context(cls, ctx, rag_chunks: list, task_type: str = "slide") -> "ContentPipelineInput":
-        """
-        Factory: extract chỉ fields cần thiết từ RequestContext.
-
-        Args:
-            ctx: RequestContext — broad context object
-            rag_chunks: RAG retrieved chunks (đã qua retrieval + rerank)
-            task_type: "slide" hoặc "lesson_plan"
-        """
         # Extract topic
         topic = (
             (ctx.intent_result.topic if ctx.intent_result else None)
@@ -74,12 +45,6 @@ class ContentPipelineInput:
         )
 
     def to_graph_state(self) -> dict:
-        """
-        Serialize thành ContentSupervisorState initial dict.
-
-        Chỉ set INPUT fields + required defaults.
-        Intermediate/output fields dùng None/empty defaults.
-        """
         return {
             # ── Input (from DTO) ──
             "task_type": self.task_type,
@@ -91,6 +56,7 @@ class ContentPipelineInput:
             "rag_chunks": self.rag_chunks,
             "messages": [],
             # ── Intermediate (graph sẽ populate) ──
+            "synthesized_context": "",
             "context_map": "",
             "chunk_map": {},
             "outline_payload": None,
@@ -106,7 +72,6 @@ class ContentPipelineInput:
 
     @staticmethod
     def _extract_grade(topic: str, contexts: list) -> str:
-        """Extract grade từ topic hoặc context metadata."""
         match = re.search(r'(?:lớp|lop|grade)\s*(10|11|12)', topic.lower())
         if match:
             return match.group(1)
@@ -123,10 +88,6 @@ class ContentPipelineInput:
 # ============================================================
 
 class AgentResult(BaseModel):
-    """
-    Envelope thống nhất cho kết quả mỗi agent.
-    Mọi agent đều trả về format này.
-    """
     agent: str = Field(..., description="Agent name: media|outline|content|quiz")
     status: Literal["success", "partial", "failed"] = "failed"
     latency_ms: int = Field(default=0, ge=0)
@@ -142,7 +103,6 @@ class AgentResult(BaseModel):
 # ============================================================
 
 class MediaItem(BaseModel):
-    """Một item media (image/gif)."""
     url: Optional[str] = None
     type: Literal["image", "gif"] = "image"
     caption: str = ""
@@ -150,7 +110,6 @@ class MediaItem(BaseModel):
 
 
 class MediaPayload(BaseModel):
-    """Output payload của Media Agent."""
     hero_media: List[MediaItem] = Field(default_factory=list)
     inline_media: List[MediaItem] = Field(default_factory=list)
 
@@ -160,7 +119,6 @@ class MediaPayload(BaseModel):
 # ============================================================
 
 class OutlineSlide(BaseModel):
-    """Một slide trong outline."""
     slide_id: str = Field(..., description="VD: s1, s2, ...")
     slide_type: Literal["title", "content", "exercise", "summary", "image"] = "content"
     title: str
@@ -170,7 +128,6 @@ class OutlineSlide(BaseModel):
 
 
 class OutlinePayload(BaseModel):
-    """Output payload của Outline Planner."""
     lesson_title: str
     slides: List[OutlineSlide] = Field(..., min_length=1)
 
@@ -180,7 +137,6 @@ class OutlinePayload(BaseModel):
 # ============================================================
 
 class ContentSlide(BaseModel):
-    """Nội dung chi tiết cho 1 slide."""
     slide_id: str
     title: str
     bullets: List[str] = Field(default_factory=list, max_length=6)
@@ -189,7 +145,6 @@ class ContentSlide(BaseModel):
 
 
 class ContentPayload(BaseModel):
-    """Output payload của Content Writer."""
     slides: List[ContentSlide]
 
 
@@ -198,7 +153,6 @@ class ContentPayload(BaseModel):
 # ============================================================
 
 class SlideQuizItem(BaseModel):
-    """Một câu hỏi quiz cho slide."""
     question: str
     options: Dict[str, str] = Field(
         ..., description="4 options: A, B, C, D"
@@ -209,7 +163,6 @@ class SlideQuizItem(BaseModel):
 
 
 class QuizPayload(BaseModel):
-    """Output payload của Quiz Generator."""
     quiz_items: List[SlideQuizItem] = Field(default_factory=list)
 
 
@@ -218,7 +171,6 @@ class QuizPayload(BaseModel):
 # ============================================================
 
 class MergedSlide(BaseModel):
-    """Slide hoàn chỉnh sau khi merge tất cả agents."""
     slide_id: str
     slide_type: Literal["title", "content", "exercise", "summary", "image"]
     title: str

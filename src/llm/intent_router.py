@@ -19,7 +19,6 @@ logger = logging.getLogger("chatbot.intent_router")
 
 @dataclass
 class IntentResult:
-    """Kết quả phân loại intent 2 tầng."""
     primary_intent: str         # "generate" | "interact" | "analyze" | "explain" | "chat"
     sub_intent: Optional[str] = None   # Filled by ActionPlanner
     task_type: Optional[str] = None    # "mcq" | "essay" | "fill_blank" | "true_false" | "slide" | ...
@@ -38,17 +37,6 @@ class IntentResult:
 # ============================================================
 
 class IntentRouter:
-    """
-    Multi-Intent Agentic Router.
-
-    Level 1: LLM-based intent detection — supports multi-intent (max 3).
-    Level 2: Rule-based sub-intent resolution (see ActionPlanner).
-
-    Agentic patterns:
-        - Validate + filter low-confidence intents (Observe → Decide)
-        - Retry with feedback on parse failure (Self-Correction)
-        - Fallback gracefully on total failure
-    """
 
     VALID_INTENTS = {"generate", "interact", "analyze", "explain", "chat"}
     VALID_TASK_TYPES = {"mcq", "essay", "fill_blank", "true_false", "slide", "lesson_plan"}
@@ -72,10 +60,6 @@ class IntentRouter:
         current_topic: Optional[str] = None,
         session_messages: Optional[List[dict]] = None,
     ) -> IntentResult:
-        """
-        Backward-compatible single-intent detection.
-        Delegates to detect_multi() and returns the first (primary) intent.
-        """
         results = self.detect_multi(query, current_topic, session_messages)
         return results[0]
 
@@ -86,20 +70,6 @@ class IntentRouter:
         session_messages: Optional[List[dict]] = None,
         max_retries: int = 2,
     ) -> List[IntentResult]:
-        """
-        Agentic multi-intent detection.
-
-        Observe → Validate → Decide → (Retry if needed)
-
-        Args:
-            query: User's current message
-            current_topic: Topic of current session
-            session_messages: Recent conversation history
-            max_retries: Max retry attempts on parse failure
-
-        Returns:
-            List[IntentResult] — 1 to MAX_INTENTS items, sorted by order
-        """
         session_context = self._format_session_context(session_messages)
         topic_instruction = self._build_topic_instruction(current_topic)
 
@@ -181,7 +151,6 @@ class IntentRouter:
         return [self._fallback(query)]
 
     def _build_topic_instruction(self, current_topic: Optional[str]) -> str:
-        """Build instruction for topic change detection."""
         if current_topic:
             return (
                 f"Session hien tai dang o chu de: \"{current_topic}\". "
@@ -191,7 +160,6 @@ class IntentRouter:
         return "Khong co session truoc do. is_new_topic = true neu co topic moi."
 
     def _format_session_context(self, messages: Optional[List[dict]]) -> str:
-        """Format recent messages for context."""
         if not messages:
             return ""
         recent = messages[-3:]
@@ -199,7 +167,6 @@ class IntentRouter:
         return "\nNgu canh hoi thoai:\n" + "\n".join(lines) + "\n"
 
     def _extract_text(self, response) -> str:
-        """Extract text from API response."""
         if response.candidates:
             for part in response.candidates[0].content.parts:
                 if hasattr(part, "text") and part.text:
@@ -207,13 +174,6 @@ class IntentRouter:
         return ""
 
     def _parse_multi_result(self, raw: str) -> Optional[List[IntentResult]]:
-        """
-        Parse LLM JSON response into List[IntentResult].
-
-        Handles both formats:
-            - New: {"intents": [{...}, {...}]}
-            - Legacy: {"intent": "...", ...} (single object)
-        """
         text = raw.strip()
         text = re.sub(r'^```json\s*', '', text, flags=re.IGNORECASE)
         text = re.sub(r'^```\s*', '', text)
@@ -250,7 +210,6 @@ class IntentRouter:
         return results
 
     def _validate_single_intent(self, data: dict) -> Optional[IntentResult]:
-        """Validate and construct a single IntentResult from a dict."""
         intent = data.get("intent", "chat")
         if intent not in self.VALID_INTENTS:
             intent = "chat"
@@ -281,12 +240,10 @@ class IntentRouter:
         return result
 
     def _parse_result(self, raw: str) -> Optional[IntentResult]:
-        """Legacy parser — backward compat. Delegates to multi parser."""
         results = self._parse_multi_result(raw)
         return results[0] if results else None
 
     def _fallback(self, query: str) -> IntentResult:
-        """Fallback when LLM detection fails."""
         return IntentResult(primary_intent="chat", topic=None, is_new_topic=False)
 
 

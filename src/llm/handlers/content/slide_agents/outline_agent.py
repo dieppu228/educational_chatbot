@@ -1,14 +1,3 @@
-"""
-OutlineAgent — Agent 2: Thiết kế dàn ý (outline) slide / giáo án.
-
-Vai trò: CRITICAL — fail thì abort toàn bộ pipeline.
-Output: OutlinePayload (lesson_title + 8-12 slides/sections skeleton)
-Timeout: 6000ms | Retry: 2
-
-Hỗ trợ 2 task_type:
-    - "slide" → SLIDE_OUTLINE_TEMPLATE
-    - "lesson_plan" → LESSON_PLAN_OUTLINE_TEMPLATE
-"""
 
 import logging
 from src.llm.handlers.content.slide_agents.base_slide_agent import BaseSlideAgent
@@ -31,19 +20,6 @@ class OutlineAgent(BaseSlideAgent):
 
     def _execute(self, *, context_map: str, topic: str, grade: str, book: str,
                  task_type: str = "slide", **kwargs) -> dict:
-        """
-        Sinh outline bài giảng / giáo án từ context map.
-
-        Args:
-            context_map: Context đã format theo grouped structure (với chunk_ids)
-            topic: Chủ đề bài học
-            grade: Lớp (10/11/12)
-            book: Bộ sách (CD/KNTT)
-            task_type: "slide" hoặc "lesson_plan" — chọn prompt tương ứng
-
-        Returns:
-            dict — OutlinePayload format
-        """
         template = _OUTLINE_TEMPLATES.get(task_type, SLIDE_OUTLINE_TEMPLATE)
 
         prompt = template.format(
@@ -79,7 +55,6 @@ class OutlineAgent(BaseSlideAgent):
         return payload
 
     def _patch_missing_types(self, slides: list, missing: set, lesson_title: str) -> list:
-        """Tự thêm slide bắt buộc nếu LLM quên."""
         next_id = len(slides) + 1
 
         if "title" in missing:

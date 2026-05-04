@@ -7,10 +7,6 @@ from src.llm.memory import TaskItem
 from src.config.config import settings
 
 class QuestionScorer(BaseHandler):
-    """
-    Bộ chấm điểm đa năng cho mọi loại câu hỏi.
-    Sử dụng LLM để nhận diện ý định trả lời và đối chiếu đáp án.
-    """
     
     def handle(
         self, 
@@ -18,16 +14,6 @@ class QuestionScorer(BaseHandler):
         items: List[TaskItem],
         **kwargs
     ) -> ScoringOutput:
-        """
-        Chấm điểm câu trả lời của người dùng.
-        
-        Args:
-            query: Câu trả lời của user (VD: "Câu 1 mình chọn A", "Mạng LAN là...")
-            items: Danh sách câu hỏi trong session hiện tại
-            
-        Returns:
-            ScoringOutput: Kết quả chấm điểm
-        """
         # Chuyển items sang text để LLM đọc nội dung session
         state_text = self._format_items_for_scorer(items)
         
@@ -59,7 +45,6 @@ class QuestionScorer(BaseHandler):
             return ScoringOutput(status="ambiguous", explanation="Không thể chấm điểm.")
 
     def _score_essay(self, user_answer: str, item: TaskItem, initial_result: ScoringOutput) -> ScoringOutput:
-        """Chấm điểm câu tự luận chuyên sâu."""
         content = item.content
         prompt = ESSAY_SCORING_TEMPLATE.format(
             question=content.get("question", ""),
@@ -85,7 +70,6 @@ class QuestionScorer(BaseHandler):
             return initial_result
 
     def _format_items_for_scorer(self, items: List[TaskItem]) -> str:
-        """Định dạng danh sách câu hỏi để LLM dễ hiểu khi chấm điểm."""
         lines = []
         for i, item in enumerate(items):
             type_str = item.type.upper()

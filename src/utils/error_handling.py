@@ -1,9 +1,3 @@
-"""
-Error Handling Utilities — Standardized error wrapper.
-
-Thay thế try-catch rải rác trong từng handler.
-Chuẩn hóa format error response cho user-facing messages.
-"""
 
 import logging
 import functools
@@ -16,16 +10,6 @@ def safe_execute(
     fallback_message: str = "Đã xảy ra lỗi. Vui lòng thử lại.",
     log_prefix: str = "",
 ) -> Callable:
-    """
-    Decorator wrap handler methods để catch exceptions thống nhất.
-
-    Usage:
-        @safe_execute(fallback_message="Lỗi sinh câu hỏi", log_prefix="QuizService")
-        def generate_quiz(self, ctx, ...):
-            ...
-
-    Hỗ trợ cả generator functions (yield) và regular functions (return).
-    """
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:
@@ -48,7 +32,6 @@ def _safe_generator(
     prefix: str,
     fallback_message: str,
 ) -> Generator:
-    """Wrap generator trong try-except để catch lỗi giữa chừng."""
     try:
         yield from gen
     except Exception as e:
@@ -57,11 +40,6 @@ def _safe_generator(
 
 
 def format_error_response(error: Exception, max_length: int = 100) -> str:
-    """
-    Chuẩn hóa error message cho user-facing response.
-
-    Không leak stack trace hay internal details.
-    """
     error_str = str(error)
     if len(error_str) > max_length:
         error_str = error_str[:max_length] + "..."

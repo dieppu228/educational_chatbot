@@ -14,14 +14,6 @@ logger = logging.getLogger("chatbot.query_rewriter")
 
 
 class QueryRewriter:
-    """
-    LLM-based query rewriter cho RAG pipeline.
-
-    Sử dụng conversation history (từ ContextAnalyzer) để:
-    1. Xác định query có cần viết lại hay không
-    2. Sinh 2-3 queries tường minh, đa dạng từ khóa
-    3. Fallback về [query gốc] nếu LLM call thất bại
-    """
 
     def __init__(self, api_key: str = None, model_name: str = None):
         self.api_key = api_key or settings.GENAI_API_KEY or os.getenv("GENAI_API_KEY", "")
@@ -33,17 +25,6 @@ class QueryRewriter:
         self.client = genai.Client(api_key=self.api_key)
 
     def rewrite(self, query: str, history_context: str) -> List[str]:
-        """
-        Viết lại query dựa trên ngữ cảnh hội thoại.
-
-        Args:
-            query: Câu hỏi hiện tại của user
-            history_context: Context đã trích xuất từ ContextAnalyzer
-                             (đã qua extract_context_from_history)
-
-        Returns:
-            List[str]: 2-3 queries đã rewrite, hoặc [query] nếu không cần/lỗi
-        """
         if not query or not query.strip():
             return [query]
 
@@ -77,7 +58,6 @@ class QueryRewriter:
             return [query]
 
     def _extract_text(self, response) -> str:
-        """Extract text from API response."""
         if response.candidates:
             for part in response.candidates[0].content.parts:
                 if hasattr(part, "text") and part.text:
@@ -85,12 +65,6 @@ class QueryRewriter:
         return ""
 
     def _parse_result(self, raw: str, original_query: str) -> dict:
-        """
-        Parse LLM JSON response.
-
-        Returns:
-            dict: {"needs_rewrite": bool, "queries": List[str]}
-        """
         text = raw.strip()
         # Clean markdown code blocks if present
         text = re.sub(r'^```json\s*', '', text, flags=re.IGNORECASE)

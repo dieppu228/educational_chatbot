@@ -1,4 +1,3 @@
-"""Fallback handler for off-topic and chitchat queries"""
 
 from typing import Optional
 from src.llm.handlers.base_handler import BaseHandler
@@ -7,18 +6,8 @@ from src.config.config import settings
 
 
 class FallbackHandler(BaseHandler):
-    """Handle off-topic or chitchat queries gracefully."""
     
     def handle(self, query: str) -> str:
-        """
-        Generate response for off-topic query.
-        
-        Args:
-            query: User query that doesn't fit main workflow
-        
-        Returns:
-            str: Friendly response guiding user back to learning
-        """
         try:
             prompt = FALLBACK_PROMPT.format(query=query)
             

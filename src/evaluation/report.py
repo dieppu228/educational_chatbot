@@ -1,9 +1,3 @@
-"""
-Evaluation Reporter — Trích xuất và định dạng kết quả đánh giá RAGAS.
-
-Đọc file eval_metrics.json và sinh ra các báo cáo dạng:
-- Bảng Markdown (eval_report.md)
-"""
 
 import json
 import logging
@@ -18,15 +12,11 @@ logger = logging.getLogger("evaluation.report")
 
 
 class EvalReporter:
-    """
-    Class sinh báo cáo từ kết quả RAGAS.
-    """
     def __init__(self, metrics_file: str = "eval_metrics.json"):
         self.output_dir = Path(settings.EVAL_OUTPUT_DIR)
         self.metrics_path = self.output_dir / metrics_file
         
     def _load_metrics(self) -> List[Dict]:
-        """Load data JSON từ file."""
         if not self.metrics_path.exists():
             raise FileNotFoundError(
                 f"Không tìm thấy {self.metrics_path}. "
@@ -36,12 +26,6 @@ class EvalReporter:
             return json.load(f)
 
     def generate_report(self) -> str:
-        """
-        Tạo báo cáo dạng Markdown.
-        
-        Returns:
-            str: Nội dung markdown của báo cáo
-        """
         data = self._load_metrics()
         df = pd.DataFrame(data)
         
@@ -125,7 +109,6 @@ class EvalReporter:
         return md_content
 
     def print_summary(self):
-        """In nhanh bảng tóm tắt trung bình."""
         data = self._load_metrics()
         df = pd.DataFrame(data)
         

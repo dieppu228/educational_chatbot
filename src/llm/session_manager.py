@@ -9,14 +9,6 @@ logger = logging.getLogger("chatbot.session_manager")
 
 
 class SessionManager:
-    """
-    Quản lý session lifecycle.
-
-    Quy tắc tạo session mới:
-        1. is_new_topic = True (LLM detect topic change)
-        2. Intent thay đổi loại chính (generate quiz → generate slide)
-        3. Không có session hiện tại
-    """
 
     # Intent groups that are compatible (same session)
     COMPATIBLE_INTENTS = {
@@ -33,21 +25,6 @@ class SessionManager:
         intent_result: IntentResult,
         user_id: str = "anonymous",
     ) -> Session:
-        """
-        Determine which session to use.
-
-        Logic:
-            1. No current session → create new
-            2. is_new_topic → save current, create new
-            3. Generate-type intent change (quiz→slide) → save current, create new
-            4. Otherwise → keep current session
-
-        Args:
-            intent_result: Output from IntentRouter
-
-        Returns:
-            Session to use for this interaction
-        """
         current = self.memory.get_current_session(user_id)
 
         # Case 1: No current session
@@ -92,13 +69,6 @@ class SessionManager:
         current: Session,
         intent_result: IntentResult,
     ) -> bool:
-        """
-        Check if the generate request is a fundamentally different type.
-
-        Quiz → more quiz (same type) → KEEP session
-        Quiz → slide → NEW session
-        Slide → quiz → NEW session
-        """
         new_task_type = intent_result.task_type
 
         if not new_task_type:
@@ -122,7 +92,6 @@ class SessionManager:
         return False
 
     def _create_new_session(self, intent_result: IntentResult, user_id: str) -> Session:
-        """Create a new session based on intent result."""
         session = self.memory.create_session(
             topic=intent_result.topic or "",
             intent=intent_result.primary_intent,
@@ -138,12 +107,10 @@ class SessionManager:
         return session
 
     def _save_and_archive(self, session: Session) -> None:
-        """Save current session before switching."""
         self.store.auto_save(session)
         logger.debug(f"Session archived: {session.session_id}")
 
     def load_previous_session(self, session_id: str) -> Optional[Session]:
-        """Load a previously saved session."""
         session = self.store.load_session(session_id)
         if session:
             self.memory.set_current_session(session.user_id, session)
@@ -152,7 +119,6 @@ class SessionManager:
         return session
 
     def list_sessions(self) -> list:
-        """List all saved sessions (metadata only)."""
         return self.store.list_sessions()
 
 

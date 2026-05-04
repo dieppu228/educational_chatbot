@@ -11,14 +11,6 @@ from sentence_transformers import SentenceTransformer
 # ============================================================
 
 class EmbeddingModel:
-    """
-    Wrapper cho SentenceTransformer embedding model.
-    
-    Tại sao cần wrapper:
-        - Tập trung cấu hình model 1 chỗ (model_name, device, batch_size)
-        - Chuẩn hóa normalize embeddings cho cosine similarity
-        - Hàm tiện ích: embed_chunks, embed_query
-    """
     
     def __init__(
         self, 
@@ -26,21 +18,12 @@ class EmbeddingModel:
         device: Optional[str] = None,
         batch_size: int = 64
     ):
-        """
-        Khởi tạo embedding model.
-        
-        Args:
-            model_name: Tên model trên HuggingFace
-            device: "cpu" hoặc "cuda". Nếu None sẽ tự động detect.
-            batch_size: Số text encode cùng lúc (giảm nếu thiếu RAM)
-        """
         self.model_name = model_name
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.batch_size = batch_size
         self.model = None  # Lazy load
     
     def _load_model(self):
-        """Load model lần đầu khi cần (lazy loading để tiết kiệm RAM)."""
         if self.model is None:
             print(f"Loading embedding model: {self.model_name}...")
             self.model = SentenceTransformer(
@@ -51,16 +34,6 @@ class EmbeddingModel:
             print(f"Model loaded on {self.device}")
     
     def encode(self, texts: List[str], show_progress: bool = True) -> np.ndarray:
-        """
-        Encode danh sách text thành embeddings.
-        
-        Args:
-            texts: Danh sách văn bản cần encode
-            show_progress: Hiện progress bar
-            
-        Returns:
-            np.ndarray: shape (n_texts, 768), dtype float32, L2-normalized
-        """
         self._load_model()
         
         embeddings = self.model.encode(
@@ -74,12 +47,6 @@ class EmbeddingModel:
         return np.array(embeddings, dtype=np.float32)
     
     def encode_query(self, query: str) -> np.ndarray:
-        """
-        Encode 1 câu query (không hiện progress bar).
-        
-        Returns:
-            np.ndarray: shape (768,)
-        """
         return self.encode([query], show_progress=False)[0]
 
 
@@ -88,7 +55,6 @@ class EmbeddingModel:
 # ============================================================
 
 def load_chunks(chunks_path: str) -> list:
-    """Load chunks từ file JSON."""
     with open(chunks_path, 'r', encoding='utf-8') as f:
         chunks = json.load(f)
     print(f"Loaded {len(chunks)} chunks from {chunks_path}")
@@ -96,21 +62,6 @@ def load_chunks(chunks_path: str) -> list:
 
 
 def prepare_texts(chunks: list, use_context: bool = True) -> List[str]:
-    """
-    Chuẩn bị text để embed từ chunks.
-    
-    Tại sao embed context + content:
-        Khi user hỏi "Bài 3 lớp 10 nói về gì?", context chứa thông tin
-        "Bài 3: MỘT SỐ KIỂU DỮ LIỆU" giúp match tốt hơn so với chỉ
-        embed nội dung bên trong.
-    
-    Args:
-        chunks: List dict từ JSON
-        use_context: Nếu True, ghép context + content
-        
-    Returns:
-        List[str]: Danh sách text đã chuẩn bị
-    """
     texts = []
     for chunk in chunks:
         content = chunk.get("content", "")
@@ -133,17 +84,6 @@ def embed_and_save(
     batch_size: int = 64,
     use_context: bool = True
 ):
-    """
-    Pipeline đầy đủ: Load chunks → Embed → Save.
-    
-    Args:
-        chunks_path: Đường dẫn file JSON chunks
-        embeddings_path: Đường dẫn lưu file .npy
-        model_name: Tên model embedding
-        device: "cpu" hoặc "cuda"
-        batch_size: Batch size khi encode
-        use_context: Ghép context vào text trước khi embed
-    """
     print("=" * 60)
     print("EMBEDDING CHUNKS PIPELINE")
     print("=" * 60)

@@ -1,7 +1,3 @@
-"""
-Pydantic schemas for LLM node outputs.
-Provides type-safe validation and parsing for all LLM responses.
-"""
 
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Literal, Dict, Any
@@ -13,7 +9,6 @@ import json
 # ============================================================
 
 class MCQOption(BaseModel):
-    """Schema for multiple choice options A, B, C, D"""
     A: str = Field(..., description="Option A text")
     B: str = Field(..., description="Option B text")
     C: str = Field(..., description="Option C text")
@@ -21,7 +16,6 @@ class MCQOption(BaseModel):
 
 
 class MCQQuestion(BaseModel):
-    """Schema for a single MCQ question"""
     index: int = Field(..., ge=1, description="Question number (1-indexed)")
     question: str = Field(..., min_length=10, description="Question text")
     options: MCQOption = Field(..., description="Answer options A-D")
@@ -31,7 +25,6 @@ class MCQQuestion(BaseModel):
     @field_validator('question')
     @classmethod
     def question_must_end_with_question_mark_or_colon(cls, v: str) -> str:
-        """Validate question ends appropriately"""
         v = v.strip()
         # Allow questions ending with ? : or .
         if not v[-1] in ['?', ':', '.', '。']:
@@ -40,16 +33,11 @@ class MCQQuestion(BaseModel):
 
 
 class MCQGenerationOutput(BaseModel):
-    """
-    Schema for Question Generator output.
-    Validates the complete MCQ response from LLM.
-    """
     mcq: List[MCQQuestion] = Field(..., min_length=1, description="List of MCQ questions")
     
     @field_validator('mcq')
     @classmethod
     def validate_unique_indices(cls, v: List[MCQQuestion]) -> List[MCQQuestion]:
-        """Ensure all question indices are unique"""
         indices = [q.index for q in v]
         if len(indices) != len(set(indices)):
             raise ValueError("Question indices must be unique")
@@ -57,7 +45,6 @@ class MCQGenerationOutput(BaseModel):
     
     @classmethod
     def from_json_string(cls, json_str: str) -> "MCQGenerationOutput":
-        """Parse from raw JSON string returned by LLM"""
         try:
             data = json.loads(json_str)
             return cls(**data)
@@ -65,14 +52,12 @@ class MCQGenerationOutput(BaseModel):
             raise ValueError(f"Invalid JSON: {e}")
     
     def get_question_by_index(self, index: int) -> Optional[MCQQuestion]:
-        """Get question by its index (1-indexed)"""
         for q in self.mcq:
             if q.index == index:
                 return q
         return None
     
     def to_display_format(self) -> str:
-        """Convert to human-readable display format"""
         lines = []
         for q in self.mcq:
             lines.append(f"Câu hỏi {q.index}:")
@@ -93,10 +78,6 @@ class MCQGenerationOutput(BaseModel):
 # ============================================================
 
 class ScoringOutput(BaseModel):
-    """
-    Schema for Answer Scorer output.
-    Validates the scoring result from LLM.
-    """
     status: Literal["found", "not_found", "ambiguous"] = Field(
         ..., 
         description="Status of answer detection"
@@ -141,7 +122,6 @@ class ScoringOutput(BaseModel):
     
     @classmethod
     def from_json_string(cls, json_str: str) -> "ScoringOutput":
-        """Parse from raw JSON string returned by LLM"""
         try:
             data = json.loads(json_str)
             return cls(**data)
@@ -149,7 +129,6 @@ class ScoringOutput(BaseModel):
             raise ValueError(f"Invalid JSON: {e}")
     
     def to_feedback_message(self) -> str:
-        """Generate user-friendly feedback message"""
         if self.status == "not_found":
             return "Không tìm thấy câu hỏi hoặc đáp án trong tin nhắn của bạn."
         
@@ -173,10 +152,6 @@ class ScoringOutput(BaseModel):
 # ============================================================
 
 class FallbackOutput(BaseModel):
-    """
-    Schema for Fallback Handler output.
-    Simple text response for off-topic queries.
-    """
     response: str = Field(..., min_length=1, description="Fallback response text")
     is_redirect: bool = Field(
         default=False, 
@@ -185,7 +160,6 @@ class FallbackOutput(BaseModel):
     
     @classmethod
     def from_text(cls, text: str) -> "FallbackOutput":
-        """Create from raw text response"""
         return cls(response=text.strip())
 
 
@@ -194,9 +168,6 @@ class FallbackOutput(BaseModel):
 # ============================================================
 
 class FeedbackOutput(BaseModel):
-    """
-    Schema for educational feedback generation.
-    """
     feedback: str = Field(..., description="Educational feedback text")
     encouragement: Optional[str] = Field(None, description="Encouraging message")
     next_steps: Optional[str] = Field(None, description="Suggested next steps")
@@ -207,17 +178,12 @@ class FeedbackOutput(BaseModel):
 # ============================================================
 
 class ExtractMetadataOutput(BaseModel):
-    """
-    Schema for metadata extraction from user query.
-    Used for filtering RAG results.
-    """
     lesson: Optional[str] = Field(None, description="Extracted lesson name")
     grade: Optional[Literal["10", "11", "12"]] = Field(None, description="Grade level")
     topic: Optional[str] = Field(None, description="Topic/subject area")
     
     @classmethod
     def from_json_string(cls, json_str: str) -> "ExtractMetadataOutput":
-        """Parse from raw JSON string returned by LLM"""
         try:
             data = json.loads(json_str)
             return cls(**data)
@@ -231,7 +197,6 @@ class ExtractMetadataOutput(BaseModel):
 # ============================================================
 
 class EssayQuestion(BaseModel):
-    """Schema for a single essay question."""
     index: int = Field(..., ge=1, description="Question number (1-indexed)")
     question: str = Field(..., min_length=10, description="Essay question text")
     sample_answer: str = Field(..., min_length=10, description="Sample answer for reference")
@@ -242,7 +207,6 @@ class EssayQuestion(BaseModel):
 
 
 class EssayGenerationOutput(BaseModel):
-    """Schema for Essay Generator output."""
     essays: List[EssayQuestion] = Field(..., min_length=1, description="List of essay questions")
 
     @classmethod
@@ -269,7 +233,6 @@ class EssayGenerationOutput(BaseModel):
 # ============================================================
 
 class FillBlankQuestion(BaseModel):
-    """Schema for a single fill-in-the-blank question."""
     index: int = Field(..., ge=1, description="Question number (1-indexed)")
     text_with_blanks: str = Field(
         ..., min_length=10,
@@ -283,7 +246,6 @@ class FillBlankQuestion(BaseModel):
 
 
 class FillBlankGenerationOutput(BaseModel):
-    """Schema for Fill-in-the-Blank Generator output."""
     fill_blanks: List[FillBlankQuestion] = Field(
         ..., min_length=1, description="List of fill-blank questions"
     )
@@ -312,7 +274,6 @@ class FillBlankGenerationOutput(BaseModel):
 # ============================================================
 
 class TrueFalseQuestion(BaseModel):
-    """Schema for a single true/false question."""
     index: int = Field(..., ge=1, description="Question number (1-indexed)")
     statement: str = Field(..., min_length=10, description="Statement to evaluate")
     correct_answer: bool = Field(..., description="True or False")
@@ -320,7 +281,6 @@ class TrueFalseQuestion(BaseModel):
 
 
 class TrueFalseGenerationOutput(BaseModel):
-    """Schema for True/False Generator output."""
     true_false: List[TrueFalseQuestion] = Field(
         ..., min_length=1, description="List of true/false questions"
     )
@@ -350,7 +310,6 @@ class TrueFalseGenerationOutput(BaseModel):
 # ============================================================
 
 class QuestionValidation(BaseModel):
-    """Kết quả validate 1 câu hỏi."""
     index: int = Field(..., description="Question index being validated")
     is_valid: bool = Field(..., description="Whether this question passes validation")
     issues: List[str] = Field(
@@ -363,7 +322,6 @@ class QuestionValidation(BaseModel):
 
 
 class ValidationResult(BaseModel):
-    """Kết quả validate toàn bộ batch câu hỏi."""
     all_valid: bool = Field(..., description="True if all questions passed")
     validations: List[QuestionValidation] = Field(
         ..., description="Validation result per question"

@@ -1,15 +1,3 @@
-"""
-ContentAgent — Agent 3: Viết nội dung chi tiết cho từng slide / section giáo án.
-
-Vai trò: CRITICAL — phụ thuộc vào outline từ Agent 2.
-Output: ContentPayload (bullets + notes cho mỗi slide/section)
-Timeout per slide: 2500ms | Retry per slide: 1
-Worker pool: max 3 concurrent slides.
-
-Hỗ trợ 2 task_type:
-    - "slide" → SLIDE_CONTENT_TEMPLATE
-    - "lesson_plan" → LESSON_PLAN_CONTENT_TEMPLATE
-"""
 
 import logging
 from typing import Dict, List, Any
@@ -45,17 +33,6 @@ class ContentAgent(BaseSlideAgent):
         task_type: str = "slide",
         **kwargs,
     ) -> dict:
-        """
-        Viết nội dung cho tất cả slides/sections (parallel, max 3 workers).
-
-        Args:
-            outline_slides: List outline slides từ Agent 2
-            chunk_map: Dict[chunk_id → chunk_content] để lấy context subset
-            task_type: "slide" hoặc "lesson_plan" — chọn prompt tương ứng
-
-        Returns:
-            dict — ContentPayload format: {slides: [...]}
-        """
         content_slides = []
         failed_slides = []
 
@@ -105,7 +82,6 @@ class ContentAgent(BaseSlideAgent):
         chunk_map: Dict[str, str],
         template=None,
     ) -> dict:
-        """Viết nội dung cho 1 slide/section cụ thể."""
         if template is None:
             template = SLIDE_CONTENT_TEMPLATE
 
@@ -143,7 +119,6 @@ class ContentAgent(BaseSlideAgent):
         return result
 
     def _fallback_from_outline(self, slide_data: Dict[str, Any]) -> dict:
-        """Tạo content fallback từ outline khi LLM call fail."""
         return {
             "slide_id": slide_data.get("slide_id", "s0"),
             "title": slide_data.get("title", ""),

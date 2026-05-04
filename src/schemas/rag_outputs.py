@@ -1,7 +1,3 @@
-"""
-Pydantic schemas for RAG pipeline outputs.
-Provides type-safe validation for retrieval and reranking results.
-"""
 
 from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any
@@ -12,7 +8,6 @@ from typing import List, Optional, Dict, Any
 # ============================================================
 
 class ChunkMetadata(BaseModel):
-    """Metadata for a retrieved chunk"""
     grade: Optional[str] = Field(None, description="Grade level (10, 11, 12)")
     lesson: Optional[str] = Field(None, description="Lesson name/number")
     idea: Optional[str] = Field(None, description="Main idea/concept")
@@ -22,10 +17,6 @@ class ChunkMetadata(BaseModel):
 
 
 class RetrievalResult(BaseModel):
-    """
-    Schema for a single retrieval result.
-    Represents one document/chunk from hybrid search.
-    """
     context: Optional[str] = Field(None, description="Parent context/breadcrumb")
     content: str = Field(..., description="Main content text")
     metadata: ChunkMetadata = Field(default_factory=ChunkMetadata, description="Chunk metadata")
@@ -36,17 +27,12 @@ class RetrievalResult(BaseModel):
     rrf_score: Optional[float] = Field(None, ge=0.0, description="Combined RRF score")
     
     def get_display_content(self, max_length: int = 200) -> str:
-        """Get truncated content for display"""
         if len(self.content) <= max_length:
             return self.content
         return self.content[:max_length] + "..."
 
 
 class RetrievalOutput(BaseModel):
-    """
-    Schema for complete retrieval output.
-    Contains list of retrieved documents with scores.
-    """
     results: List[RetrievalResult] = Field(default_factory=list, description="Retrieved documents")
     query: str = Field(..., description="Original search query")
     total_retrieved: int = Field(default=0, description="Total number retrieved")
@@ -54,17 +40,14 @@ class RetrievalOutput(BaseModel):
     @field_validator('total_retrieved', mode='before')
     @classmethod
     def set_total(cls, v, info):
-        """Auto-calculate total if not provided"""
         if v == 0 and 'results' in info.data:
             return len(info.data['results'])
         return v
     
     def get_top_k(self, k: int) -> List[RetrievalResult]:
-        """Get top k results"""
         return self.results[:k]
     
     def get_contexts_text(self, separator: str = "\n\n---\n\n") -> str:
-        """Combine all content into single text for LLM prompt"""
         return separator.join([r.content for r in self.results])
 
 
@@ -73,10 +56,6 @@ class RetrievalOutput(BaseModel):
 # ============================================================
 
 class RerankResult(BaseModel):
-    """
-    Schema for a single reranked result.
-    Extends RetrievalResult with rerank score.
-    """
     context: Optional[str] = Field(None, description="Parent context")
     content: str = Field(..., description="Main content text")
     metadata: ChunkMetadata = Field(default_factory=ChunkMetadata, description="Chunk metadata")
@@ -91,16 +70,11 @@ class RerankResult(BaseModel):
 
 
 class RerankOutput(BaseModel):
-    """
-    Schema for complete reranking output.
-    Contains reranked list of documents.
-    """
     results: List[RerankResult] = Field(default_factory=list, description="Reranked documents")
     query: str = Field(..., description="Original search query")
     top_n: int = Field(..., ge=1, description="Number of results after reranking")
     
     def get_contexts_for_prompt(self) -> str:
-        """Get formatted contexts for LLM prompt"""
         parts = []
         for i, result in enumerate(self.results, 1):
             header = f"[Document {i}]"

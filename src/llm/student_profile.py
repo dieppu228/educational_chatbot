@@ -1,15 +1,3 @@
-"""
-StudentProfile — In-memory learning progress tracking.
-
-Quản lý học lập từng user, không lưu DB.
-Mất khi reset server (acceptable cho prototype).
-
-Design:
-  - Mỗi user có 1 StudentProfile (user_id = session_id)
-  - Track lessons_studied, lesson_progress (attempts, scores, difficulty, mastered)
-  - Auto-calculate weak_topics, strong_topics
-  - Expose summary() cho debug panel
-"""
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -18,7 +6,6 @@ from datetime import datetime
 
 @dataclass
 class LessonProgress:
-    """Progress cho 1 bài học/topic cụ thể."""
     topic: str
     attempts: int = 0
     scores: List[float] = field(default_factory=list)  # Normalized to 0-1
@@ -26,22 +13,18 @@ class LessonProgress:
     
     @property
     def avg_score(self) -> float:
-        """Average score (0-1)."""
         return sum(self.scores) / len(self.scores) if self.scores else 0.0
     
     @property
     def last_score(self) -> float:
-        """Most recent score (0-1)."""
         return self.scores[-1] if self.scores else 0.0
     
     @property
     def mastered(self) -> bool:
-        """Mastered if avg >= 0.8 AND attempts >= 3."""
         return self.avg_score >= 0.8 and self.attempts >= 3
     
     @property
     def difficulty(self) -> str:
-        """Auto-calculated from avg_score."""
         if self.avg_score >= 0.85:
             return "easy"
         elif self.avg_score >= 0.65:
@@ -50,12 +33,6 @@ class LessonProgress:
             return "hard"
     
     def record_attempt(self, score: float) -> None:
-        """
-        Record a single attempt.
-        
-        Args:
-            score: 0-1 (for percentages) or 0-10 (auto-normalized)
-        """
         # Auto-normalize to 0-1
         normalized = score / 10.0 if score > 1.0 else score
         normalized = max(0.0, min(1.0, normalized))  # Clamp to [0, 1]
@@ -65,7 +42,6 @@ class LessonProgress:
         self.last_attempted = datetime.now().isoformat()
     
     def to_dict(self) -> dict:
-        """Serialize to dict."""
         return {
             "topic": self.topic,
             "attempts": self.attempts,
@@ -79,7 +55,6 @@ class LessonProgress:
     
     @classmethod
     def from_dict(cls, data: dict) -> "LessonProgress":
-        """Deserialize from dict."""
         return cls(
             topic=data.get("topic", ""),
             attempts=data.get("attempts", 0),
@@ -90,7 +65,6 @@ class LessonProgress:
 
 @dataclass
 class StudentProfile:
-    """In-memory student learning profile."""
     user_id: str
     
     # Lesson data
@@ -103,7 +77,6 @@ class StudentProfile:
     
     @property
     def weak_topics(self) -> List[str]:
-        """Topics with avg_score < 0.65 and attempts >= 2."""
         return [
             topic for topic, progress in self.lesson_progress.items()
             if progress.avg_score < 0.65 and progress.attempts >= 2
@@ -111,7 +84,6 @@ class StudentProfile:
     
     @property
     def strong_topics(self) -> List[str]:
-        """Topics with avg_score >= 0.8 and attempts >= 2."""
         return [
             topic for topic, progress in self.lesson_progress.items()
             if progress.avg_score >= 0.8 and progress.attempts >= 2
@@ -119,25 +91,16 @@ class StudentProfile:
     
     @property
     def total_attempts(self) -> int:
-        """Total attempts across all topics."""
         return sum(p.attempts for p in self.lesson_progress.values())
     
     @property
     def avg_score_overall(self) -> float:
-        """Overall average score across all topics."""
         if not self.lesson_progress:
             return 0.0
         total_score = sum(p.avg_score * p.attempts for p in self.lesson_progress.values())
         return total_score / self.total_attempts if self.total_attempts > 0 else 0.0
     
     def record_attempt(self, topic: str, score: float) -> None:
-        """
-        Record learning attempt for a topic.
-        
-        Args:
-            topic: Topic/lesson name
-            score: 0-1 or 0-10 (auto-normalized)
-        """
         # Create or get LessonProgress
         if topic not in self.lesson_progress:
             self.lesson_progress[topic] = LessonProgress(topic=topic)
@@ -149,7 +112,6 @@ class StudentProfile:
         self.last_active = datetime.now().isoformat()
     
     def get_summary(self) -> str:
-        """Generate human-readable summary of progress."""
         if not self.lessons_studied:
             return "Chưa có dữ liệu học tập."
         
@@ -168,7 +130,6 @@ class StudentProfile:
         return "\n".join(lines)
     
     def to_dict(self) -> dict:
-        """Serialize to dict."""
         return {
             "user_id": self.user_id,
             "lessons_studied": self.lessons_studied,
@@ -186,7 +147,6 @@ class StudentProfile:
     
     @classmethod
     def from_dict(cls, data: dict) -> "StudentProfile":
-        """Deserialize from dict."""
         profile = cls(
             user_id=data.get("user_id", ""),
             lessons_studied=data.get("lessons_studied", []),
@@ -202,33 +162,27 @@ class StudentProfile:
 
 
 class StudentProfileManager:
-    """Manage in-memory student profiles (user_id → StudentProfile)."""
     
     def __init__(self):
         self.profiles: Dict[str, StudentProfile] = {}
     
     def get_or_create(self, user_id: str) -> StudentProfile:
-        """Get existing profile or create new one."""
         if user_id not in self.profiles:
             self.profiles[user_id] = StudentProfile(user_id=user_id)
         return self.profiles[user_id]
     
     def get(self, user_id: str) -> Optional[StudentProfile]:
-        """Get profile if exists."""
         return self.profiles.get(user_id)
     
     def record_attempt(self, user_id: str, topic: str, score: float) -> None:
-        """Record attempt for a user/topic."""
         profile = self.get_or_create(user_id)
         profile.record_attempt(topic, score)
     
     def get_summary(self, user_id: str) -> str:
-        """Get summary for a user."""
         profile = self.get(user_id)
         if profile is None:
             return "Người dùng chưa có dữ liệu."
         return profile.get_summary()
     
     def list_all_profiles(self) -> Dict[str, StudentProfile]:
-        """List all profiles (for admin/debug)."""
         return self.profiles.copy()

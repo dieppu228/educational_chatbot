@@ -1,22 +1,3 @@
-"""
-ContentSupervisor — LangGraph StateGraph cho slide + giáo án.
-
-Kiến trúc:
-    START → preprocess → supervisor ⟷ tools (loop) → END
-
-    - preprocess: fixed node, chạy 1 lần, populate context_map + chunk_map
-    - supervisor: LLM (Gemini) với bind_tools, quyết định gọi tool nào
-    - tools: ToolNode chạy agent tools, kết quả → state + messages
-    - Loop bị giới hạn bởi recursion_limit (default 15)
-
-Supervisor flow:
-    1. Gọi generate_outline → HITL interrupt → user approve
-    2. Gọi generate_content (cần outline)
-    3. Gọi generate_media + generate_quiz (optional)
-    4. Gọi merge_results
-    5. Gọi check_quality
-    6. Trả lời cuối cùng → END
-"""
 
 import json
 import logging
@@ -44,10 +25,19 @@ RECURSION_LIMIT = 15
 SUPERVISOR_SYSTEM_PROMPT = """Bạn là Content Supervisor — điều phối viên tạo nội dung giáo dục.
 
 NHIỆM VỤ: Điều phối các công cụ (tools) để tạo {task_description}.
+Bạn KHÔNG tự viết nội dung. Bạn CHỈ quyết định gọi tool nào, với tham số gì, theo thứ tự nào.
+
+THÔNG TIN BÀI HỌC:
+- Chủ đề: {topic}
+- Lớp: {grade}
+- Bộ sách: {book}
+
+=== BỐI CẢNH KIẾN THỨC (để bạn hiểu phạm vi bài học, KHÔNG dùng để tự sinh nội dung) ===
+{synthesized_context}
 
 CÔNG CỤ CÓ SẴN:
-1. generate_outline — Thiết kế dàn ý (GỌI ĐẦU TIÊN, bắt buộc)
-2. generate_content — Viết nội dung chi tiết (cần outline trước)
+1. generate_outline — Thiết kế dàn ý (GỌI ĐẦU TIÊN, bắt buộc). Sub-agent sẽ dùng tài liệu gốc để tạo outline.
+2. generate_content — Viết nội dung chi tiết (cần outline trước). Sub-agent sẽ dùng tài liệu gốc.
 3. generate_media — Gợi ý media minh họa (tùy chọn)
 4. generate_quiz — Sinh câu hỏi luyện tập (tùy chọn)
 5. merge_results — Ghép tất cả thành slides hoàn chỉnh (sau khi có outline + content)
@@ -68,11 +58,6 @@ THỨ TỰ KHUYẾN NGHỊ:
 4. merge_results()
 5. check_quality()
 6. Trả lời: "Đã tạo xong [N] slides cho bài [tên bài]."
-
-THÔNG TIN BÀI HỌC:
-- Chủ đề: {topic}
-- Lớp: {grade}
-- Bộ sách: {book}
 """
 
 
@@ -81,10 +66,6 @@ THÔNG TIN BÀI HỌC:
 # ════════════════════════════════════════════════════════
 
 def preprocess_node(state: ContentSupervisorState) -> dict:
-    """
-    Phase 0: Preprocess RAG chunks → context_map + chunk_map.
-    Chạy 1 lần trước supervisor loop.
-    """
     rag_chunks = state.get("rag_chunks", [])
     chunk_map: Dict[str, str] = {}
     grouped: Dict[str, Dict[str, List[str]]] = {}
@@ -119,24 +100,43 @@ def preprocess_node(state: ContentSupervisorState) -> dict:
 
     logger.info(f"Preprocess: {len(rag_chunks)} chunks → {len(chunk_map)} chunk_ids")
 
-    # Build system message cho supervisor
+    # ── Synthesize context bằng ContextBuilder (LLM call) ──
     task_type = state.get("task_type", "slide")
     task_desc = "slide bài giảng" if task_type == "slide" else "giáo án bài giảng"
+    query = state.get("query", "")
+    action = f"generate_{task_type}"
 
+    synthesized = ""
+    try:
+        from src.rag.context_builder import ContextBuilder
+        builder = ContextBuilder()
+        synthesized = builder.build(
+            query=query,
+            chunks=rag_chunks,
+            action=action,
+        )
+        logger.info(f"Preprocess: synthesized_context = {len(synthesized)} chars")
+    except Exception as e:
+        logger.warning(f"ContextBuilder failed in preprocess: {e}. Using context_map as fallback.")
+        synthesized = context_map  # Fallback: dùng raw grouped context
+
+    # Build system message cho supervisor (synthesized_context → system prompt)
     system_msg = SUPERVISOR_SYSTEM_PROMPT.format(
         task_description=task_desc,
         topic=state.get("topic", ""),
         grade=state.get("grade", ""),
         book=state.get("book", ""),
+        synthesized_context=synthesized,
     )
 
     user_msg = (
         f"Hãy tạo {task_desc} cho chủ đề '{state.get('topic', '')}', "
         f"lớp {state.get('grade', '')}, bộ sách {state.get('book', '')}. "
-        f"Context đã được preprocess sẵn trong state."
+        f"Bắt đầu bằng cách gọi generate_outline()."
     )
 
     return {
+        "synthesized_context": synthesized,
         "context_map": context_map,
         "chunk_map": chunk_map,
         "messages": [
@@ -148,10 +148,6 @@ def preprocess_node(state: ContentSupervisorState) -> dict:
 
 
 def supervisor_node(state: ContentSupervisorState) -> dict:
-    """
-    Supervisor: LLM đọc messages, quyết định gọi tool nào tiếp.
-    Nếu không cần gọi tool → trả lời cuối → END.
-    """
     from src.config.config import settings
 
     llm = ChatGoogleGenerativeAI(
@@ -194,10 +190,6 @@ def supervisor_node(state: ContentSupervisorState) -> dict:
 
 
 def post_tool_processor(state: ContentSupervisorState) -> dict:
-    """
-    Sau khi ToolNode chạy xong, extract kết quả từ ToolMessages
-    và lưu vào state fields tương ứng.
-    """
     updates = {}
 
     # Scan messages từ cuối lên, tìm ToolMessages mới nhất
@@ -229,11 +221,6 @@ def post_tool_processor(state: ContentSupervisorState) -> dict:
 # ════════════════════════════════════════════════════════
 
 def should_continue(state: ContentSupervisorState) -> str:
-    """
-    Router: supervisor vừa trả lời xong.
-    Nếu có tool_calls → route tới "tools"
-    Nếu không (final answer) → route tới END
-    """
     messages = state.get("messages", [])
     if not messages:
         return END
@@ -252,15 +239,6 @@ def should_continue(state: ContentSupervisorState) -> str:
 # ════════════════════════════════════════════════════════
 
 def build_content_supervisor(checkpointer=None):
-    """
-    Build và compile ContentSupervisor StateGraph.
-
-    Args:
-        checkpointer: LangGraph checkpointer (default: MemorySaver)
-
-    Returns:
-        Compiled StateGraph, ready for .invoke() hoặc .stream()
-    """
     if checkpointer is None:
         checkpointer = MemorySaver()
 

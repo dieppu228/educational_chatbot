@@ -1,24 +1,3 @@
-"""
-Orchestrator— Thin Pipeline Controller for EduBot.
-
-Responsibilities (CHỈ orchestrate, KHÔNG chứa domain logic):
-    1. Tạo RequestContext
-    2. ContextAnalyzer → enrichment + query rewriting
-    3. IntentRouter → intent detection (1 LLM call)
-    4. SessionManager → session resolution (pure code)
-    5. ActionPlanner → action planning (pure code)
-    6. Book resolution
-    7. ExecutionDispatcher → delegate tới services
-    8. SessionStore → auto-save
-    9. TraceService → ghi log
-
-Tất cả domain logic đã được tách sang:
-    - QuizService (src/llm/services/quiz_service.py)
-    - SlideService (src/llm/services/slide_service.py)
-    - RAGService (src/rag/rag_service.py)
-    - ExecutionDispatcher (src/llm/execution_dispatcher.py)
-    - TraceService (src/utils/trace_service.py)
-"""
 
 import time
 import logging
@@ -55,13 +34,6 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 
 
 class Orchestrator:
-    """
-    Thin Pipeline Controller — chỉ kết nối các components.
-
-    Flow:
-        RequestContext → ContextAnalyzer → IntentRouter → SessionManager
-        → ActionPlanner → ExecutionDispatcher → SessionStore → TraceService
-    """
 
     # Actions that REQUIRE book filter (involve RAG search)
     ACTIONS_REQUIRING_BOOK = {
@@ -120,16 +92,6 @@ class Orchestrator:
         user_id: Optional[str] = None,
         **kwargs,
     ) -> Generator[str, None, None]:
-        """
-        Main processing pipeline.
-
-        Args:
-            query: User's message
-            ui_book: Book series from UI dropdown ("CD" | "KNTT" | None)
-
-        Yields:
-            str: Response chunks (for streaming display)
-        """
         # ① Tạo RequestContext — thay thế toàn bộ global state
         ctx = RequestContext(query=query, ui_book=ui_book, user_id=user_id or "anonymous")
 
@@ -204,7 +166,6 @@ class Orchestrator:
     # ============================================================
 
     def _enrich_context(self, ctx: RequestContext):
-        """Stage 1: ContextAnalyzer + QueryRewriter."""
         current_session = self.memory.get_current_session(ctx.user_id)
         history_text = ""
         if current_session:
@@ -238,7 +199,6 @@ class Orchestrator:
         )
 
     def _detect_intent(self, ctx: RequestContext):
-        """Stage 2: IntentRouter — Agentic multi-intent detection."""
         current_session = self.memory.get_current_session(ctx.user_id)
         current_topic = current_session.topic if current_session else None
         session_messages = current_session.get_context_messages() if current_session else None
@@ -280,7 +240,6 @@ class Orchestrator:
         )
 
     def _resolve_session(self, ctx: RequestContext):
-        """Stage 3: SessionManager (pure code)."""
         session = self.session_manager.resolve_session(ctx.intent_result, user_id=ctx.user_id)
         ctx.session = session
         logger.info(
@@ -300,7 +259,6 @@ class Orchestrator:
         )
 
     def _plan_action(self, ctx: RequestContext):
-        """Stage 4: ActionPlanner — multi-intent aware."""
         action_plans = self.action_planner.plan_all(
             ctx.intent_results, ctx.session, ctx.query
         )
@@ -328,7 +286,6 @@ class Orchestrator:
         )
 
     def _handle_no_book(self, ctx: RequestContext) -> Generator[str, None, None]:
-        """Handle case when book is required but not specified."""
         msg = (
             "📚 Hệ thống hỗ trợ 2 bộ sách SGK Tin học THPT:\n"
             "- **Cánh Diều** (CD)\n"

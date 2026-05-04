@@ -1,10 +1,3 @@
-"""
-QuizAgent — Agent 4: Sinh câu hỏi luyện tập cho slide bài giảng.
-
-Vai trò: optional — fail không block pipeline.
-Output: QuizPayload (3-5 câu MCQ)
-Timeout: 4000ms | Retry: 1
-"""
 
 import logging
 from typing import Dict
@@ -21,16 +14,6 @@ class QuizAgent(BaseSlideAgent):
     error_code = "QUIZ_FAILED"
 
     def _execute(self, *, topic: str, context: str, **kwargs) -> dict:
-        """
-        Sinh 3-5 câu hỏi MCQ từ context bài học.
-
-        Args:
-            topic: Chủ đề bài học
-            context: Context text liên quan đến phần luyện tập
-
-        Returns:
-            dict — QuizPayload format: {quiz_items: [...]}
-        """
         prompt = SLIDE_QUIZ_TEMPLATE.format(
             topic=topic,
             context=context,

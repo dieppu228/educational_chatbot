@@ -1,12 +1,3 @@
-"""
-RAGAS Evaluator — Tính toán các metrics đánh giá chất lượng RAG.
-
-Input:  eval_results.json (từ DataCollector)
-Output: eval_metrics.json (điểm số của từng sample)
-Metrics: Answer Relevancy, Faithfulness, Context Precision, Context Recall.
-
-Tương thích: ragas >= 0.4.x, langchain-google-genai >= 4.x
-"""
 
 import os
 import json
@@ -34,9 +25,6 @@ logger = logging.getLogger("evaluation.ragas")
 
 
 class RAGASEvaluator:
-    """
-    Class tính điểm hệ thống RAG bằng RAGAS.
-    """
     
     def __init__(
         self,
@@ -44,9 +32,6 @@ class RAGASEvaluator:
         embedding_model: Optional[str] = None,
         api_key: Optional[str] = None,
     ):
-        """
-        Khởi tạo RAGAS Evaluator với mô hình LLM và Embedding.
-        """
         self.llm_model = llm_model or settings.EVAL_LLM_MODEL
         self.embedding_model = embedding_model or settings.EVAL_EMBEDDING_MODEL
         self.api_key = api_key or settings.GENAI_API_KEY or os.getenv("GENAI_API_KEY", "")
@@ -66,7 +51,6 @@ class RAGASEvaluator:
         ]
 
     def _init_ragas_models(self):
-        """Khởi tạo wrappers cho Language models dành cho RAGAS."""
         logger.info(f"Initializing models for RAGAS: LLM={self.llm_model}, Embeddings={self.embedding_model}")
         
         llm = ChatGoogleGenerativeAI(
@@ -87,17 +71,6 @@ class RAGASEvaluator:
         return ragas_llm, ragas_embeddings
 
     def evaluate(self, dataset: List[Dict]) -> List[Dict]:
-        """
-        Chạy đánh giá các metrics trên tập dữ liệu đã thu thập.
-        
-        Args:
-            dataset: List[Dict] (có keys: user_input, response, retrieved_contexts, reference).
-                     Nếu file cũ dùng các key khác như question, answer, contexts, ground_truths,
-                     hàm này sẽ tự động ánh xạ lại cho phù hợp với RAGAS API.
-        
-        Returns:
-            List[Dict]: dữ liệu đánh giá chi tiết với các cột điểm mới.
-        """
         logger.info(f"Starting RAGAS evaluation for {len(dataset)} samples...")
         
         if not dataset:
@@ -169,7 +142,6 @@ class RAGASEvaluator:
         return results_list
         
     def load(self) -> List[Dict]:
-        """Tải file đã được evaluate."""
         path = self.output_dir / "eval_metrics.json"
         if not path.exists():
             raise FileNotFoundError(f"Chưa có kết quả tại {path}. Hãy chạy evaluate().")

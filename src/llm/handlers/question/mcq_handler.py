@@ -5,7 +5,6 @@ from src.schemas.llm_outputs import MCQGenerationOutput
 from src.config.config import settings
 
 class MCQHandler(BaseHandler):
-    """Sinh câu hỏi trắc nghiệm ABCD từ context."""
     
     def handle(
         self, 
@@ -14,17 +13,6 @@ class MCQHandler(BaseHandler):
         num_questions: int = 3,
         **kwargs
     ) -> MCQGenerationOutput:
-        """
-        Sinh câu hỏi trắc nghiệm.
-        
-        Args:
-            query: Yêu cầu của user (VD: "Sinh 5 câu về mạng LAN")
-            context: Nội dung bài học từ RAG
-            num_questions: Số câu cần sinh
-            
-        Returns:
-            MCQGenerationOutput: Object chứa danh sách câu hỏi
-        """
         # 1. Build prompt
         prompt = QUESTION_GENERATION_TEMPLATE.format(
             query=query,

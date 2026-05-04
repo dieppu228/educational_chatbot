@@ -291,8 +291,13 @@ Giáo viên hoặc học sinh có thể yêu cầu hệ thống tạo ra một b
 
 \section{Yêu cầu phi chức năng}
 \label{section:2.4}
-Trong phần này, sinh viên đưa ra các yêu cầu khác nếu có, bao gồm các yêu cầu phi chức năng như hiệu năng, độ tin cậy, tính dễ dùng, tính dễ bảo trì, hoặc các yêu cầu về mặt kỹ thuật như về CSDL, công nghệ sử dụng, v.v.
-
+Hệ thống Trợ lý ảo Giáo dục cần tuân thủ các yêu cầu phi chức năng sau để đảm bảo chất lượng và trải nghiệm người dùng:
+\begin{itemize}
+    \item \textbf{Hiệu năng (Performance):} Hệ thống phản hồi các truy vấn RAG của người dùng trong khoảng thời gian lý tưởng dưới 5 giây. Đối với các tác vụ phức tạp như sinh slide, thời gian chờ tối đa không vượt quá 30 giây.
+    \item \textbf{Độ tin cậy (Reliability):} Các kiến thức và nội dung được tạo ra phải bám sát %100% nội dung sách giáo khoa (Grounded), giảm thiểu tối đa hiện tượng "ảo giác" (Hallucination) từ LLM.
+    \item \textbf{Tính dễ dùng (Usability):} Giao diện người dùng (UI) cần hiển thị trực quan, thân thiện (dựa trên Gradio), giúp giáo viên và học sinh dễ dàng tương tác mà không cần qua đào tạo về công nghệ phức tạp.
+    \item \textbf{Tính mở rộng và bảo trì (Scalability \& Maintainability):} Hệ thống được thiết kế theo kiến trúc module rời rạc thuần mã nguồn (Code-level Orchestrator), cho phép dễ dàng tích hợp thêm các Agent mới hoặc nâng cấp thư viện mà không làm gián đoạn hệ thống hiện tại.
+\end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

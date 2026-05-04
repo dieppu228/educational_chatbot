@@ -1,14 +1,3 @@
-"""
-SlideMerger — Merge kết quả từ 4 agents thành output cuối cùng.
-SlideQualityGate — Kiểm tra chất lượng output trước khi trả về.
-
-Merge policy (deterministic, theo spec §5):
-    1. Skeleton từ Agent 2 (outline — nguồn sự thật cho cấu trúc)
-    2. Chèn content từ Agent 3 theo slide_id
-    3. Gắn media từ Agent 1 (nếu success) theo slide_type
-    4. Append quiz từ Agent 4 vào slide exercise
-    5. Recompute total_slides
-"""
 
 import logging
 from typing import List, Tuple, Optional
@@ -30,10 +19,6 @@ logger = logging.getLogger("chatbot.slide_merger")
 # ============================================================
 
 class SlideMerger:
-    """
-    Merge deterministic kết quả từ 4 agents.
-    Outline luôn ưu tiên cao hơn content khi mâu thuẫn slide_type.
-    """
 
     def merge(
         self,
@@ -42,12 +27,6 @@ class SlideMerger:
         media_result: AgentResult,
         quiz_result: AgentResult,
     ) -> List[MergedSlide]:
-        """
-        Merge tất cả agent results thành danh sách MergedSlide.
-
-        Returns:
-            List[MergedSlide] — slides đã merge, sẵn sàng cho quality gate
-        """
         # 1. Parse outline (source of truth)
         outline_payload = OutlinePayload(**outline_result.payload)
 
@@ -118,7 +97,6 @@ class SlideMerger:
         media_payload: Optional[MediaPayload],
         quiz_items: List[SlideQuizItem],
     ) -> MergedSlide:
-        """Merge 1 slide từ các sources."""
 
         # Base từ outline
         slide = MergedSlide(
@@ -153,7 +131,6 @@ class SlideMerger:
     def _match_media(
         self, slide: MergedSlide, media_payload: MediaPayload
     ) -> List[MediaItem]:
-        """Match media items vào slide theo slide_type."""
         matched = []
 
         if slide.slide_type == "title":
@@ -172,23 +149,8 @@ class SlideMerger:
 # ============================================================
 
 class SlideQualityGate:
-    """
-    Kiểm tra chất lượng output slide trước khi trả về.
-
-    Checks (theo spec §6):
-        - Structural: fields đầy đủ
-        - Coverage: có đủ title/content/exercise/summary
-        - Grounding: mỗi slide có source_chunk_ids
-        - Pedagogy: flow hợp lý
-    """
 
     def validate(self, slides: List[MergedSlide]) -> Tuple[bool, List[str]]:
-        """
-        Validate danh sách slides.
-
-        Returns:
-            (passed, issues) — passed=True nếu OK, issues là list vấn đề
-        """
         issues = []
 
         # 1. Structural
@@ -230,14 +192,6 @@ class SlideQualityGate:
         return passed, issues
 
     def auto_fix(self, slides: List[MergedSlide], issues: List[str]) -> List[MergedSlide]:
-        """
-        Thử auto-fix các vấn đề đơn giản.
-
-        Chỉ fix được:
-            - Thiếu source_chunk_ids → gán rỗng (grounding warning)
-            - Slide đầu không phải title → di chuyển title lên đầu
-            - Thiếu title slide → tạo mới
-        """
         # Fix pedagogy: di chuyển title lên đầu
         title_slides = [s for s in slides if s.slide_type == "title"]
         if title_slides and slides[0].slide_type != "title":

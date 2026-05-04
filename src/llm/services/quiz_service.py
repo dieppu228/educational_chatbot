@@ -1,10 +1,3 @@
-"""
-QuizService — Domain logic cho Quiz (sinh, chấm, ôn tập).
-
-Tách từ các hàm _handle_generate_quiz, _handle_check_answer,
-_handle_review_wrong, _handle_get_stats, _handle_explain_question
-trong orchestrator.py cũ.
-"""
 
 import json
 import time
@@ -18,7 +11,7 @@ from src.llm.validators.question_validator import QuestionValidator
 from src.llm.handlers.explain_handler import ExplainHandler
 from src.llm.student_tracker import StudentTracker
 from src.llm.utils import extract_num_questions
-from src.rag.context_combiner import format_contexts
+from src.rag.context_builder import ContextBuilder
 from src.rag.rag_service import RAGService
 from src.utils.error_handling import safe_execute
 
@@ -26,14 +19,6 @@ logger = logging.getLogger("chatbot.quiz_service")
 
 
 class QuizService:
-    """
-    Quản lý toàn bộ domain logic liên quan đến Quiz:
-        - Sinh câu hỏi (MCQ, Essay, Fill, True/False)
-        - Chấm điểm
-        - Ôn tập câu sai
-        - Xem thống kê
-        - Giải thích câu hỏi cụ thể
-    """
 
     def __init__(self, question_handlers: dict, rag_service: RAGService):
         self.question_handlers = question_handlers
@@ -42,6 +27,7 @@ class QuizService:
         self.validator = QuestionValidator()
         self.explain_handler = ExplainHandler()
         self.student_tracker = StudentTracker()
+        self.context_builder = ContextBuilder()
 
     # ────────────────────────────────────────────────────────
     # GENERATE QUIZ
@@ -51,7 +37,6 @@ class QuizService:
     def generate_quiz(
         self, ctx: RequestContext, task_type: str
     ) -> Generator[str, None, None]:
-        """Sinh câu hỏi và tạo QuizRound mới."""
         session = ctx.session
         query = ctx.enriched_query
 
@@ -67,7 +52,9 @@ class QuizService:
             yield "Không tìm thấy tài liệu phù hợp để tạo câu hỏi."
             return
 
-        context_text = format_contexts(contexts, action="generate_quiz")
+        context_text = self.context_builder.build(
+            query=query, chunks=contexts, action="generate_quiz"
+        )
         handler = self.question_handlers.get(task_type, self.question_handlers["mcq"])
         num_q = extract_num_questions(query) or 3
         logger.info(f"Generate: type={task_type}, num={num_q}")
@@ -177,7 +164,6 @@ class QuizService:
     def check_answer(
         self, ctx: RequestContext, original_query: str
     ) -> Generator[str, None, None]:
-        """Chấm điểm câu trả lời của user."""
         session = ctx.session
         all_questions = session.get_all_question_records()
 
@@ -253,7 +239,6 @@ class QuizService:
     def review_wrong(
         self, ctx: RequestContext, original_query: str, round_id: Optional[int] = None
     ) -> Generator[str, None, None]:
-        """Hiển thị câu sai để ôn tập."""
         session = ctx.session
         quiz_state = session.quiz_state
 
@@ -323,7 +308,6 @@ class QuizService:
     # ────────────────────────────────────────────────────────
 
     def get_stats(self, ctx: RequestContext) -> Generator[str, None, None]:
-        """Xem thống kê quiz."""
         session = ctx.session
         lines = []
 
@@ -358,7 +342,6 @@ class QuizService:
     def explain_question(
         self, ctx: RequestContext, original_query: str
     ) -> Generator[str, None, None]:
-        """Giải thích câu hỏi cụ thể trong session."""
         session = ctx.session
         all_questions = session.get_all_question_records()
 

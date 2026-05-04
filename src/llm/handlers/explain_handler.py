@@ -1,13 +1,9 @@
-"""
-Explain Handler — Giải thích chuyên sâu một khái niệm.
-"""
 
 from src.llm.handlers.base_handler import BaseHandler
 from src.llm.prompts import EXPLAIN_PROMPT
 
 
 class ExplainHandler(BaseHandler):
-    """Giải thích chuyên sâu 1 khái niệm."""
     
     def handle(self, query: str, context: str = "", **kwargs) -> str:
         if not context:

@@ -15,7 +15,6 @@ logger = logging.getLogger("chatbot.action_planner")
 # ============================================================
 
 class Action(Enum):
-    """All possible actions the Orchestrator can execute."""
 
     # Generate
     GENERATE_QUIZ = "generate_quiz"
@@ -42,7 +41,6 @@ class Action(Enum):
 
 @dataclass
 class ActionPlan:
-    """Result of action planning."""
     action: Action
     reason: str                     # Why this action was chosen (for logging)
     round_id: Optional[int] = None  # For review: which round to review
@@ -87,12 +85,6 @@ ROUND_ID_PATTERN = re.compile(
 # ============================================================
 
 class ActionPlanner:
-    """
-    Rule-based action planner.
-    Maps (IntentResult + Session state + message) → ActionPlan.
-
-    No LLM calls. Pure Python logic.
-    """
 
     def plan(
         self,
@@ -100,17 +92,6 @@ class ActionPlanner:
         session: Optional[Session],
         message: str,
     ) -> ActionPlan:
-        """
-        Determine the action to execute.
-
-        Args:
-            intent_result: Output from IntentRouter (Level 1)
-            session: Current session (may be None for new sessions)
-            message: Original user message
-
-        Returns:
-            ActionPlan with action enum and reason
-        """
         primary = intent_result.primary_intent
         msg_lower = message.lower()
 
@@ -135,20 +116,6 @@ class ActionPlanner:
         session: Optional[Session],
         message: str,
     ) -> List[ActionPlan]:
-        """
-        Map List[IntentResult] → List[ActionPlan].
-
-        Deduplicates consecutive identical actions to avoid
-        running the same handler twice in a row.
-
-        Args:
-            intent_results: All detected intents (max 3)
-            session: Current session
-            message: Original user message
-
-        Returns:
-            List[ActionPlan] — 1 to N plans in execution order
-        """
         plans = []
         for intent_result in intent_results:
             plan = self.plan(intent_result, session, message)
@@ -164,7 +131,6 @@ class ActionPlanner:
     # ── Generate ────────────────────────────────────────────
 
     def _plan_generate(self, intent_result: IntentResult, msg: str) -> ActionPlan:
-        """Resolve generate sub-intent from task_type."""
         task_type = intent_result.task_type
 
         if task_type == "slide":
@@ -184,7 +150,6 @@ class ActionPlanner:
         session: Optional[Session],
         msg: str,
     ) -> ActionPlan:
-        """Resolve interact sub-intent based on session state + keywords."""
 
         # 1. Check for review/ôn tập keywords
         if self._matches_keywords(msg, REVIEW_KEYWORDS):
@@ -227,13 +192,11 @@ class ActionPlanner:
     # ── Analyze ─────────────────────────────────────────────
 
     def _plan_analyze(self, session: Optional[Session], msg: str) -> ActionPlan:
-        """Resolve analyze sub-intent."""
         return ActionPlan(action=Action.GET_STATS, reason="Analyze intent → stats")
 
     # ── Explain ─────────────────────────────────────────────
 
     def _plan_explain(self, session: Optional[Session], msg: str) -> ActionPlan:
-        """Resolve explain sub-intent."""
         # If asking about a specific question in context
         if session and self._matches_keywords(msg, EXPLAIN_QUESTION_KEYWORDS):
             if (session.quiz_state and session.quiz_state.get_all_questions()) or \
@@ -249,18 +212,12 @@ class ActionPlanner:
     # ── Helpers ─────────────────────────────────────────────
 
     def _matches_keywords(self, msg: str, patterns: list) -> bool:
-        """Check if message matches any keyword pattern."""
         for pattern in patterns:
             if re.search(pattern, msg, re.IGNORECASE):
                 return True
         return False
 
     def _extract_round_id(self, msg: str) -> Optional[int]:
-        """
-        Extract round number from message.
-        "ôn lại câu sai lần 1" → 0 (convert to 0-indexed)
-        "review round 2" → 1
-        """
         match = ROUND_ID_PATTERN.search(msg)
         if match:
             # User says "lần 1" meaning round_id 0

@@ -5,7 +5,7 @@ from src.llm.action_planner import Action, ActionPlan
 from src.schemas.context import RequestContext
 from src.llm.handlers.chat_handler import ChatHandler
 from src.llm.handlers.explain_handler import ExplainHandler
-from src.rag.context_combiner import format_contexts
+from src.rag.context_builder import ContextBuilder
 from src.llm.services.quiz_service import QuizService
 from src.llm.services.slide_service import SlideService
 from src.rag.rag_service import RAGService
@@ -15,12 +15,6 @@ logger = logging.getLogger("chatbot.dispatcher")
 
 
 class ExecutionDispatcher:
-    """
-    Registry-based handler dispatch.
-
-    Mỗi Action enum → 1 handler function.
-    Clean, dễ mở rộng: chỉ cần thêm entry vào _handlers dict.
-    """
 
     def __init__(
         self,
@@ -33,6 +27,7 @@ class ExecutionDispatcher:
         self.rag_service = rag_service
         self.chat_handler = ChatHandler()
         self.explain_handler = ExplainHandler()
+        self.context_builder = ContextBuilder()
 
         # ── Handler Registry ──────────────────────────────
         self._handlers: Dict[Action, Callable] = {
@@ -53,16 +48,6 @@ class ExecutionDispatcher:
         plan: ActionPlan,
         ctx: RequestContext,
     ) -> Generator[str, None, None]:
-        """
-        Dispatch action → handler.
-
-        Args:
-            plan: ActionPlan từ ActionPlanner
-            ctx: RequestContext chứa toàn bộ data
-
-        Yields:
-            str: Response chunks
-        """
         handler = self._handlers.get(plan.action, self._dispatch_chat)
         yield from handler(plan, ctx)
 
@@ -97,7 +82,6 @@ class ExecutionDispatcher:
     def _dispatch_explain_question(
         self, plan: ActionPlan, ctx: RequestContext
     ) -> Generator[str, None, None]:
-        """Giải thích câu hỏi cụ thể. Fallback sang explain concept nếu không có câu hỏi."""
         for chunk in self.quiz_service.explain_question(ctx, ctx.query):
             if chunk is None:
                 # Fallback: không có câu hỏi trong session
@@ -109,12 +93,13 @@ class ExecutionDispatcher:
     def _dispatch_explain_concept(
         self, plan: ActionPlan, ctx: RequestContext
     ) -> Generator[str, None, None]:
-        """Giải thích khái niệm tổng quát (RAG + ExplainHandler)."""
         yield "Đang tìm tài liệu để giải thích..."
 
         import time
         contexts = self.rag_service.get_context(ctx, intent_hint="explain")
-        context_text = format_contexts(contexts, action="explain_concept") if contexts else ""
+        context_text = self.context_builder.build(
+            query=ctx.enriched_query, chunks=contexts, action="explain_concept"
+        ) if contexts else ""
 
         t0 = time.time()
         response = self.explain_handler.handle(ctx.enriched_query, context=context_text)
@@ -133,7 +118,6 @@ class ExecutionDispatcher:
     def _dispatch_chat(
         self, plan: ActionPlan, ctx: RequestContext
     ) -> Generator[str, None, None]:
-        """Chat tự do — KHÔNG gọi RAG, chỉ dùng ChatHandler."""
         import time
 
         t0 = time.time()
@@ -152,7 +136,6 @@ class ExecutionDispatcher:
     def _dispatch_lesson_plan(
         self, plan: ActionPlan, ctx: RequestContext
     ) -> Generator[str, None, None]:
-        """Sinh giáo án bài giảng qua ContentSupervisor pipeline."""
         yield from self.slide_service.generate_lesson_plan(ctx)
 
     def _dispatch_answer_exercise(

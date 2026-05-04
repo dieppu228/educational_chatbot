@@ -13,21 +13,6 @@ from collections import Counter
 
 @dataclass
 class ChunkMetadata:
-    """
-    Metadata cho mỗi chunk.
-    
-    Giải thích từng trường:
-        - book: Bộ sách (VD: "CD" = Cánh Diều, "KNTT" = Kết nối tri thức)
-        - grade: Lớp học (VD: "10", "11", "12")
-        - topic: Mã chủ đề (VD: "A", "B", "1", "2")
-        - topic_name: Tên đầy đủ chủ đề 
-        - lesson: Số bài (VD: "Bài 1", "Bài 2")
-        - lesson_name: Tên đầy đủ bài học
-        - section: Mã mục (VD: "1", "2", "a")
-        - title: Tiêu đề heading
-        - level: Cấp heading markdown (1 = #, 2 = ##, 3 = ###)
-        - type: Loại nội dung (theory/exercise/summary/objective/note/application)
-    """
     book: str = ""
     grade: str = ""
     topic: str = ""
@@ -42,14 +27,6 @@ class ChunkMetadata:
 
 @dataclass
 class Chunk:
-    """
-    Một chunk trong hệ thống hierarchical chunking.
-    
-    Giải thích:
-        - content: Nội dung text thuần
-        - context: Breadcrumb path (VD: "CHỦ ĐỀ A > Bài 1 > 2. Mục chính")
-        - metadata: Thông tin phân loại
-    """
     content: str = ""
     context: str = ""
     metadata: ChunkMetadata = field(default_factory=ChunkMetadata)
@@ -60,20 +37,6 @@ class Chunk:
 # ============================================================
 
 def parse_heading(line: str) -> Optional[Tuple[int, str]]:
-    """
-    Phân tích 1 dòng heading Markdown.
-    
-    Args:
-        line: Dòng text
-        
-    Returns:
-        Tuple(level, title) nếu là heading, None nếu không.
-        
-    Ví dụ:
-        "# Bài 1: DỮ LIỆU" → (1, "Bài 1: DỮ LIỆU")
-        "## 1. Nguồn thông tin" → (2, "1. Nguồn thông tin")
-        "Dòng thường" → None
-    """
     match = re.match(r'^(#{1,6})\s+(.+)$', line.strip())
     if match:
         level = len(match.group(1))
@@ -83,24 +46,6 @@ def parse_heading(line: str) -> Optional[Tuple[int, str]]:
 
 
 def detect_topic_line(line: str) -> Optional[Tuple[str, str]]:
-    """
-    Phát hiện dòng CHỦ ĐỀ (có thể là heading # hoặc bold **).
-    
-    Patterns cần detect:
-        - "# CHỦ ĐỀ A: Máy tính và xã hội tri thức..."
-        - "# CHỦ ĐỀ 1: Máy tính và xã hội tri thức"
-        - "# CHỦ ĐỀ A (CS): ..."
-        - "**CHỦ ĐỀ A : ...**"
-        
-    Returns:
-        Tuple(topic_code, topic_name) hoặc None.
-        
-    Ví dụ:
-        "# CHỦ ĐỀ A: Máy tính và xã hội tri thức" 
-            → ("A", "Máy tính và xã hội tri thức")
-        "# CHỦ ĐỀ 2: Mạng máy tính và Internet"
-            → ("2", "Mạng máy tính và Internet")
-    """
     # Loại bỏ heading markers và bold markers
     text = re.sub(r'^#+\s*', '', line.strip())
     text = re.sub(r'^\*\*|\*\*$', '', text).strip()
@@ -119,19 +64,6 @@ def detect_topic_line(line: str) -> Optional[Tuple[str, str]]:
 
 
 def detect_lesson_line(title: str) -> Optional[Tuple[str, str]]:
-    """
-    Phát hiện heading bài học từ title (đã bỏ # markers).
-    
-    Patterns:
-        - "Bài 1: DỮ LIỆU, THÔNG TIN VÀ XỬ LÍ THÔNG TIN"
-        - "Bài 1: DỮ LIỆU VÀ THÔNG TIN – Phần 2"
-        
-    Returns:
-        Tuple(lesson_num, lesson_name) hoặc None.
-        
-    Ví dụ:
-        "Bài 1: DỮ LIỆU VÀ THÔNG TIN" → ("Bài 1", "DỮ LIỆU VÀ THÔNG TIN")
-    """
     pattern = r'^(Bài\s+\d+)\s*[:\-–]\s*(.+)$'
     match = re.match(pattern, title, re.IGNORECASE)
     if match:
@@ -143,24 +75,6 @@ def detect_lesson_line(title: str) -> Optional[Tuple[str, str]]:
 
 
 def classify_section_type(title: str) -> str:
-    """
-    Phân loại loại nội dung dựa trên tiêu đề section.
-    
-    Quy tắc phân loại:
-        - "Luyện tập", "LUYỆN TẬP", "Bài tập" → exercise
-        - "Vận dụng", "VẬN DỤNG" → application
-        - "Tóm tắt bài học", "TÓM TẮT" → summary
-        - "Em cần chú ý", "Chú ý" → note
-        - "Sau bài này em sẽ", "Học xong bài này" → objective
-        - "Hoạt động", "Kết nối tri thức" → theory (mặc định)
-        - Mọi thứ khác → theory
-        
-    Args:
-        title: Tiêu đề section
-        
-    Returns:
-        str: Loại nội dung
-    """
     title_lower = title.lower().strip()
     
     # Exercise patterns
@@ -192,44 +106,12 @@ def classify_section_type(title: str) -> str:
 # ============================================================
 
 class HierarchicalChunker:
-    """
-    Chunker phân cấp cho sách giáo khoa Markdown.
-    
-    Thuật toán:
-    1. Đọc file markdown theo từng dòng
-    2. Khi gặp heading, tạo chunk mới với metadata tương ứng
-    3. Nội dung giữa 2 heading liên tiếp → content của chunk
-    4. Duy trì stack chủ đề / bài hiện tại để tạo breadcrumb context
-    5. Phân loại type dựa trên tiêu đề section
-    
-    Quy tắc đặc biệt:
-    - CHỦ ĐỀ: Không tạo chunk, chỉ cập nhật state
-    - Bài: Không tạo chunk riêng cho heading bài, gom phần mở đầu vào chunk đầu tiên  
-    - Chunk quá ngắn (<min_chars): Gộp vào chunk trước đó
-    - Chunk quá dài (>max_chars): Cắt theo paragraph
-    """
     
     def __init__(self, min_chunk_chars: int = 100, max_chunk_chars: int = 2000):
-        """
-        Khởi tạo chunker.
-        
-        Args:
-            min_chunk_chars: Chunk nhỏ hơn sẽ bị gộp vào chunk trước
-            max_chunk_chars: Chunk lớn hơn sẽ bị cắt theo paragraph
-        """
         self.min_chunk_chars = min_chunk_chars
         self.max_chunk_chars = max_chunk_chars
     
     def _extract_book_grade(self, filename: str) -> Tuple[str, str]:
-        """
-        Trích xuất thông tin bộ sách và lớp từ tên file.
-        
-        Quy ước tên file: SGK_Tin{grade}_{book}_clean.md
-        
-        Ví dụ:
-            "SGK_Tin10_CD_clean.md" → ("CD", "10")
-            "SGK_Tin11_KNTT_clean.md" → ("KNTT", "11")
-        """
         # Tìm grade
         grade_match = re.search(r'Tin(\d{2})', filename)
         grade = grade_match.group(1) if grade_match else ""
@@ -246,13 +128,6 @@ class HierarchicalChunker:
     
     def _build_context(self, topic_name: str, lesson_name: str, 
                        section_title: str) -> str:
-        """
-        Tạo breadcrumb context string từ các thành phần hierarchical.
-        
-        Ví dụ:
-            ("Máy tính và xã hội tri thức", "DỮ LIỆU VÀ THÔNG TIN", "Nguồn thông tin")
-            → "Máy tính và xã hội tri thức > DỮ LIỆU VÀ THÔNG TIN > Nguồn thông tin"
-        """
         parts = []
         if topic_name:
             parts.append(topic_name)
@@ -263,16 +138,6 @@ class HierarchicalChunker:
         return " > ".join(parts)
     
     def _detect_objective_block(self, lines: List[str], start_idx: int) -> Optional[int]:
-        """
-        Phát hiện phần mục tiêu bài học (dạng inline, không có heading).
-        
-        Patterns:
-            - "Học xong bài này, em sẽ:"
-            - "SAU BÀI NÀY EM SẼ:" (có thể là heading ##)
-            
-        Returns:
-            Index dòng cuối của block mục tiêu, hoặc None.
-        """
         line = lines[start_idx].strip()
         line_lower = line.lower()
         
@@ -292,25 +157,6 @@ class HierarchicalChunker:
         return end_idx
     
     def chunk_file(self, filepath: str) -> List[Chunk]:
-        """
-        Chunk 1 file markdown thành danh sách Chunk.
-        
-        Đây là hàm chính của pipeline. Thuật toán:
-        
-        1. Đọc toàn bộ file, chia theo dòng
-        2. Scan qua từng dòng:
-           a. Gặp CHỦ ĐỀ → cập nhật current_topic
-           b. Gặp Bài → cập nhật current_lesson  
-           c. Gặp heading ## hoặc ### → flush chunk hiện tại, bắt đầu chunk mới
-           d. Dòng thường → gom vào content chunk hiện tại
-        3. Post-process: gộp chunk nhỏ, cắt chunk to
-        
-        Args:
-            filepath: Đường dẫn file .md
-            
-        Returns:
-            List[Chunk]: Danh sách chunks
-        """
         filename = Path(filepath).name
         book, grade = self._extract_book_grade(filename)
         
@@ -332,7 +178,6 @@ class HierarchicalChunker:
         current_type = "theory"
         
         def flush_chunk():
-            """Lưu chunk hiện tại vào danh sách."""
             nonlocal current_content_lines, current_title, current_level, current_type
             
             text = '\n'.join(current_content_lines).strip()
@@ -451,14 +296,6 @@ class HierarchicalChunker:
         return chunks
     
     def _merge_short_chunks(self, chunks: List[Chunk]) -> List[Chunk]:
-        """
-        Gộp các chunk quá ngắn vào chunk trước đó.
-        
-        Lý do: Chunk quá ngắn (< min_chunk_chars) không đủ context cho retrieval,
-        gây nhiễu khi search. Gộp vào chunk trước giúp mỗi chunk có đủ nội dung.
-        
-        Quy tắc: Chỉ gộp nếu cùng bài (lesson) và chunk trước cùng type.
-        """
         if not chunks:
             return chunks
         
@@ -479,13 +316,6 @@ class HierarchicalChunker:
         return merged
     
     def _split_long_chunks(self, chunks: List[Chunk]) -> List[Chunk]:
-        """
-        Cắt chunk quá dài thành nhiều chunk nhỏ hơn, theo paragraph.
-        
-        Lý do: Chunk quá dài (> max_chunk_chars) giảm precision khi retrieval
-        vì embedding bị "pha loãng". Cắt theo paragraph giữ ngữ nghĩa tốt hơn
-        so với cắt theo ký tự.
-        """
         result = []
         
         for chunk in chunks:
@@ -527,16 +357,6 @@ class HierarchicalChunker:
         return result
     
     def chunk_all_files(self, data_dir: str, pattern: str = "*_clean.md") -> List[Chunk]:
-        """
-        Chạy chunking trên tất cả file matching pattern trong thư mục.
-        
-        Args:
-            data_dir: Thư mục chứa file markdown
-            pattern: Glob pattern để filter file
-            
-        Returns:
-            List[Chunk]: Toàn bộ chunks từ tất cả file
-        """
         data_path = Path(data_dir)
         files = sorted(data_path.glob(pattern))
         
@@ -572,16 +392,6 @@ class HierarchicalChunker:
 # ============================================================
 
 def chunks_to_json(chunks: List[Chunk]) -> List[Dict]:
-    """
-    Chuyển danh sách Chunk thành list dict (JSON-serializable).
-    
-    Format output:
-    {
-        "content": "...",
-        "context": "CHỦ ĐỀ A > Bài 1 > Mục 2",
-        "metadata": { ... }
-    }
-    """
     result = []
     for chunk in chunks:
         result.append({
@@ -593,7 +403,6 @@ def chunks_to_json(chunks: List[Chunk]) -> List[Dict]:
 
 
 def save_chunks(chunks: List[Chunk], output_path: str):
-    """Lưu chunks vào file JSON. Tạo thư mục nếu chưa có."""
     data = chunks_to_json(chunks)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as f:
@@ -606,7 +415,6 @@ def save_chunks(chunks: List[Chunk], output_path: str):
 # ============================================================
 
 def print_stats(chunks: List[Chunk]):
-    """In thống kê chi tiết về kết quả chunking."""
     print("\n" + "=" * 60)
     print("CHUNK STATISTICS")
     print("=" * 60)
@@ -649,11 +457,6 @@ def print_stats(chunks: List[Chunk]):
 
 
 def spot_check(chunks: List[Chunk], n: int = 5):
-    """
-    Kiểm tra nhanh n chunks ngẫu nhiên.
-    
-    Hiển thị: context, type, độ dài, 100 ký tự đầu.
-    """
     import random
     
     print("\n" + "=" * 60)

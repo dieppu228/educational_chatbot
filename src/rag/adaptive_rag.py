@@ -41,10 +41,6 @@ class RAGResult:
 # ============================================================
 
 class QueryClassifier:
-    """
-    Phân loại query để chọn chiến lược RAG.
-    KHÔNG dùng LLM — chỉ dùng heuristics + keyword matching.
-    """
 
     BROAD_KEYWORDS = [
         "tổng quan", "tổng quát", "toàn cảnh", "tổng hợp",
@@ -84,18 +80,6 @@ class QueryClassifier:
         grade_hint: Optional[str] = None,
         topic_hint: Optional[str] = None,
     ) -> QueryProfile:
-        """
-        Phân loại query → chọn strategy.
-
-        Args:
-            query: Câu truy vấn của user
-            intent_hint: Intent từ IntentRouter ("explain"|"generate"|"chat")
-            grade_hint: Grade đã detect từ IntentRouter (ưu tiên hơn keyword)
-            topic_hint: Topic từ IntentRouter — dùng cho metadata filter
-
-        Returns:
-            QueryProfile với strategy đã chọn
-        """
         q_lower = query.lower()
 
         # Ưu tiên grade từ IntentRouter (LLM đã reasoning)
@@ -155,14 +139,12 @@ class QueryClassifier:
         )
 
     def _detect_grade(self, q_lower: str) -> Optional[str]:
-        """Nhận diện lớp từ query (ưu tiên match cụm, không match số đơn)."""
         for grade, patterns in self.GRADE_PATTERNS.items():
             if any(p in q_lower for p in patterns):
                 return grade
         return None
 
     def _has_lesson_hint(self, q_lower: str) -> bool:
-        """Query có đề cập bài học cụ thể không."""
         # Chỉ match khi đi kèm số (vd: "bài 3", "chủ đề 2")
         import re
         return bool(re.search(r'(bài|chủ đề|mục|tiết|phần)\s*\d', q_lower))
@@ -173,16 +155,6 @@ class QueryClassifier:
 # ============================================================
 
 class AdaptiveRAGAgent:
-    """
-    Agent quyết định chiến lược RAG dựa trên loại query.
-
-    Observe → Classify → Act (choose strategy) → Return chunks
-
-    Đây là Agent (không phải LLM) vì:
-    - Tự quyết định chiến lược (không pre-defined)
-    - Observe kết quả → fallback nếu insufficient
-    - Có thể loop thêm strategy nếu primary thất bại
-    """
 
     def __init__(self, retriever, reranker, settings):
         self.retriever = retriever
@@ -198,19 +170,6 @@ class AdaptiveRAGAgent:
         grade_hint: str = None,
         book: str = None,
     ) -> RAGResult:
-        """
-        Main entry point — Agent tự chọn và thực thi strategy.
-
-        Args:
-            query: Câu truy vấn
-            intent_hint: "explain" | "generate" | "chat" (từ IntentRouter)
-            topic_hint: Topic đã detect bởi IntentRouter LLM
-            grade_hint: Grade đã detect bởi IntentRouter LLM
-            book: Book series filter ("CD" | "KNTT" | None)
-
-        Returns:
-            RAGResult với chunks và metadata
-        """
         t0 = time.time()
 
         # === Pre-compute book-scoped indices (if book provided) ===
@@ -270,7 +229,6 @@ class AdaptiveRAGAgent:
     # ============================================================
 
     def _standard_retrieval(self, query: str, book_indices: List[int] = None) -> List[Dict]:
-        """BM25 + Semantic + RRF → Reranker. Scoped by book if provided."""
         if book_indices is not None:
             results = self.retriever.search_scoped(
                 query, doc_indices=book_indices, top_k=self.settings.RETRIEVER_TOP_K
@@ -282,10 +240,6 @@ class AdaptiveRAGAgent:
         return self.reranker.rerank(query, results, top_n=self.settings.RERANKER_TOP_N)
 
     def _broad_retrieval(self, query: str, profile: QueryProfile, book: str = None) -> List[Dict]:
-        """
-        Metadata filter → lấy đại diện chunk mỗi bài.
-        Dùng grade + topic_hint + book từ IntentRouter để filter chính xác hơn.
-        """
         raw = self.retriever.search_by_metadata(
             grade=profile.grade,
             topic_name=profile.topic_hint,
@@ -320,10 +274,6 @@ class AdaptiveRAGAgent:
         return raw[:max_chunks]
 
     def _curriculum_lookup(self, profile: QueryProfile, book: str = None) -> List[Dict]:
-        """
-        Tổng hợp danh sách bài học từ metadata — không cần LLM.
-        Dùng topic_hint + book để filter theo chủ đề và bộ sách.
-        """
         raw = self.retriever.search_by_metadata(
             grade=profile.grade,
             topic_name=profile.topic_hint,
@@ -372,14 +322,6 @@ class AdaptiveRAGAgent:
         return summary_chunks[:25]
 
     def _hierarchical_retrieval(self, query: str, profile: QueryProfile, book_indices: List[int] = None) -> List[Dict]:
-        """
-        HRAG — Two-phase hierarchical retrieval.
-
-        Phase 1 (Coarse): Semantic search trên Level 1-2 chunks
-                          → xác định TOP parent topics/lessons.
-        Phase 2 (Fine):   Scoped BM25+Semantic+RRF chỉ trên children
-                          (Level 3+) của parents đã chọn → Reranker.
-        """
         all_chunks = self.retriever.chunks
         # If book_indices provided, use as base scope
         scope_set = set(book_indices) if book_indices else None
@@ -455,7 +397,6 @@ class AdaptiveRAGAgent:
         return reranked if reranked else child_results
 
     def _merge_deduplicate(self, primary: List[Dict], secondary: List[Dict]) -> List[Dict]:
-        """Merge 2 lists, loại trùng doc_id. Primary được ưu tiên."""
         seen_ids = {c["doc_id"] for c in primary}
         merged = list(primary)
         for c in secondary:
@@ -465,7 +406,6 @@ class AdaptiveRAGAgent:
         return merged
 
     def _get_book_indices(self, book: str) -> List[int]:
-        """Pre-compute danh sách indices thuộc bộ sách chỉ định."""
         indices = []
         for i, chunk in enumerate(self.retriever.chunks):
             if chunk.get("metadata", {}).get("book") == book:

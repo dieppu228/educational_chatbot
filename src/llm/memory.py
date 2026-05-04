@@ -10,10 +10,6 @@ from typing import List, Dict, Optional, Any
 
 @dataclass
 class TaskItem:
-    """
-    Item linh hoạt — lưu bất kỳ loại output nào.
-    DEPRECATED: Dùng QuestionRecord thay thế cho code mới.
-    """
     type: str
     content: Dict[str, Any]
     index: int = 0
@@ -21,7 +17,6 @@ class TaskItem:
 
 @dataclass
 class Message:
-    """Tin nhắn trong hội thoại."""
     role: str       # "user" | "assistant"
     content: str
 
@@ -42,14 +37,6 @@ class Message:
 
 @dataclass
 class QuestionRecord:
-    """
-    Lưu chi tiết 1 câu hỏi + kết quả trả lời.
-
-    question_id format:
-        Quiz: "r{round_id}_q{index}"       → "r0_q0", "r2_q3"
-        Slide exercise: "slide_ex{slide_idx}_q{index}" → "slide_ex0_q1"
-        Review: "rev{round_id}_q{index}"    → "rev0_q0"
-    """
     question_id: str
     question_type: str              # "mcq" | "essay" | "fill_blank" | "true_false"
     content: Dict[str, Any]         # Full question content from schema output
@@ -65,7 +52,6 @@ class QuestionRecord:
     source: str = "quiz"                # "quiz" | "slide_exercise" | "review"
 
     def record_attempt(self, user_answer: Any, is_correct: bool, score: Optional[float] = None):
-        """Record a user's attempt at answering this question."""
         self.user_answer = user_answer
         self.is_correct = is_correct
         self.score = score
@@ -90,20 +76,11 @@ class QuestionRecord:
         return cls(**data)
 
     def to_task_item(self) -> TaskItem:
-        """Convert to legacy TaskItem for backward compatibility."""
         return TaskItem(type=self.question_type, content=self.content, index=0)
 
 
 @dataclass
 class QuizRound:
-    """
-    Đại diện cho 1 lần user yêu cầu sinh câu hỏi.
-
-    Ví dụ:
-        Round 0: User yêu cầu "Tạo 3 câu MCQ về mạng LAN"
-        Round 1: User yêu cầu "Thêm 5 câu nữa"
-        Round 2: User yêu cầu "Tạo 2 câu tự luận"
-    """
     round_id: int
     question_type: str              # "mcq" | "essay" | "fill_blank" | "true_false"
     query: str                      # Original user query
@@ -124,12 +101,10 @@ class QuizRound:
 
     @property
     def wrong_questions(self) -> List[QuestionRecord]:
-        """Return questions answered incorrectly."""
         return [q for q in self.questions if q.is_correct is False]
 
     @property
     def unanswered_questions(self) -> List[QuestionRecord]:
-        """Return questions not yet answered."""
         return [q for q in self.questions if q.user_answer is None]
 
     def to_dict(self) -> dict:
@@ -155,10 +130,6 @@ class QuizRound:
 
 @dataclass
 class QuizSessionState:
-    """
-    State chuyên biệt cho quiz session.
-    Lưu trữ nhiều rounds, hỗ trợ ôn tập câu sai.
-    """
     rounds: List[QuizRound] = field(default_factory=list)
 
     @property
@@ -179,7 +150,6 @@ class QuizSessionState:
         return self.total_correct / answered if answered > 0 else 0.0
 
     def create_round(self, question_type: str, query: str) -> QuizRound:
-        """Create a new quiz round and append to rounds list."""
         round_obj = QuizRound(
             round_id=len(self.rounds),
             question_type=question_type,
@@ -189,28 +159,21 @@ class QuizSessionState:
         return round_obj
 
     def get_round(self, round_id: int) -> Optional[QuizRound]:
-        """Get a specific round by ID."""
         for r in self.rounds:
             if r.round_id == round_id:
                 return r
         return None
 
     def get_latest_round(self) -> Optional[QuizRound]:
-        """Get the most recent round."""
         return self.rounds[-1] if self.rounds else None
 
     def get_all_questions(self) -> List[QuestionRecord]:
-        """Get all questions across all rounds."""
         all_q = []
         for r in self.rounds:
             all_q.extend(r.questions)
         return all_q
 
     def get_wrong_questions(self, round_id: Optional[int] = None) -> List[QuestionRecord]:
-        """
-        Get wrong questions.
-        round_id=None → all rounds, round_id=0 → only round 0.
-        """
         if round_id is not None:
             target_round = self.get_round(round_id)
             return target_round.wrong_questions if target_round else []
@@ -221,14 +184,9 @@ class QuizSessionState:
         return wrong
 
     def get_wrong_questions_by_type(self, q_type: str) -> List[QuestionRecord]:
-        """Get wrong questions filtered by question type."""
         return [q for q in self.get_wrong_questions() if q.question_type == q_type]
 
     def create_review_round(self, source_round_ids: Optional[List[int]] = None) -> Optional[QuizRound]:
-        """
-        Create a review round from wrong questions of specified rounds.
-        source_round_ids=None → collect from all rounds.
-        """
         wrong = []
         if source_round_ids:
             for rid in source_round_ids:
@@ -257,7 +215,6 @@ class QuizSessionState:
         return review_round
 
     def get_summary(self) -> str:
-        """Generate a text summary of quiz progress."""
         if not self.rounds:
             return "Chua co cau hoi nao."
 
@@ -290,10 +247,6 @@ class QuizSessionState:
 
 @dataclass
 class SlideSessionState:
-    """
-    State chuyên biệt cho slide session.
-    Kế thừa quiz mechanism cho exercise questions trong slide.
-    """
     slide_output: Optional[Dict] = None     # Graph output (slides, status, HITL data)
     slide_html: Optional[str] = None        # HTML rendered
 
@@ -317,15 +270,12 @@ class SlideSessionState:
         return sum(1 for q in self.exercise_questions if q.is_correct is True)
 
     def get_wrong_exercises(self) -> List[QuestionRecord]:
-        """Get exercise questions answered incorrectly."""
         return [q for q in self.exercise_questions if q.is_correct is False]
 
     def get_unanswered_exercises(self) -> List[QuestionRecord]:
-        """Get exercises not yet attempted."""
         return [q for q in self.exercise_questions if q.user_answer is None]
 
     def add_exercise(self, question_type: str, content: dict, slide_idx: int, q_idx: int):
-        """Add an exercise question extracted from a slide."""
         record = QuestionRecord(
             question_id=f"slide_ex{slide_idx}_q{q_idx}",
             question_type=question_type,
@@ -354,10 +304,6 @@ class SlideSessionState:
 
 @dataclass
 class Session:
-    """
-    Session v2 — 1 topic + 1 primary intent.
-    Replaces the old SessionState for new code.
-    """
     session_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     user_id: str = "anonymous"        # Owner user id (from UI/client)
     topic: str = ""
@@ -377,33 +323,27 @@ class Session:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def touch(self):
-        """Update the updated_at timestamp."""
         self.updated_at = datetime.now().isoformat()
 
     def add_message(self, role: str, content: str):
-        """Add a message to conversation history."""
         self.messages.append(Message(role=role, content=content))
         self.touch()
 
     def get_context_messages(self, max_messages: int = 10) -> List[dict]:
-        """Get recent messages as list of dicts for LLM context."""
         recent = self.messages[-max_messages:]
         return [m.to_dict() for m in recent]
 
     def ensure_quiz_state(self) -> QuizSessionState:
-        """Ensure quiz_state exists, create if needed."""
         if self.quiz_state is None:
             self.quiz_state = QuizSessionState()
         return self.quiz_state
 
     def ensure_slide_state(self) -> SlideSessionState:
-        """Ensure slide_state exists, create if needed."""
         if self.slide_state is None:
             self.slide_state = SlideSessionState()
         return self.slide_state
 
     def get_all_question_records(self) -> List[QuestionRecord]:
-        """Get all questions from both quiz and slide states."""
         records = []
         if self.quiz_state:
             records.extend(self.quiz_state.get_all_questions())
@@ -451,10 +391,6 @@ class Session:
 # ============================================================
 
 class MemoryManager:
-    """
-    Quản lý sessions và conversation context.
-    v3: Chỉ dùng Session mới (v2). Legacy SessionState removed.
-    """
 
     def __init__(self, max_context_messages: int = 10):
         # Sessions v2
@@ -474,7 +410,6 @@ class MemoryManager:
         intent: str = "chat",
         user_id: Optional[str] = None,
     ) -> Session:
-        """Create a new v2 session."""
         uid = self._normalize_user_id(user_id)
         session = Session(topic=topic, intent=intent, user_id=uid)
         self.sessions_v2.append(session)
@@ -483,7 +418,6 @@ class MemoryManager:
         return session
 
     def get_session(self, session_id: str, user_id: Optional[str] = None) -> Optional[Session]:
-        """Get a v2 session by ID."""
         for s in self.sessions_v2:
             if s.session_id == session_id:
                 uid = self._normalize_user_id(user_id or s.user_id)
@@ -493,12 +427,10 @@ class MemoryManager:
         return None
 
     def get_current_session(self, user_id: Optional[str] = None) -> Optional[Session]:
-        """Get current active session for a specific user."""
         uid = self._normalize_user_id(user_id)
         return self.current_sessions_by_user.get(uid)
 
     def set_current_session(self, user_id: Optional[str], session: Session) -> None:
-        """Set current active session for a specific user."""
         uid = self._normalize_user_id(user_id or session.user_id)
         self.current_session_v2 = session
         self.current_sessions_by_user[uid] = session
@@ -509,26 +441,22 @@ class MemoryManager:
         intent: str = "chat",
         user_id: Optional[str] = None,
     ) -> Session:
-        """Get current session or create new one."""
         current = self.get_current_session(user_id)
         if current is not None:
             return current
         return self.create_session(topic=topic, intent=intent, user_id=user_id)
 
     def switch_session(self, topic: str, intent: str, user_id: Optional[str] = None) -> Session:
-        """Save current session and create a new one."""
         new_session = self.create_session(topic=topic, intent=intent, user_id=user_id)
         return new_session
 
     def get_context(self, user_id: Optional[str] = None) -> List[dict]:
-        """Get context window from current v2 session."""
         current = self.get_current_session(user_id)
         if not current:
             return []
         return current.get_context_messages(self.max_context_messages)
 
     def clear_user_session(self, user_id: Optional[str] = None) -> None:
-        """Detach current active session mapping for one user (keeps stored history)."""
         uid = self._normalize_user_id(user_id)
         current = self.current_sessions_by_user.pop(uid, None)
         if current and self.current_session_v2 and self.current_session_v2.session_id == current.session_id:

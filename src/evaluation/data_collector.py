@@ -1,10 +1,3 @@
-"""
-Data Collector — Chạy RAG pipeline trên test set, thu thập kết quả.
-
-Input:  test set (question, ground_truth)
-Output: dataset đầy đủ (question, contexts, answer, ground_truth) 
-        sẵn sàng cho RAGAS evaluate.
-"""
 
 import json
 import os
@@ -34,13 +27,6 @@ Hãy trả lời dựa trên tài liệu. Nếu tài liệu không chứa đủ 
 
 
 class DataCollector:
-    """
-    Chạy RAG pipeline trên test set để thu thập dữ liệu đánh giá.
-    
-    Flow:
-        question → CustomSearch (retrieve) → Reranker → LLM (generate answer)
-        → (question, retrieved_contexts, answer, ground_truth)
-    """
     
     def __init__(
         self,
@@ -49,13 +35,6 @@ class DataCollector:
         api_key: Optional[str] = None,
         llm_model: Optional[str] = None,
     ):
-        """
-        Args:
-            retriever: CustomSearch instance (đã load data + embeddings)
-            reranker: Reranker instance
-            api_key: Google API key
-            llm_model: Model LLM để generate answer
-        """
         self.retriever = retriever
         self.reranker = reranker
         self.api_key = api_key or settings.GENAI_API_KEY or os.getenv("GENAI_API_KEY", "")
@@ -69,12 +48,6 @@ class DataCollector:
         self.output_dir.mkdir(exist_ok=True)
     
     def _retrieve_and_rerank(self, query: str) -> List[str]:
-        """
-        Chạy retrieve + rerank, trả về list context strings.
-        
-        Returns:
-            List[str] — nội dung các chunks đã rerank
-        """
         # Hybrid search
         results = self.retriever.search(
             query, 
@@ -96,12 +69,6 @@ class DataCollector:
         return contexts
     
     def _generate_answer(self, question: str, contexts: List[str]) -> str:
-        """
-        Gọi LLM sinh câu trả lời từ contexts.
-        
-        Returns:
-            str — câu trả lời từ LLM
-        """
         context_text = "\n\n---\n\n".join(contexts)
         prompt = ANSWER_PROMPT.format(context=context_text, question=question)
         
@@ -122,17 +89,6 @@ class DataCollector:
             return ""
     
     def collect(self, testset: List[Dict]) -> List[Dict]:
-        """
-        Chạy full pipeline trên test set, thu thập kết quả.
-        
-        Args:
-            testset: List[Dict] từ TestsetGenerator — mỗi dict có:
-                     user_input, reference_contexts, reference
-        
-        Returns:
-            List[Dict] — mỗi dict có:
-                user_input, retrieved_contexts, response, reference
-        """
         logger.info(f"Collecting data for {len(testset)} samples...")
         
         results = []
@@ -183,7 +139,6 @@ class DataCollector:
         return results
     
     def load(self) -> List[Dict]:
-        """Load kết quả đã thu thập."""
         path = self.output_dir / "eval_results.json"
         if not path.exists():
             raise FileNotFoundError(

@@ -1,13 +1,3 @@
-"""
-TraceService — Centralized logging & debug trace.
-
-Thay thế:
-    - Hàm _write_json_trace() trong orchestrator.py
-    - Việc ghi self.last_debug_info rải rác khắp nơi
-    - Fix chế độ ghi file mode='w' → mode='a' (append)
-
-Hỗ trợ per-request debug tracking bằng request_id.
-"""
 
 import json
 import logging
@@ -55,26 +45,12 @@ if not logger.handlers:
 # ============================================================
 
 class TraceService:
-    """
-    Centralized trace & debug service.
-
-    Responsibilities:
-        - Ghi debug trace cho mỗi request (JSON, append mode)
-        - Cung cấp logger cho toàn pipeline
-        - Thu gọn payload debug (preview thay vì full content)
-    """
 
     def __init__(self, trace_file: Optional[Path] = None):
         self.trace_file = trace_file or _trace_file
         self.logger = logger
 
     def write_trace(self, ctx: RequestContext, response_preview: str = ""):
-        """
-        Ghi full debug trace cho 1 request.
-
-        Dùng mode='a' (append) thay vì 'w' (overwrite).
-        Mỗi entry được phân cách bằng request_id.
-        """
         trace_data = ctx.to_debug_dict()
         trace_data["total_time_s"] = ctx.elapsed_time
 
@@ -92,7 +68,6 @@ class TraceService:
             self.logger.error(f"Failed to write JSON trace: {e}")
 
     def log_step(self, ctx: RequestContext, node: str, **kwargs):
-        """Thêm 1 step vào trace + log ra console."""
         ctx.add_debug_step(node, **kwargs)
 
         # Log summary ra console
@@ -103,15 +78,12 @@ class TraceService:
         self.logger.info(" | ".join(summary_parts))
 
     def log_info(self, msg: str):
-        """Shortcut for info logging."""
         self.logger.info(msg)
 
     def log_error(self, msg: str):
-        """Shortcut for error logging."""
         self.logger.error(msg)
 
     def log_warning(self, msg: str):
-        """Shortcut for warning logging."""
         self.logger.warning(msg)
 
 

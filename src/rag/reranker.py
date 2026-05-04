@@ -6,25 +6,13 @@ from sentence_transformers import CrossEncoder
 import torch
 
 class Reranker:
-    """
-    Reranker dùng Cross-Encoder model AITeamVN/Vietnamese_Reranker.
-    
-    Cross-encoder nhận (query, document) pair → score relevance.
-    Chính xác hơn bi-encoder nhưng chậm hơn → chỉ dùng rerank top-N.
-    """
     
     def __init__(self, model_name: str = "AITeamVN/Vietnamese_Reranker", device: Optional[str] = None):
-        """
-        Args:
-            model_name: Tên model cross-encoder trên HuggingFace
-            device: "cpu" hoặc "cuda"
-        """
         self.model_name = model_name
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._model = None  # Lazy load
     
     def _load_model(self):
-        """Load model lần đầu khi cần."""
         if self._model is None:
             print(f"Loading reranker: {self.model_name}...")
             self._model = CrossEncoder(
@@ -35,17 +23,6 @@ class Reranker:
             print(f"Reranker loaded on {self.device}")
     
     def rerank(self, query: str, results: List[Dict], top_n: int = 10) -> List[Dict]:
-        """
-        Rerank danh sách kết quả search.
-        
-        Args:
-            query: Câu truy vấn gốc
-            results: List[Dict] từ CustomSearch.search() — cần có key "content"
-            top_n: Số kết quả trả về sau rerank
-            
-        Returns:
-            List[Dict] đã sắp xếp theo rerank_score, thêm key "rerank_score"
-        """
         if not results:
             return []
         
@@ -68,18 +45,6 @@ class Reranker:
     
     def filter_context(self, results: List[Dict], min_len: int = 50, 
                        min_score: float = 0.0, top_n: Optional[int] = None) -> List[Dict]:
-        """
-        Lọc kết quả: bỏ trùng lặp, quá ngắn, score thấp.
-        
-        Args:
-            results: Kết quả sau rerank
-            min_len: Độ dài tối thiểu content (chars)
-            min_score: Rerank score tối thiểu
-            top_n: Giới hạn số kết quả
-            
-        Returns:
-            List[Dict] đã lọc
-        """
         filtered = []
         seen = set()
         

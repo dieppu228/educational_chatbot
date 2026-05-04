@@ -5,7 +5,6 @@ from src.schemas.llm_outputs import EssayGenerationOutput
 from src.config.config import settings
 
 class EssayHandler(BaseHandler):
-    """Sinh câu hỏi tự luận từ nội dung bài học."""
     
     def handle(
         self, 
@@ -14,17 +13,6 @@ class EssayHandler(BaseHandler):
         num_questions: int = 2,
         **kwargs
     ) -> EssayGenerationOutput:
-        """
-        Sinh câu hỏi tự luận.
-        
-        Args:
-            query: Yêu cầu của user
-            context: Nội dung bài học từ RAG
-            num_questions: Số câu cần sinh
-            
-        Returns:
-            EssayGenerationOutput: Object chứa danh sách câu tự luận
-        """
         # 1. Build prompt
         prompt = ESSAY_GENERATION_TEMPLATE.format(
             query=query,

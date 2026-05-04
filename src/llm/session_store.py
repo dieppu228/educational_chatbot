@@ -1,12 +1,3 @@
-"""
-Session Store — JSON Persistence for EduBot Sessions.
-
-Lưu/tải sessions ra file JSON.
-Mỗi session = 1 file riêng: data/sessions/{session_id}.json
-Index file: data/sessions/_index.json
-
-Sau này migrate sang DB: chỉ thay implementation, interface giữ nguyên.
-"""
 
 import json
 import logging
@@ -18,16 +9,6 @@ logger = logging.getLogger("chatbot.session_store")
 
 
 class SessionStore:
-    """
-    JSON-based session persistence.
-
-    Storage layout:
-        data/sessions/
-        ├── _index.json          # Session metadata index
-        ├── abc-123.json         # Individual session files
-        ├── def-456.json
-        └── ...
-    """
 
     def __init__(self, storage_path: str = "data/sessions"):
         self.storage_path = Path(storage_path)
@@ -41,7 +22,6 @@ class SessionStore:
     # ── Save ────────────────────────────────────────────────
 
     def save_session(self, session: Session) -> None:
-        """Save a single session to its own JSON file."""
         file_path = self.storage_path / f"{session.session_id}.json"
 
         try:
@@ -58,15 +38,10 @@ class SessionStore:
             raise
 
     def save_all(self, sessions: List[Session]) -> None:
-        """Batch save multiple sessions."""
         for session in sessions:
             self.save_session(session)
 
     def auto_save(self, session: Session) -> None:
-        """
-        Auto-save a session (called after important interactions).
-        Same as save_session but with error swallowing for non-critical saves.
-        """
         try:
             self.save_session(session)
         except Exception as e:
@@ -75,7 +50,6 @@ class SessionStore:
     # ── Load ────────────────────────────────────────────────
 
     def load_session(self, session_id: str) -> Optional[Session]:
-        """Load a single session from its JSON file."""
         file_path = self.storage_path / f"{session_id}.json"
 
         if not file_path.exists():
@@ -94,7 +68,6 @@ class SessionStore:
             return None
 
     def load_all(self) -> List[Session]:
-        """Load all sessions from storage."""
         sessions = []
         index = self._read_index()
 
@@ -109,16 +82,9 @@ class SessionStore:
     # ── Query ───────────────────────────────────────────────
 
     def list_sessions(self) -> List[Dict]:
-        """
-        List all sessions (metadata only, without loading full content).
-
-        Returns:
-            List of dicts: [{"session_id": ..., "topic": ..., "intent": ..., "created_at": ..., "updated_at": ...}]
-        """
         return self._read_index()
 
     def get_latest_session_id(self) -> Optional[str]:
-        """Get the most recently updated session ID."""
         index = self._read_index()
         if not index:
             return None
@@ -128,18 +94,15 @@ class SessionStore:
         return sorted_index[0]["session_id"]
 
     def find_sessions_by_topic(self, topic: str) -> List[Dict]:
-        """Find sessions matching a topic (simple substring match)."""
         index = self._read_index()
         return [entry for entry in index if topic.lower() in entry.get("topic", "").lower()]
 
     def session_exists(self, session_id: str) -> bool:
-        """Check if a session file exists."""
         return (self.storage_path / f"{session_id}.json").exists()
 
     # ── Delete ──────────────────────────────────────────────
 
     def delete_session(self, session_id: str) -> bool:
-        """Delete a session file and remove from index."""
         file_path = self.storage_path / f"{session_id}.json"
 
         try:
@@ -161,7 +124,6 @@ class SessionStore:
     # ── Index Management ────────────────────────────────────
 
     def _read_index(self) -> List[Dict]:
-        """Read the session index file."""
         try:
             if self._index_file.exists():
                 with open(self._index_file, "r", encoding="utf-8") as f:
@@ -171,7 +133,6 @@ class SessionStore:
         return []
 
     def _write_index(self, index: List[Dict]) -> None:
-        """Write the session index file."""
         try:
             with open(self._index_file, "w", encoding="utf-8") as f:
                 json.dump(index, f, ensure_ascii=False, indent=2)
@@ -179,7 +140,6 @@ class SessionStore:
             logger.error(f"Failed to write index: {e}")
 
     def _update_index(self, session: Session) -> None:
-        """Update or add a session entry in the index."""
         index = self._read_index()
 
         entry = {

@@ -1,12 +1,3 @@
-"""
-CLI Runner — Script chính để chạy trọn bộ đánh giá RAG hoặc từng bước riêng biệt.
-
-Cách chạy:
-    python -m src.evaluation.run_eval --help
-    python -m src.evaluation.run_eval --step all
-    python -m src.evaluation.run_eval --step collect
-    python -m src.evaluation.run_eval --step evaluate
-"""
 
 import argparse
 import logging

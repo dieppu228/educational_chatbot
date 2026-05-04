@@ -1,13 +1,3 @@
-"""
-Tools — Wrap existing agents thành LangChain tools cho supervisor.
-
-Mỗi tool:
-    - Dùng InjectedState để truy cập large data (context_map, chunk_map)
-    - Gọi agent logic hiện tại (giữ nguyên)
-    - Trả về JSON string cho supervisor messages
-
-HITL: generate_outline có interrupt() để user review dàn ý.
-"""
 
 import json
 import logging
@@ -31,9 +21,6 @@ def generate_outline(
     book: str,
     state: Annotated[dict, InjectedState],
 ) -> str:
-    """Thiết kế dàn ý (outline) bài giảng / giáo án gồm 7-12 slides/sections.
-    Gọi tool này ĐẦU TIÊN trước bất kỳ tool nào khác.
-    Sau khi tạo outline, user sẽ được review và có thể chỉnh sửa."""
 
     from src.llm.handlers.content.slide_agents import OutlineAgent
 
@@ -81,8 +68,6 @@ def generate_outline(
 def generate_content(
     state: Annotated[dict, InjectedState],
 ) -> str:
-    """Viết nội dung chi tiết cho từng slide/section dựa trên outline đã được duyệt.
-    CHỈ gọi tool này SAU KHI generate_outline đã hoàn thành."""
 
     from src.llm.handlers.content.slide_agents import ContentAgent
 
@@ -122,8 +107,6 @@ def generate_media(
     grade: str,
     book: str,
 ) -> str:
-    """Gợi ý media minh họa (hình ảnh, biểu đồ) cho slide.
-    Tool này OPTIONAL — có thể gọi song song với các tool khác."""
 
     from src.llm.handlers.content.slide_agents import MediaAgent
 
@@ -147,8 +130,6 @@ def generate_quiz(
     topic: str,
     state: Annotated[dict, InjectedState],
 ) -> str:
-    """Sinh 3-5 câu hỏi trắc nghiệm (MCQ) cho phần luyện tập.
-    Tool này OPTIONAL — có thể gọi song song với các tool khác."""
 
     from src.llm.handlers.content.slide_agents import QuizAgent
 
@@ -173,8 +154,6 @@ def generate_quiz(
 def merge_results(
     state: Annotated[dict, InjectedState],
 ) -> str:
-    """Merge kết quả từ outline, content, media, quiz thành danh sách slides hoàn chỉnh.
-    Gọi SAU KHI ít nhất generate_outline và generate_content đã xong."""
 
     from src.llm.services.slide_merger import SlideMerger
     from src.schemas.slide_schemas import AgentResult
@@ -228,8 +207,6 @@ def merge_results(
 def check_quality(
     state: Annotated[dict, InjectedState],
 ) -> str:
-    """Kiểm tra chất lượng slides đã merge. Nếu không đạt sẽ tự auto-fix.
-    Gọi SAU merge_results."""
 
     from src.llm.services.slide_merger import SlideQualityGate
     from src.schemas.slide_schemas import MergedSlide

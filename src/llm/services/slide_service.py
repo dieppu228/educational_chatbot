@@ -1,14 +1,3 @@
-"""
-SlideService — Domain logic cho Slide & Lesson Plan generation.
-
-v4: Tích hợp ContentPipelineInput (narrow interface DTO)
-    + generate_lesson_plan() cho giáo án.
-
-    - generate_slide()       → gọi graph.invoke() với task_type="slide"
-    - generate_lesson_plan() → gọi graph.invoke() với task_type="lesson_plan"
-    - resume_outline()       → resume HITL sau khi user review outline
-    - answer_exercise()      → giữ nguyên logic chấm bài tập slide
-"""
 
 import time
 import uuid
@@ -29,13 +18,6 @@ logger = logging.getLogger("chatbot.slide_service")
 
 
 class SlideService:
-    """
-    Quản lý domain logic liên quan đến Content Generation:
-        - Sinh slide bài giảng (LangGraph supervisor)
-        - Sinh giáo án (LangGraph supervisor, task_type="lesson_plan")
-        - Resume HITL sau outline review
-        - Chấm bài tập slide
-    """
 
     def __init__(self, rag_service: RAGService):
         self.rag_service = rag_service
@@ -50,7 +32,6 @@ class SlideService:
     def generate_slide(
         self, ctx: RequestContext
     ) -> Generator[str, None, None]:
-        """Sinh slide bài giảng bằng LangGraph ContentSupervisor."""
         yield from self._run_content_pipeline(ctx, task_type="slide")
 
     # ────────────────────────────────────────────────────────
@@ -61,7 +42,6 @@ class SlideService:
     def generate_lesson_plan(
         self, ctx: RequestContext
     ) -> Generator[str, None, None]:
-        """Sinh giáo án bằng LangGraph ContentSupervisor (task_type=lesson_plan)."""
         yield from self._run_content_pipeline(ctx, task_type="lesson_plan")
 
     # ────────────────────────────────────────────────────────
@@ -71,13 +51,6 @@ class SlideService:
     def _run_content_pipeline(
         self, ctx: RequestContext, task_type: str = "slide"
     ) -> Generator[str, None, None]:
-        """
-        Shared pipeline cho cả slide và lesson_plan.
-
-        Args:
-            ctx: RequestContext từ orchestrator
-            task_type: "slide" hoặc "lesson_plan"
-        """
         session = ctx.session
         task_label = "giáo án" if task_type == "lesson_plan" else "slide"
 
@@ -164,7 +137,6 @@ class SlideService:
     def resume_outline(
         self, ctx: RequestContext, user_feedback: str
     ) -> Generator[str, None, None]:
-        """Resume graph sau HITL interrupt (outline review)."""
         session = ctx.session
         slide_state = session.slide_state
 
@@ -214,7 +186,6 @@ class SlideService:
         pipeline_time: float,
         task_type: str = "slide",
     ) -> Generator[str, None, None]:
-        """Xử lý kết quả khi graph hoàn thành (không interrupt)."""
 
         task_label = "giáo án" if task_type == "lesson_plan" else "slide"
         action_name = f"generate_{task_type}"
@@ -292,7 +263,6 @@ class SlideService:
     # ────────────────────────────────────────────────────────
 
     def _format_slides_display(self, lesson_title: str, slides: list) -> str:
-        """Format slides thành text display."""
         if not slides:
             return "Không có slides."
 
@@ -313,7 +283,6 @@ class SlideService:
         return "\n".join(lines)
 
     def _format_lesson_plan_display(self, lesson_title: str, sections: list) -> str:
-        """Format giáo án thành text display."""
         if not sections:
             return "Không có nội dung giáo án."
 
@@ -344,7 +313,6 @@ class SlideService:
     def answer_exercise(
         self, ctx: RequestContext, original_query: str
     ) -> Generator[str, None, None]:
-        """Chấm điểm câu trả lời bài tập slide."""
         session = ctx.session
         slide_state = session.slide_state
 
@@ -386,7 +354,6 @@ class SlideService:
     # ────────────────────────────────────────────────────────
 
     def is_waiting_hitl(self, session) -> bool:
-        """Check xem pipeline có đang chờ HITL input không."""
         slide_state = session.slide_state
         if not slide_state or not slide_state.slide_output:
             return False

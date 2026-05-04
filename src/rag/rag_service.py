@@ -10,15 +10,6 @@ logger = logging.getLogger("chatbot.rag_service")
 
 
 class RAGService:
-    """
-    Centralized RAG retrieval service.
-
-    Responsibilities:
-        - Single-query & multi-query retrieval
-        - Dedup + rerank tổng hợp
-        - Grade extraction từ topic
-        - Error handling (KHÔNG swallow exception — log rõ ràng)
-    """
 
     def __init__(self, retriever, reranker):
         self.rag_agent = AdaptiveRAGAgent(
@@ -34,22 +25,6 @@ class RAGService:
         intent_hint: Optional[str] = None,
         task_type: Optional[str] = None,
     ) -> List[Dict]:
-        """
-        Adaptive RAG — tự chọn chiến lược retrieval.
-
-        Multi-query: nếu QueryRewriter sinh 2-3 queries,
-        loop qua từng query, gom chunks, deduplicate.
-
-        Args:
-            ctx: RequestContext chứa queries_for_rag, effective_book, intent_result
-            intent_hint: "explain" | "generate" | "chat"
-
-        Returns:
-            List[Dict]: Danh sách chunks đã rerank
-
-        Raises:
-            RAGServiceError: Khi RAG pipeline gặp lỗi nghiêm trọng
-        """
         # Lấy topic và grade từ IntentRouter
         topic_hint = None
         grade_hint = None
@@ -191,13 +166,6 @@ class RAGService:
 
     @staticmethod
     def _extract_grade_from_topic(topic: str) -> Optional[str]:
-        """Extract grade (10/11/12) từ topic string.
-
-        Ví dụ:
-            "Kiến thức Tin học lớp 12" → "12"
-            "Tin 10 - Bài 3"          → "10"
-            "Lập trình Python"        → None
-        """
         topic_lower = topic.lower()
         match = re.search(r'lớp\s*(10|11|12)', topic_lower)
         if match:
@@ -209,10 +177,6 @@ class RAGService:
 
     @staticmethod
     def _get_rerank_top_n(task_type: Optional[str] = None) -> int:
-        """Trả về rerank limit phù hợp với task type.
-
-        Slide/lesson_plan cần nhiều chunks hơn để phủ toàn bộ nội dung bài.
-        """
         if task_type in ("slide", "slide_generate"):
             return getattr(settings, 'RERANKER_TOP_N_SLIDE', 15)
         elif task_type in ("lesson_plan", "giao_an"):

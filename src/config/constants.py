@@ -1,4 +1,3 @@
-"""Global constants for the application"""
 
 # ===== LLM Configuration =====
 TEMP_CREATIVE = 0.7

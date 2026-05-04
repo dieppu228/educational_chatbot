@@ -1,14 +1,3 @@
-"""
-RequestContext — Per-request data container.
-
-Thay thế toàn bộ global state trong Orchestrator:
-    - self._current_intent_result
-    - self._current_book
-    - self._current_queries_for_rag
-    - self.last_debug_info
-
-Mỗi lần gọi ask(), tạo 1 RequestContext mới, truyền xuyên suốt pipeline.
-"""
 
 import time
 import uuid
@@ -22,13 +11,6 @@ from src.llm.memory import Session
 
 @dataclass
 class RequestContext:
-    """
-    Chứa toàn bộ dữ liệu vòng đời của 1 request.
-
-    Được tạo mới ở đầu ask(), truyền qua từng stage:
-        ContextAnalyzer → IntentRouter → SessionManager
-        → ActionPlanner → RAGService → ExecutionDispatcher
-    """
 
     # ── Input ──────────────────────────────────────────────
     query: str                                  # Query gốc từ user
@@ -62,7 +44,6 @@ class RequestContext:
     t0: float = field(default_factory=time.time)
 
     def __post_init__(self):
-        """Set enriched_query and queries_for_rag defaults."""
         if not self.enriched_query:
             self.enriched_query = self.query
         if not self.queries_for_rag:
@@ -71,12 +52,10 @@ class RequestContext:
     # ── Convenience methods ────────────────────────────────
 
     def add_debug_step(self, node: str, **kwargs):
-        """Thêm 1 node vào trace."""
         step = {"node": node, **kwargs}
         self.debug_steps.append(step)
 
     def resolve_book(self):
-        """Resolve effective book từ ui_book, intent, session."""
         self.effective_book = (
             self.ui_book
             or (self.intent_result.book if self.intent_result else None)
@@ -87,7 +66,6 @@ class RequestContext:
             self.session.book = self.effective_book
 
     def to_debug_dict(self) -> dict:
-        """Serialize full debug info — dùng cho trace log."""
         return {
             "request_id": self.request_id,
             "user_id": self.user_id,
@@ -99,7 +77,6 @@ class RequestContext:
 
     @property
     def elapsed_time(self) -> float:
-        """Thời gian đã trôi qua kể từ khi request bắt đầu."""
         return round(time.time() - self.t0, 2)
 
 

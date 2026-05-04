@@ -3,7 +3,6 @@ from typing import Set, Optional, List
 
 
 class ContextAnalyzer:
-    """Analyze if a query needs contextualization from conversation history."""
     
     # Pronouns that might reference previous context
     PRONOUNS = {
@@ -34,20 +33,9 @@ class ContextAnalyzer:
     }
     
     def __init__(self):
-        """Initialize context analyzer."""
         pass
     
     def needs_contextualization(self, query: str, history: str) -> bool:
-        """
-        Determine if query needs contextualization from conversation history.
-        
-        Args:
-            query: Current user query
-            history: Conversation history (can be empty string)
-        
-        Returns:
-            bool: True if query likely needs history context, False otherwise
-        """
         # No history = no context needed
         if not history or not history.strip():
             return False
@@ -83,7 +71,6 @@ class ContextAnalyzer:
         return False
     
     def _has_pronouns(self, query: str) -> bool:
-        """Check if query contains pronouns."""
         words = query.split()
         for pronoun in self.PRONOUNS:
             if pronoun in words or pronoun in query:
@@ -91,14 +78,12 @@ class ContextAnalyzer:
         return False
     
     def _has_comparative(self, query: str) -> bool:
-        """Check if query contains comparative words."""
         for comp in self.COMPARATIVE:
             if comp in query:
                 return True
         return False
     
     def _starts_with_ellipsis(self, query: str) -> bool:
-        """Check if query starts with ellipsis marker."""
         words = query.split()
         if words:
             first_word = words[0].lower().strip(".,!?;:")
@@ -106,18 +91,12 @@ class ContextAnalyzer:
         return False
     
     def _has_modals(self, query: str) -> bool:
-        """Check if query contains modal verbs."""
         for modal in self.MODALS:
             if modal in query:
                 return True
         return False
     
     def _is_affirmation_only(self, query: str) -> bool:
-        """
-        Check if query is just an affirmation without content.
-        
-        Examples: "yes", "ok", "oke", "được", "vâng"
-        """
         affirmations = {"ok", "okay", "oke", "yes", "được", "vâng", "ừ", "a", "ai"}
         return query.lower().strip() in affirmations
     
@@ -127,10 +106,6 @@ class ContextAnalyzer:
         history: str,
         max_context_length: int = 1000
     ) -> str:
-        """
-        Extract relevant context using a hybrid approach:
-        Score = 70% Keyword Overlap + 30% Recency
-        """
         if not history or not history.strip():
             return ""
         
@@ -181,7 +156,6 @@ class ContextAnalyzer:
         return '\n'.join([item["text"] for item in selected])
 
     def _fallback_recency_only(self, lines: List[str], max_len: int) -> str:
-        """Simple fallback extracting most recent lines."""
         context_lines = []
         total_length = 0
         for line in reversed(lines):

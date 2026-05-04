@@ -5,7 +5,6 @@ from src.schemas.llm_outputs import TrueFalseGenerationOutput
 from src.config.config import settings
 
 class TrueFalseHandler(BaseHandler):
-    """Sinh câu hỏi Đúng/Sai từ nội dung bài học."""
     
     def handle(
         self, 
@@ -14,17 +13,6 @@ class TrueFalseHandler(BaseHandler):
         num_questions: int = 3,
         **kwargs
     ) -> TrueFalseGenerationOutput:
-        """
-        Sinh câu hỏi Đúng/Sai.
-        
-        Args:
-            query: Yêu cầu của user
-            context: Nội dung bài học từ RAG
-            num_questions: Số câu cần sinh
-            
-        Returns:
-            TrueFalseGenerationOutput: Object chứa danh sách câu Đúng/Sai
-        """
         # 1. Build prompt
         prompt = TRUE_FALSE_GENERATION_TEMPLATE.format(
             query=query,
