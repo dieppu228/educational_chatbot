@@ -1,43 +1,19 @@
 
 import json
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 
 from src.schemas.context import RequestContext
+from src.utils.trace_decorator import logger, trace_node
 
 # ============================================================
-# LOGGER SETUP
+# TRACE FILE
 # ============================================================
 
 _project_root = Path(__file__).resolve().parent.parent.parent
 _log_dir = _project_root / "logs"
 _log_dir.mkdir(exist_ok=True)
-_log_file = _log_dir / "app.log"
 _trace_file = _log_dir / "pipeline_trace.log"
-
-logger = logging.getLogger("chatbot")
-logger.setLevel(logging.DEBUG)
-logger.propagate = False
-
-_fmt = logging.Formatter(
-    "[%(asctime)s] %(levelname)-7s | %(message)s",
-    datefmt="%H:%M:%S"
-)
-
-if not logger.handlers:
-    _ch = logging.StreamHandler()
-    _ch.setLevel(logging.INFO)
-    _ch.setFormatter(_fmt)
-    logger.addHandler(_ch)
-
-    _fh = logging.FileHandler(str(_log_file), encoding="utf-8", mode="a")
-    _fh.setLevel(logging.DEBUG)
-    _fh.setFormatter(logging.Formatter(
-        "[%(asctime)s] %(levelname)-7s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    ))
-    logger.addHandler(_fh)
 
 
 # ============================================================
@@ -90,4 +66,4 @@ class TraceService:
 # Singleton instance cho toàn project
 trace_service = TraceService()
 
-__all__ = ["TraceService", "trace_service", "logger"]
+__all__ = ["TraceService", "trace_service", "logger", "trace_node"]

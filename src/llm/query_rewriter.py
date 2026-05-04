@@ -1,7 +1,6 @@
 import json
 import re
 import os
-import logging
 from typing import List, Optional
 
 from google import genai
@@ -9,8 +8,7 @@ from google.genai.types import GenerateContentConfig
 
 from src.config.config import settings
 from src.llm.prompts import QUERY_REWRITE_PROMPT
-
-logger = logging.getLogger("chatbot.query_rewriter")
+from src.utils.trace_decorator import trace_node
 
 
 class QueryRewriter:
@@ -24,6 +22,7 @@ class QueryRewriter:
         self.model_name = model_name or settings.LLM_MODEL or "gemini-2.5-flash-lite"
         self.client = genai.Client(api_key=self.api_key)
 
+    @trace_node("QueryRewriter.rewrite")
     def rewrite(self, query: str, history_context: str) -> List[str]:
         if not query or not query.strip():
             return [query]
@@ -46,15 +45,9 @@ class QueryRewriter:
             raw = self._extract_text(response)
             result = self._parse_result(raw, query)
 
-            logger.info(
-                f"QueryRewriter: needs_rewrite={result['needs_rewrite']}, "
-                f"queries={result['queries']}"
-            )
-
             return result["queries"]
 
         except Exception as e:
-            logger.error(f"QueryRewriter error: {e}")
             return [query]
 
     def _extract_text(self, response) -> str:
@@ -79,7 +72,6 @@ class QueryRewriter:
 
             # Validate queries
             if not isinstance(queries, list) or len(queries) == 0:
-                logger.warning(f"QueryRewriter: invalid queries format, fallback")
                 return {"needs_rewrite": False, "queries": [original_query]}
 
             # Filter empty strings
@@ -94,7 +86,6 @@ class QueryRewriter:
             return {"needs_rewrite": needs_rewrite, "queries": queries}
 
         except json.JSONDecodeError:
-            logger.warning(f"QueryRewriter: failed to parse JSON: {raw[:200]}")
             return {"needs_rewrite": False, "queries": [original_query]}
 
 

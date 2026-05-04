@@ -1,12 +1,10 @@
 import re
-import logging
 from typing import Optional, List, Dict
 
 from src.config.config import settings
 from src.schemas.context import RequestContext
 from src.rag.adaptive_rag import AdaptiveRAGAgent
-
-logger = logging.getLogger("chatbot.rag_service")
+from src.utils.trace_decorator import trace_node
 
 
 class RAGService:
@@ -19,6 +17,7 @@ class RAGService:
         )
         self.reranker = reranker
 
+    @trace_node("RAGService.get_context")
     def get_context(
         self,
         ctx: RequestContext,
@@ -76,15 +75,6 @@ class RAGService:
                 # Safety net: nếu cutoff loại hết, giữ top 3
                 if not filtered and result_chunks:
                     filtered = result_chunks[:3]
-                    logger.warning(
-                        f"Score cutoff dropped ALL {before_count} chunks "
-                        f"(min_score={min_score}), keeping top 3 as fallback"
-                    )
-                elif len(filtered) < before_count:
-                    logger.info(
-                        f"Score cutoff: {before_count} -> {len(filtered)} chunks "
-                        f"(min_score={min_score})"
-                    )
 
                 return filtered
 
@@ -110,10 +100,7 @@ class RAGService:
                         all_chunks.append(chunk)
                         seen_doc_ids.add(chunk["doc_id"])
 
-            logger.info(
-                f"Multi-query RAG: {len(queries)} queries → "
-                f"{len(all_chunks)} unique chunks ({total_time:.2f}s)"
-            )
+
 
             # Task-aware rerank: slide/lesson_plan giữ nhiều chunks hơn
             rerank_top_n = self._get_rerank_top_n(task_type)
@@ -133,15 +120,7 @@ class RAGService:
             # Safety net
             if not filtered and all_chunks:
                 filtered = all_chunks[:3]
-                logger.warning(
-                    f"Score cutoff dropped ALL {before_count} chunks "
-                    f"(min_score={min_score}), keeping top 3 as fallback"
-                )
-            elif len(filtered) < before_count:
-                logger.info(
-                    f"Score cutoff: {before_count} -> {len(filtered)} chunks "
-                    f"(min_score={min_score})"
-                )
+
             all_chunks = filtered
 
             ctx.add_debug_step(
@@ -158,7 +137,6 @@ class RAGService:
 
         except Exception as e:
             # KHÔNG swallow — log rõ ràng và re-raise nếu cần
-            logger.error(f"RAG Service Error: {e}", exc_info=True)
             ctx.add_debug_step("RAG", status="error", error=str(e)[:200])
             # Trả về empty thay vì crash pipeline,
             # nhưng log đủ thông tin để debug

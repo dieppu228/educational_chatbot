@@ -1,6 +1,5 @@
 
 import json
-import logging
 from typing import Dict, List, Any, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
@@ -11,8 +10,6 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from src.llm.graphs.state import ContentSupervisorState
 from src.llm.graphs.tools import ALL_TOOLS, TOOL_STATE_MAPPING
-
-logger = logging.getLogger("chatbot.graph.supervisor")
 
 # ── Config ──
 RECURSION_LIMIT = 15
@@ -98,7 +95,7 @@ def preprocess_node(state: ContentSupervisorState) -> dict:
 
     context_map = "\n".join(lines)
 
-    logger.info(f"Preprocess: {len(rag_chunks)} chunks → {len(chunk_map)} chunk_ids")
+
 
     # ── Synthesize context bằng ContextBuilder (LLM call) ──
     task_type = state.get("task_type", "slide")
@@ -115,9 +112,8 @@ def preprocess_node(state: ContentSupervisorState) -> dict:
             chunks=rag_chunks,
             action=action,
         )
-        logger.info(f"Preprocess: synthesized_context = {len(synthesized)} chars")
+
     except Exception as e:
-        logger.warning(f"ContextBuilder failed in preprocess: {e}. Using context_map as fallback.")
         synthesized = context_map  # Fallback: dùng raw grouped context
 
     # Build system message cho supervisor (synthesized_context → system prompt)
@@ -210,8 +206,7 @@ def post_tool_processor(state: ContentSupervisorState) -> dict:
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-    if updates:
-        logger.info(f"Post-tool: stored {list(updates.keys())} in state")
+
 
     return updates
 
@@ -271,7 +266,7 @@ def build_content_supervisor(checkpointer=None):
 
     graph = builder.compile(checkpointer=checkpointer)
 
-    logger.info("ContentSupervisor graph compiled successfully")
+
     
     return graph
 

@@ -1,10 +1,9 @@
 import time
-import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List, Dict
 
-logger = logging.getLogger("chatbot")
+from src.utils.trace_decorator import trace_node
 
 
 # ============================================================
@@ -162,6 +161,7 @@ class AdaptiveRAGAgent:
         self.settings  = settings
         self.classifier = QueryClassifier()
 
+    @trace_node("AdaptiveRAG.retrieve")
     def retrieve(
         self,
         query: str,
@@ -174,8 +174,6 @@ class AdaptiveRAGAgent:
 
         # === Pre-compute book-scoped indices (if book provided) ===
         book_indices = self._get_book_indices(book) if book else None
-        if book:
-            logger.info(f"RAGAgent: book filter='{book}' → {len(book_indices) if book_indices else 0} chunks in scope")
 
         # === OBSERVE — tích hợp signals từ IntentRouter ===
         profile = self.classifier.classify(
@@ -183,11 +181,6 @@ class AdaptiveRAGAgent:
             intent_hint=intent_hint,
             grade_hint=grade_hint,
             topic_hint=topic_hint,
-        )
-        logger.info(
-            f"RAGAgent: strategy={profile.strategy.value} | "
-            f"grade={profile.grade} | topic={profile.topic_hint} | "
-            f"book={book} | {profile.reason}"
         )
 
         # === ACT ===
@@ -198,7 +191,6 @@ class AdaptiveRAGAgent:
             chunks = self._broad_retrieval(query, profile, book=book)
             # Fallback: nếu broad trả về < 3 chunks → bổ sung standard
             if len(chunks) < 3:
-                logger.info("RAGAgent: BROAD < 3 chunks → fallback standard")
                 standard = self._standard_retrieval(query, book_indices=book_indices)
                 chunks = self._merge_deduplicate(chunks, standard)
 
@@ -206,7 +198,6 @@ class AdaptiveRAGAgent:
             chunks = self._hierarchical_retrieval(query, profile, book_indices=book_indices)
             # Fallback: nếu HRAG < 3 chunks → bổ sung standard
             if len(chunks) < 3:
-                logger.info("RAGAgent: HIERARCHICAL < 3 chunks → fallback standard")
                 standard = self._standard_retrieval(query, book_indices=book_indices)
                 chunks = self._merge_deduplicate(chunks, standard)
 
@@ -214,7 +205,6 @@ class AdaptiveRAGAgent:
             chunks = self._standard_retrieval(query, book_indices=book_indices)
 
         total_time = time.time() - t0
-        logger.info(f"RAGAgent done: {len(chunks)} chunks, {total_time:.2f}s")
 
         return RAGResult(
             chunks=chunks,
@@ -341,7 +331,7 @@ class AdaptiveRAGAgent:
             parent_indices.append(i)
 
         if not parent_indices:
-            logger.warning("HRAG Phase 1: no parent chunks found → fallback standard")
+            # HRAG Phase 1: no parent chunks found → fallback standard
             return self._standard_retrieval(query, book_indices=book_indices)
 
         # Semantic search chỉ trên parents
@@ -355,10 +345,7 @@ class AdaptiveRAGAgent:
             m = res["metadata"]
             parent_keys.add((m.get("topic_name", ""), m.get("lesson_name", "")))
 
-        logger.info(
-            f"HRAG Phase 1: {len(parent_indices)} parents searched → "
-            f"{len(parent_results)} selected → {len(parent_keys)} unique lessons"
-        )
+
 
         # ── Phase 2: Fine — search children (Level 3+) ─────────────
         child_indices = []
@@ -374,10 +361,10 @@ class AdaptiveRAGAgent:
                 child_indices.append(i)
 
         if not child_indices:
-            logger.warning("HRAG Phase 2: no children found → returning parent chunks")
+            # HRAG Phase 2: no children found → returning parent chunks
             return parent_results
 
-        logger.info(f"HRAG Phase 2: scoped search on {len(child_indices)} child chunks")
+
 
         # Scoped hybrid search (BM25 + Semantic + RRF) trên children
         child_results = self.retriever.search_scoped(

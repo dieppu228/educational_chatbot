@@ -1,13 +1,10 @@
 
 import json
-import logging
 from typing import Annotated
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 from langgraph.types import interrupt
-
-logger = logging.getLogger("chatbot.graph.tools")
 
 
 # ════════════════════════════════════════════════════════
@@ -21,6 +18,7 @@ def generate_outline(
     book: str,
     state: Annotated[dict, InjectedState],
 ) -> str:
+    """Tạo dàn ý bài giảng/giáo án từ context."""
 
     from src.llm.handlers.content.slide_agents import OutlineAgent
 
@@ -40,7 +38,6 @@ def generate_outline(
     )
 
     if result.status == "failed":
-        logger.warning(f"Outline agent failed: {result.error_message}")
         return json.dumps({"error": result.error_message, "status": "failed"})
 
     # ── HITL: pause cho user review ──
@@ -53,10 +50,8 @@ def generate_outline(
 
     # User có thể approve (True) hoặc gửi edited outline (dict)
     if isinstance(feedback, dict) and "edited_outline" in feedback:
-        logger.info("User edited outline — sử dụng bản chỉnh sửa")
         return json.dumps(feedback["edited_outline"])
 
-    logger.info(f"Outline approved: {len(result.payload.get('slides', []))} slides")
     return json.dumps(result.payload)
 
 
@@ -68,6 +63,7 @@ def generate_outline(
 def generate_content(
     state: Annotated[dict, InjectedState],
 ) -> str:
+    """Viết nội dung chi tiết cho từng slide dựa trên outline."""
 
     from src.llm.handlers.content.slide_agents import ContentAgent
 
@@ -90,10 +86,8 @@ def generate_content(
     )
 
     if result.status == "failed":
-        logger.warning(f"Content agent failed: {result.error_message}")
         return json.dumps({"error": result.error_message, "status": "failed"})
 
-    logger.info(f"Content generated: {len(result.payload.get('slides', []))} slides")
     return json.dumps(result.payload)
 
 
@@ -107,6 +101,7 @@ def generate_media(
     grade: str,
     book: str,
 ) -> str:
+    """Gợi ý media minh họa cho bài giảng."""
 
     from src.llm.handlers.content.slide_agents import MediaAgent
 
@@ -114,10 +109,8 @@ def generate_media(
     result = agent.run(topic=topic, grade=grade, book=book)
 
     if result.status == "failed":
-        logger.warning(f"Media agent failed: {result.error_message}")
         return json.dumps({"hero_media": [], "inline_media": [], "status": "failed"})
 
-    logger.info("Media suggestions generated")
     return json.dumps(result.payload)
 
 
@@ -130,6 +123,7 @@ def generate_quiz(
     topic: str,
     state: Annotated[dict, InjectedState],
 ) -> str:
+    """Sinh câu hỏi luyện tập cho bài giảng."""
 
     from src.llm.handlers.content.slide_agents import QuizAgent
 
@@ -139,10 +133,8 @@ def generate_quiz(
     result = agent.run(topic=topic, context=context)
 
     if result.status == "failed":
-        logger.warning(f"Quiz agent failed: {result.error_message}")
         return json.dumps({"quiz_items": [], "status": "failed"})
 
-    logger.info(f"Quiz generated: {len(result.payload.get('quiz_items', []))} items")
     return json.dumps(result.payload)
 
 
@@ -154,6 +146,7 @@ def generate_quiz(
 def merge_results(
     state: Annotated[dict, InjectedState],
 ) -> str:
+    """Ghép outline + content + media + quiz thành slides hoàn chỉnh."""
 
     from src.llm.services.slide_merger import SlideMerger
     from src.schemas.slide_schemas import AgentResult
@@ -195,7 +188,6 @@ def merge_results(
     )
 
     merged_dicts = [s.model_dump() for s in merged]
-    logger.info(f"Merged: {len(merged_dicts)} slides")
     return json.dumps({"slides": merged_dicts, "total": len(merged_dicts), "status": "success"})
 
 
@@ -207,6 +199,7 @@ def merge_results(
 def check_quality(
     state: Annotated[dict, InjectedState],
 ) -> str:
+    """Kiểm tra chất lượng slides sau khi merge."""
 
     from src.llm.services.slide_merger import SlideQualityGate
     from src.schemas.slide_schemas import MergedSlide
@@ -228,7 +221,7 @@ def check_quality(
     passed, issues = gate.validate(slides)
 
     if not passed:
-        logger.warning(f"Quality gate failed: {issues}")
+
         fixed_slides = gate.auto_fix(slides, issues)
         passed_after_fix, issues_after = gate.validate(fixed_slides)
         return json.dumps({
@@ -238,7 +231,6 @@ def check_quality(
             "slides": [s.model_dump() for s in fixed_slides],
         })
 
-    logger.info("Quality gate passed")
     return json.dumps({"passed": True, "issues": [], "slides": [s.model_dump() for s in slides]})
 
 

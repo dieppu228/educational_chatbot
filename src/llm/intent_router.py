@@ -1,7 +1,6 @@
 import json
 import re
 import os
-import logging
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from google import genai
@@ -9,8 +8,7 @@ from google.genai.types import GenerateContentConfig
 
 from src.config.config import settings
 from src.llm.prompts import INTENT_ROUTER_PROMPT
-
-logger = logging.getLogger("chatbot.intent_router")
+from src.utils.trace_decorator import trace_node
 
 
 # ============================================================
@@ -63,6 +61,7 @@ class IntentRouter:
         results = self.detect_multi(query, current_topic, session_messages)
         return results[0]
 
+    @trace_node("IntentRouter.detect_multi")
     def detect_multi(
         self,
         query: str,
@@ -96,18 +95,12 @@ class IntentRouter:
                 intents = self._parse_multi_result(raw)
 
                 if not intents:
-                    # Parse failed — retry with feedback (Self-Correction)
-                    logger.warning(
-                        f"IntentRouter attempt {attempt + 1}/{max_retries}: "
-                        f"parse failed, retrying..."
-                    )
                     continue
 
                 # ③ VALIDATE — Filter low-confidence intents
                 validated = []
                 for intent in intents:
                     if intent.primary_intent not in self.VALID_INTENTS:
-                        logger.debug(f"Filtered invalid intent: {intent.primary_intent}")
                         continue
                     
                     # Mapping lesson_reference to exact Topic
@@ -125,7 +118,6 @@ class IntentRouter:
 
                 # ④ DECIDE — Có đủ kết quả hay cần fallback?
                 if not validated:
-                    logger.warning("All intents filtered out, using fallback")
                     return [self._fallback(query)]
 
                 # Cap at MAX_INTENTS
@@ -134,20 +126,12 @@ class IntentRouter:
                 # Set raw_response on first intent for debugging
                 validated[0].raw_response = raw
 
-                logger.info(
-                    f"IntentRouter: {len(validated)} intent(s) detected — "
-                    + ", ".join(
-                        f"{r.primary_intent}({r.task_type or '-'})" for r in validated
-                    )
-                )
                 return validated
 
             except Exception as e:
-                logger.error(f"IntentRouter attempt {attempt + 1} error: {e}")
                 continue
 
         # All retries exhausted
-        logger.error("IntentRouter: all retries exhausted, using fallback")
         return [self._fallback(query)]
 
     def _build_topic_instruction(self, current_topic: Optional[str]) -> str:
@@ -182,7 +166,6 @@ class IntentRouter:
         try:
             data = json.loads(text.strip())
         except json.JSONDecodeError:
-            logger.warning(f"Failed to parse intent JSON: {raw[:200]}")
             return None
 
         # ── New multi-intent format: {"intents": [...]} ──
@@ -192,7 +175,6 @@ class IntentRouter:
         elif "intent" in data:
             items = [data]
         else:
-            logger.warning(f"Unknown intent format: {list(data.keys())}")
             return None
 
         results = []
@@ -224,7 +206,6 @@ class IntentRouter:
 
         confidence = data.get("confidence", 0.9)
         if isinstance(confidence, (int, float)) and confidence < self.MIN_CONFIDENCE:
-            logger.debug(f"Intent '{intent}' below confidence threshold: {confidence}")
             return None
 
         result = IntentResult(

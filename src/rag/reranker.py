@@ -2,8 +2,8 @@ import numpy as np
 from typing import List, Dict, Tuple, Optional
 from sentence_transformers import CrossEncoder
 
-
 import torch
+from src.utils.trace_decorator import trace_node
 
 class Reranker:
     
@@ -14,14 +14,13 @@ class Reranker:
     
     def _load_model(self):
         if self._model is None:
-            print(f"Loading reranker: {self.model_name}...")
             self._model = CrossEncoder(
                 self.model_name,
                 device=self.device,
                 trust_remote_code=True
             )
-            print(f"Reranker loaded on {self.device}")
     
+    @trace_node("Reranker.rerank")
     def rerank(self, query: str, results: List[Dict], top_n: int = 10) -> List[Dict]:
         if not results:
             return []

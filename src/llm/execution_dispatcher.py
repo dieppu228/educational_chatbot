@@ -1,4 +1,3 @@
-import logging
 from typing import Generator, Dict, Callable
 
 from src.llm.action_planner import Action, ActionPlan
@@ -10,8 +9,6 @@ from src.llm.services.quiz_service import QuizService
 from src.llm.services.slide_service import SlideService
 from src.rag.rag_service import RAGService
 from src.utils.error_handling import safe_execute
-
-logger = logging.getLogger("chatbot.dispatcher")
 
 
 class ExecutionDispatcher:
