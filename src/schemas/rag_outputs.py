@@ -8,12 +8,17 @@ from typing import List, Optional, Dict, Any
 # ============================================================
 
 class ChunkMetadata(BaseModel):
+    book: Optional[str] = Field(None, description="Book series (CD, KNTT)")
     grade: Optional[str] = Field(None, description="Grade level (10, 11, 12)")
-    lesson: Optional[str] = Field(None, description="Lesson name/number")
-    idea: Optional[str] = Field(None, description="Main idea/concept")
-    level: Optional[int] = Field(None, ge=1, le=6, description="Heading level")
+    topic: Optional[str] = Field(None, description="Topic code (A, B, C...)")
+    topic_name: Optional[str] = Field(None, description="Topic full name")
+    lesson: Optional[str] = Field(None, description="Lesson number (Bài 1, Bài 2...)")
+    lesson_name: Optional[str] = Field(None, description="Lesson full name")
+    section: Optional[str] = Field(None, description="Section within lesson")
     title: Optional[str] = Field(None, description="Section title")
-    type: str = Field(default="content", description="Content type")
+    level: Optional[int] = Field(None, ge=1, le=6, description="Heading level")
+    type: str = Field(default="content", description="Content type (objective, content, exercise...)")
+    idea: Optional[str] = Field(None, description="Main idea/concept")
 
 
 class RetrievalResult(BaseModel):
