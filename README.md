@@ -12,6 +12,7 @@ The system aims to provide a tool that automates complex academic tasks, serving
 - **Extraction and Question Generation (Quiz Generation):** Automatically initialize exercise systems in various formats (Multiple choice, Fill-in-the-blank, True/False, Essay) with customizable quantity and difficulty.
 - **Evaluation and Scoring (Answer Scoring):** Automatically score answers and provide reasoning for corrections based on actual context instead of just keyword matching.
 - **Lecture Structure Generation (Slide/Lesson Plan Generation):** Convert text content into summary structures for creating presentations or lesson plans.
+- **Media & Resource Search:** Utilize a Web Search Tool via MCP to allow the Media Agent (in Slide Service) to fetch relevant real-time images and multimedia resources from the Internet to enrich presentations.
 
 ---
 
@@ -51,18 +52,18 @@ The system is engineered around a Clean Architecture approach with a **Thin Pipe
         │    Separator injected between multi-action outputs│
         └────────────────────┬──────────────────────────────┘
                              ▼
-    ┌────────────────────────────────┐   ┌───────────────────────────────┐
-    │       Domain Services          │──▶│        3. RAG Service         │
-    │                                │   │                               │
-    │ • QuizService  (Generate,      │   │ • AdaptiveRAGAgent (Strategy) │
-    │   Score, Review, Stats)        │   │   ──▶ STANDARD / BROAD /      │
-    │ • SlideService (Slides,        │   │       CURRICULUM / HRAG       │
-    │   Lesson Plans)                │   │                               │
-    │ • Handlers: Explain, Chat,     │   │ • ContextCombiner (task-aware │
-    │   Fallback                     │   │   context formatting)         │
-    │                                │   │ • Multi-query Dedup           │
-    │                                │   │ • Cross-Encoder Reranking     │
-    └───────────────┬────────────────┘   └───────────────────────────────┘
+    ┌────────────────────────────────┐       ┌────────────────────────────────────────┐
+    │       Domain Services          │──────▶│    3. Unified MCP Tool Architecture    │
+    │                                │       │                                        │
+    │ • QuizService  (Generate,      │       │ [MCPToolClient] ──▶ [MCPToolServer]    │
+    │   Score, Review, Stats)        │       │                           │            │
+    │ • SlideService (Slides,        │       │             ┌─────────────┴──────────┐ │
+    │   Lesson Plans)                │       │             ▼                        ▼ │
+    │ • Handlers: Explain, Chat,     │       │ [KnowledgeRetrievalTool] [WebSearchTool]│
+    │   Fallback                     │       │             │                        │ │
+    │                                │       │             ▼                        ▼ │
+    │                                │       │     [AdaptiveRAGAgent]   [Media Agent] │
+    └───────────────┬────────────────┘       └────────────────────────────────────────┘
                     │
                     ▼
     ┌───────────────────────────┐
@@ -94,9 +95,13 @@ To optimize latency, all post-routing logic is entirely rule-based — zero addi
 2. **ActionPlanner** (`plan_all()`): Maps the full `List[IntentResult]` → `List[ActionPlan]` using pure rule-based logic. Deduplicates consecutive identical actions. Each `ActionPlan` contains an `Action` enum (e.g., `GENERATE_QUIZ`, `GENERATE_SLIDE`, `EXPLAIN_CONCEPT`) and execution metadata.
 3. **Agentic Multi-Action Loop**: The Orchestrator iterates over all `ActionPlan`s. For each iteration, `ctx.intent_result` is swapped to align with the current sub-task before delegating to the `ExecutionDispatcher`. Multi-action outputs are separated by a visual delimiter in the streamed response.
 
-### 2.3. Domain Services & Adaptive RAG
+### 2.3. Domain Services & Unified MCP Tool Architecture
 
-Each dispatched action flows into its respective **Domain Service** (`QuizService`, `SlideService`) or **Handler** (`ExplainHandler`, `ChatHandler`). Operations requiring textbook knowledge pass through the decoupled `RAGService`.
+Each dispatched action flows into its respective **Domain Service** (`QuizService`, `SlideService`) or **Handler** (`ExplainHandler`, `ChatHandler`). To standardize communication between the Agents and their execution capabilities, the system employs the **Model Context Protocol (MCP)** as a unified layer. Instead of tightly coupling with specific modules, Domain Services act as Agents utilizing the `MCPToolClient` to request tools. The request is processed by the `MCPToolServer` and `ToolRegistry`.
+
+Currently, the system provides two primary tools via MCP:
+1. **`knowledge_retrieval`**: Wraps the decoupled `RAGService` to extract textbook knowledge for Quiz and Content generation workflows.
+2. **`web_search`**: Empowers the **Media Agent** (specifically within the `SlideService`) to search the web for relevant images and multimedia resources to enhance lecture presentations.
 
 The internal `AdaptiveRAGAgent` classifies the query using a heuristic-based `QueryClassifier` (no LLM) and selects the optimal retrieval strategy:
 
@@ -158,6 +163,18 @@ src/
 │           ├── slide_handler.py        # Generates structured HTML slide presentations.
 │           ├── slide_template.py       # HTML/CSS template engine for slides.
 │           └── lesson_plan_handler.py  # Generates structured lesson plans.
+│
+├── tools/                      # MODEL CONTEXT PROTOCOL (MCP) ARCHITECTURE
+│   ├── base_tool.py            # Base interface for all tools
+│   ├── mcp_client.py           # Client interface for Agents/Services to call tools
+│   ├── mcp_server.py           # In-process MCP server handling tool execution
+│   ├── mcp_protocol.py         # Standard MCP schemas (Tool, ToolResult, etc.)
+│   ├── schemas.py              # Pydantic schemas for specific tool inputs/outputs
+│   └── implementations/        # Concrete tool implementations:
+│       ├── tool_registry.py    # Registry managing available tools
+│       ├── knowledge_retrieval_tool.py # Wraps RAGService as an MCP Tool
+│       ├── web_search_tool.py          # Provides Web Search capability for the Media Agent
+│       └── content_formatter_tool.py   # Utility formatting tool
 │
 ├── rag/                        # ADVANCED RAG PIPELINE
 │   ├── rag_service.py          # RAGService: public interface consumed by Domain Services.
