@@ -1,4 +1,5 @@
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 from src.config.config import settings
@@ -31,6 +32,9 @@ class BaseHandler(ABC):
     def handle(self, **kwargs) -> str:
         pass
     
+    async def handle_async(self, **kwargs) -> str:
+        return self.handle(**kwargs)
+    
     def _call_api(
         self,
         prompt: str,
@@ -52,6 +56,38 @@ class BaseHandler(ABC):
             }
             
             response = self.client.models.generate_content(
+                model=self.model,
+                contents=full_prompt,
+                config=config
+            )
+            
+            return response.text
+        
+        except Exception as e:
+            self._handle_error(e)
+    
+    async def _call_api_async(
+        self,
+        prompt: str,
+        temperature: float = 0.0,
+        response_mime: str = "text/plain",
+        include_system_prompt: bool = True,
+        **kwargs
+    ) -> str:
+        try:
+            # Prepend system prompt for consistent bot identity
+            full_prompt = prompt
+            if include_system_prompt:
+                full_prompt = f"{SYSTEM_PROMPT_SHORT}\n\n{prompt}"
+
+            config = {
+                'temperature': temperature,
+                'response_mime_type': response_mime,
+                'top_p': kwargs.get('top_p', 0.95),
+            }
+            
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
                 model=self.model,
                 contents=full_prompt,
                 config=config

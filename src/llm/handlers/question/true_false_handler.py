@@ -32,3 +32,30 @@ class TrueFalseHandler(BaseHandler):
             return TrueFalseGenerationOutput.from_json_string(response)
         except Exception as e:
             self._handle_error(f"Lỗi parse TrueFalse JSON: {e}")
+    
+    async def handle_async(
+        self, 
+        query: str, 
+        context: str, 
+        num_questions: int = 3,
+        **kwargs
+    ) -> TrueFalseGenerationOutput:
+        # 1. Build prompt
+        prompt = TRUE_FALSE_GENERATION_TEMPLATE.format(
+            query=query,
+            context=context,
+            num_questions=num_questions
+        )
+        
+        # 2. Call API async
+        response = await self._call_api_async(
+            prompt,
+            temperature=settings.QUESTION_GENERATION_TEMPERATURE,
+            response_mime="application/json"
+        )
+        
+        # 3. Parse & Validate
+        try:
+            return TrueFalseGenerationOutput.from_json_string(response)
+        except Exception as e:
+            self._handle_error(f"Lỗi parse TrueFalse JSON: {e}")

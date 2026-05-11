@@ -42,6 +42,13 @@ class Reranker:
         
         return results_sorted[:top_n]
     
+    @trace_node("Reranker.rerank_async")
+    async def rerank_async(self, query: str, results: List[Dict], top_n: int = 10) -> List[Dict]:
+        import asyncio
+        # Cross-encoder scoring là CPU/GPU bound, chạy trong thread pool để không chặn event loop
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.rerank, query, results, top_n)
+    
     def filter_context(self, results: List[Dict], min_len: int = 50, 
                        min_score: float = 0.0, top_n: Optional[int] = None) -> List[Dict]:
         filtered = []

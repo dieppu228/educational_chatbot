@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 import os
@@ -114,6 +115,79 @@ class IntentRouter:
                                 
                     # Agent loại bỏ intent kém tin cậy
                     # (confidence được parse từ LLM response, default 0.9)
+                    validated.append(intent)
+
+                # ④ DECIDE — Có đủ kết quả hay cần fallback?
+                if not validated:
+                    return [self._fallback(query)]
+
+                # Cap at MAX_INTENTS
+                validated = validated[:self.MAX_INTENTS]
+
+                # Set raw_response on first intent for debugging
+                validated[0].raw_response = raw
+
+                return validated
+
+            except Exception as e:
+                continue
+
+        # All retries exhausted
+        return [self._fallback(query)]
+
+    @trace_node("IntentRouter.detect_multi_async")
+    async def detect_multi_async(
+        self,
+        query: str,
+        current_topic: Optional[str] = None,
+        session_messages: Optional[List[dict]] = None,
+        max_retries: int = 2,
+    ) -> List[IntentResult]:
+        session_context = self._format_session_context(session_messages)
+        topic_instruction = self._build_topic_instruction(current_topic)
+
+        prompt = INTENT_ROUTER_PROMPT.format(
+            query=query,
+            session_context=session_context,
+            topic_instruction=topic_instruction,
+        )
+
+        for attempt in range(max_retries):
+            try:
+                # ① ACT — Call LLM (non-blocking)
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=self.model_name,
+                    contents=prompt,
+                    config=GenerateContentConfig(
+                        temperature=0.1,
+                        response_mime_type="application/json",
+                    ),
+                )
+                raw = self._extract_text(response)
+
+                # ② OBSERVE — Parse response
+                intents = self._parse_multi_result(raw)
+
+                if not intents:
+                    continue
+
+                # ③ VALIDATE — Filter low-confidence intents
+                validated = []
+                for intent in intents:
+                    if intent.primary_intent not in self.VALID_INTENTS:
+                        continue
+                    
+                    # Mapping lesson_reference to exact Topic
+                    if intent.lesson_reference:
+                        semantic_topic = self.k_map.lookup_semantic_topic(intent.book, intent.lesson_reference)
+                        if semantic_topic:
+                            if intent.topic:
+                                intent.topic = f"{intent.topic} ({semantic_topic})"
+                            else:
+                                intent.topic = semantic_topic
+                                
+                    # Agent loại bỏ intent kém tin cậy
                     validated.append(intent)
 
                 # ④ DECIDE — Có đủ kết quả hay cần fallback?

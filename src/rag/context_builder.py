@@ -1,4 +1,5 @@
 
+import asyncio
 import time
 from typing import List, Dict, Optional
 
@@ -40,6 +41,45 @@ class ContextBuilder:
 
         try:
             response = self.client.models.generate_content(
+                model=settings.LLM_MODEL,
+                contents=prompt,
+                config={
+                    "temperature": 0.1,
+                    "response_mime_type": "text/plain",
+                    "top_p": 0.9,
+                },
+            )
+            return response.text.strip()
+
+        except Exception as e:
+            # Fallback: trả về raw chunks nối lại
+            return self._fallback_concatenate(selected)
+
+    @trace_node("ContextBuilder.build_async")
+    async def build_async(
+        self,
+        query: str,
+        chunks: List[Dict],
+        action: Optional[str] = None,
+        max_chunks: int = 15,
+    ) -> str:
+        if not chunks:
+            return "[Không có context]"
+
+        selected = chunks[:max_chunks]
+        raw_context = self._format_raw_chunks(selected)
+        task_desc = self._get_task_description(action)
+
+        prompt = CONTEXT_BUILD_TEMPLATE.format(
+            query=query,
+            raw_context=raw_context,
+            task_description=task_desc,
+            num_chunks=len(selected),
+        )
+
+        try:
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
                 model=settings.LLM_MODEL,
                 contents=prompt,
                 config={

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 import os
@@ -34,6 +35,35 @@ class QueryRewriter:
             )
 
             response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=GenerateContentConfig(
+                    temperature=0.1,
+                    response_mime_type="application/json",
+                ),
+            )
+
+            raw = self._extract_text(response)
+            result = self._parse_result(raw, query)
+
+            return result["queries"]
+
+        except Exception as e:
+            return [query]
+
+    @trace_node("QueryRewriter.rewrite_async")
+    async def rewrite_async(self, query: str, history_context: str) -> List[str]:
+        if not query or not query.strip():
+            return [query]
+
+        try:
+            prompt = QUERY_REWRITE_PROMPT.format(
+                query=query,
+                context=history_context or "",
+            )
+
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
                 model=self.model_name,
                 contents=prompt,
                 config=GenerateContentConfig(

@@ -69,3 +69,6 @@ slide_generate_instructions.md
 .agent/
 .planning/
 .venv/
+
+
+.commandcode/

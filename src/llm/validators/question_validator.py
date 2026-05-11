@@ -1,3 +1,4 @@
+import asyncio
 from typing import Optional, List, Dict, Any
 import json
 from src.llm.handlers.base_handler import BaseHandler
@@ -24,6 +25,34 @@ class QuestionValidator(BaseHandler):
         response = self._call_api(
             prompt,
             temperature=0.1,  # Rất thấp để tránh LLM "sáng tạo" thêm
+            response_mime="application/json"
+        )
+        
+        # 3. Parse & Validate
+        try:
+            return ValidationResult.from_json_string(response)
+        except Exception as e:
+            # Fallback nếu validator lỗi JSON: coi như không pass để đảm bảo an toàn
+            self._handle_error(f"Lỗi parse Validation JSON: {e}")
+            return ValidationResult(all_valid=False, validations=[], approved_questions=[])
+    
+    async def validate_async(
+        self, 
+        question_type: str, 
+        context: str, 
+        questions_json: str
+    ) -> ValidationResult:
+        # 1. Build prompt
+        prompt = QUESTION_VALIDATION_TEMPLATE.format(
+            question_type=question_type,
+            context=context,
+            questions_json=questions_json
+        )
+        
+        # 2. Call API async
+        response = await self._call_api_async(
+            prompt,
+            temperature=0.1,
             response_mime="application/json"
         )
         

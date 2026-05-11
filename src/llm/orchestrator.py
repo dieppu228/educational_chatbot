@@ -1,7 +1,7 @@
-
 import time
+import asyncio
 import logging
-from typing import Generator, Optional, Dict
+from typing import Generator, Optional, Dict, AsyncGenerator
 
 from src.config.config import settings
 
@@ -82,7 +82,7 @@ class Orchestrator:
         self.last_debug_info: Dict = {}
 
     # ============================================================
-    # MAIN ENTRY POINT
+    # MAIN ENTRY POINT (sync - for Gradio compatibility)
     # ============================================================
 
     def ask(
@@ -92,6 +92,31 @@ class Orchestrator:
         user_id: Optional[str] = None,
         **kwargs,
     ) -> Generator[str, None, None]:
+        # Run async pipeline in sync context for backward compatibility
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            gen = self.ask_async(query, ui_book=ui_book, user_id=user_id, **kwargs)
+            while True:
+                try:
+                    chunk = loop.run_until_complete(gen.__anext__())
+                    yield chunk
+                except StopAsyncIteration:
+                    break
+        finally:
+            loop.close()
+
+    # ============================================================
+    # ASYNC ENTRY POINT
+    # ============================================================
+
+    async def ask_async(
+        self,
+        query: str,
+        ui_book: Optional[str] = None,
+        user_id: Optional[str] = None,
+        **kwargs,
+    ) -> AsyncGenerator[str, None]:
         # ① Tạo RequestContext — thay thế toàn bộ global state
         ctx = RequestContext(query=query, ui_book=ui_book, user_id=user_id or "anonymous")
 
@@ -102,11 +127,11 @@ class Orchestrator:
             else f"QUERY [{ctx.request_id}] (user={ctx.user_id}): '{query}'"
         )
 
-        # ② Context enrichment + Query Rewriting
-        self._enrich_context(ctx)
+        # ② Context enrichment + Query Rewriting (async)
+        await self._enrich_context_async(ctx)
 
-        # ③ Intent Detection (1 LLM call)
-        self._detect_intent(ctx)
+        # ③ Intent Detection (LLM call - async)
+        await self._detect_intent_async(ctx)
 
         # ④ Session Resolution (pure code)
         self._resolve_session(ctx)
@@ -132,7 +157,9 @@ class Orchestrator:
 
             # DECIDE: Check if this action can proceed
             if plan.action in self.ACTIONS_REQUIRING_BOOK and not ctx.effective_book:
-                yield from self._handle_no_book(ctx)
+                async for chunk in self._handle_no_book_async(ctx):
+                    response_chunks.append(chunk)
+                    yield chunk
                 continue  # Skip this action, try next
 
             # ACT: Insert separator between multi-action outputs
@@ -141,13 +168,13 @@ class Orchestrator:
                 response_chunks.append(separator)
                 yield separator
 
-            for chunk in self.dispatcher.dispatch(plan, ctx):
+            async for chunk in self.dispatcher.dispatch_async(plan, ctx):
                 response_chunks.append(chunk)
                 yield chunk
 
-        # ⑧ Auto-save
+        # ⑧ Auto-save (async)
         full_response = "".join(response_chunks)
-        self.session_store.auto_save(ctx.session)
+        await self.session_store.auto_save_async(ctx.session)
 
         # ⑨ Write trace
         self.last_debug_info = ctx.to_debug_dict()
@@ -162,10 +189,10 @@ class Orchestrator:
         logger.info("=" * 60)
 
     # ============================================================
-    # PIPELINE STAGES (thin wrappers)
+    # PIPELINE STAGES (async versions)
     # ============================================================
 
-    def _enrich_context(self, ctx: RequestContext):
+    async def _enrich_context_async(self, ctx: RequestContext):
         current_session = self.memory.get_current_session(ctx.user_id)
         history_text = ""
         if current_session:
@@ -179,9 +206,9 @@ class Orchestrator:
             ctx.context_enriched = True
             logger.info("ContextAnalyzer: enriched query with history")
 
-            # Query Rewriting
+            # Query Rewriting (async)
             t_rw = time.time()
-            rewritten = self.query_rewriter.rewrite(ctx.query, context_snippet)
+            rewritten = await self.query_rewriter.rewrite_async(ctx.query, context_snippet)
             rw_time = time.time() - t_rw
 
             if rewritten and len(rewritten) > 0:
@@ -198,13 +225,13 @@ class Orchestrator:
             rewrite=ctx.rewrite_info,
         )
 
-    def _detect_intent(self, ctx: RequestContext):
+    async def _detect_intent_async(self, ctx: RequestContext):
         current_session = self.memory.get_current_session(ctx.user_id)
         current_topic = current_session.topic if current_session else None
         session_messages = current_session.get_context_messages() if current_session else None
 
         t1 = time.time()
-        intent_results = self.intent_router.detect_multi(
+        intent_results = await self.intent_router.detect_multi_async(
             query=ctx.enriched_query,
             current_topic=current_topic,
             session_messages=session_messages,
@@ -285,7 +312,7 @@ class Orchestrator:
             ],
         )
 
-    def _handle_no_book(self, ctx: RequestContext) -> Generator[str, None, None]:
+    async def _handle_no_book_async(self, ctx: RequestContext) -> AsyncGenerator[str, None]:
         msg = (
             "📚 Hệ thống hỗ trợ 2 bộ sách SGK Tin học THPT:\n"
             "- **Cánh Diều** (CD)\n"

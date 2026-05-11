@@ -1,5 +1,5 @@
-
 import json
+import asyncio
 import logging
 from pathlib import Path
 from typing import List, Optional, Dict
@@ -163,6 +163,20 @@ class SessionStore:
             index.append(entry)
 
         self._write_index(index)
+
+    # ── Async Methods ───────────────────────────────────────
+
+    async def save_session_async(self, session: Session) -> None:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self.save_session, session)
+
+    async def load_session_async(self, session_id: str) -> Optional[Session]:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.load_session, session_id)
+
+    async def auto_save_async(self, session: Session) -> None:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self.auto_save, session)
 
 
 __all__ = ["SessionStore"]

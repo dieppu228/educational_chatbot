@@ -1,5 +1,6 @@
 import re
-from typing import Optional, List, Dict
+import asyncio
+from typing import Optional, List, Dict, AsyncGenerator
 
 from src.config.config import settings
 from src.schemas.context import RequestContext
@@ -141,6 +142,20 @@ class RAGService:
             # Trả về empty thay vì crash pipeline,
             # nhưng log đủ thông tin để debug
             return []
+
+    @trace_node("RAGService.get_context_async")
+    async def get_context_async(
+        self,
+        ctx: RequestContext,
+        intent_hint: Optional[str] = None,
+        task_type: Optional[str] = None,
+    ) -> List[Dict]:
+        # Run blocking I/O in thread pool to not block event loop
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, 
+            lambda: self.get_context(ctx, intent_hint=intent_hint, task_type=task_type)
+        )
 
     @staticmethod
     def _extract_grade_from_topic(topic: str) -> Optional[str]:
