@@ -47,6 +47,7 @@ FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 class ChatRequest(BaseModel):
     message: str
     book: Optional[str] = None
+    grade: Optional[str] = None
     user_id: str = "anonymous"
 
 
@@ -58,16 +59,24 @@ class ChatResponse(BaseModel):
 # ── API Routes ──
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    ui_book = req.book if req.book and req.book != "auto" else None
+    ui_book = req.book if req.book in {"CD", "KNTT"} else None
+    ui_grade = req.grade if req.grade in {"10", "11", "12"} else None
 
     full_response = ""
+    debug_info = None
     try:
-        async for chunk in orchestrator.ask_async(req.message, ui_book=ui_book, user_id=req.user_id):
+        async for chunk in orchestrator.ask_async(req.message, ui_book=ui_book, ui_grade=ui_grade, user_id=req.user_id):
             full_response += chunk
     except Exception as e:
         full_response = f"Lỗi: {str(e)[:300]}"
+        debug_info = {
+            "user_id": req.user_id,
+            "query": req.message,
+            "error": str(e)[:300],
+        }
 
-    debug_info = orchestrator.last_debug_info
+    if debug_info is None:
+        debug_info = orchestrator.get_debug_info(req.user_id)
 
     return ChatResponse(content=full_response, debug=debug_info)
 

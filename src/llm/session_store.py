@@ -1,6 +1,8 @@
 import json
 import asyncio
 import logging
+import os
+import threading
 from pathlib import Path
 from typing import List, Optional, Dict
 from src.llm.memory import Session
@@ -18,6 +20,7 @@ class SessionStore:
         # Ensure index file exists
         if not self._index_file.exists():
             self._write_index([])
+        self._lock = threading.RLock()
 
     # ── Save ────────────────────────────────────────────────
 
@@ -25,12 +28,12 @@ class SessionStore:
         file_path = self.storage_path / f"{session.session_id}.json"
 
         try:
-            data = session.to_dict()
-            with open(file_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            with self._lock:
+                data = session.to_dict()
+                self._write_json_atomic(file_path, data)
 
-            # Update index
-            self._update_index(session)
+                # Update index
+                self._update_index(session)
             logger.debug(f"Session saved: {session.session_id} -> {file_path}")
 
         except Exception as e:
@@ -106,13 +109,14 @@ class SessionStore:
         file_path = self.storage_path / f"{session_id}.json"
 
         try:
-            if file_path.exists():
-                file_path.unlink()
+            with self._lock:
+                if file_path.exists():
+                    file_path.unlink()
 
-            # Remove from index
-            index = self._read_index()
-            index = [e for e in index if e["session_id"] != session_id]
-            self._write_index(index)
+                # Remove from index
+                index = self._read_index()
+                index = [e for e in index if e["session_id"] != session_id]
+                self._write_index(index)
 
             logger.info(f"Session deleted: {session_id}")
             return True
@@ -134,10 +138,19 @@ class SessionStore:
 
     def _write_index(self, index: List[Dict]) -> None:
         try:
-            with open(self._index_file, "w", encoding="utf-8") as f:
-                json.dump(index, f, ensure_ascii=False, indent=2)
+            self._write_json_atomic(self._index_file, index)
         except Exception as e:
             logger.error(f"Failed to write index: {e}")
+
+    def _write_json_atomic(self, file_path: Path, data) -> None:
+        tmp_path = file_path.with_name(
+            f"{file_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, file_path)
 
     def _update_index(self, session: Session) -> None:
         index = self._read_index()

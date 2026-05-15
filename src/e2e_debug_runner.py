@@ -120,7 +120,7 @@ async def run_query(args: argparse.Namespace, logger: logging.Logger) -> Dict[st
             print(chunk, end="", flush=True)
 
     response = "".join(response_chunks)
-    debug_info = orchestrator.last_debug_info or {}
+    debug_info = orchestrator.get_debug_info(args.user_id) or {}
 
     logger.info("E2E query complete: response_chars=%s", len(response))
     for index, step in enumerate(debug_info.get("steps", []), start=1):

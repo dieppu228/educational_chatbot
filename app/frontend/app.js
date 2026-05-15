@@ -9,9 +9,12 @@ const chatInput = $("#chatInput");
 const sendBtn = $("#sendBtn");
 const chatBody = $("#chatBody");
 const messagesEl = $("#messages");
+const bookSelect = $("#bookSelect");
+const gradeSelect = $("#gradeSelect");
+const chatBookInfo = $("#chatBookInfo");
 
 let isTyping = false;
-const userId = "user_" + Math.random().toString(36).slice(2, 8);
+let userId = getOrCreateUserId();
 
 document.addEventListener("DOMContentLoaded", () => {
   // Show user ID
@@ -30,6 +33,9 @@ function setupEvents() {
   chatInput.addEventListener("input", () => {
     sendBtn.disabled = !chatInput.value.trim();
   });
+  bookSelect?.addEventListener("change", updateScopeLabel);
+  gradeSelect?.addEventListener("change", updateScopeLabel);
+  updateScopeLabel();
 
   document.querySelectorAll(".quick-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -40,6 +46,10 @@ function setupEvents() {
   });
 
   $("#newChatBtn").addEventListener("click", () => {
+    userId = createUserId();
+    localStorage.setItem("edubot_user_id", userId);
+    const userIdEl = $(".user-id");
+    if (userIdEl) userIdEl.textContent = userId;
     messagesEl.innerHTML = "";
     loadWelcome();
   });
@@ -62,13 +72,14 @@ async function handleSend() {
   isTyping = true;
 
   const typingEl = showTyping();
-  const book = $("#bookSelect")?.value || "auto";
+  const book = bookSelect?.value || "auto";
+  const grade = gradeSelect?.value || "auto";
 
   try {
     const res = await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, book, user_id: userId }),
+      body: JSON.stringify({ message: text, book, grade, user_id: userId }),
     });
 
     removeEl(typingEl);
@@ -166,6 +177,22 @@ function formatMarkdown(text) {
 function now() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+function createUserId() { return "user_" + Math.random().toString(36).slice(2, 10); }
+function getOrCreateUserId() {
+  const stored = localStorage.getItem("edubot_user_id");
+  if (stored) return stored;
+  const next = createUserId();
+  localStorage.setItem("edubot_user_id", next);
+  return next;
+}
+function updateScopeLabel() {
+  if (!chatBookInfo) return;
+  const bookLabels = { auto: "Tự động", CD: "Cánh Diều", KNTT: "Kết nối tri thức" };
+  const gradeLabels = { auto: "Tự động", 10: "Lớp 10", 11: "Lớp 11", 12: "Lớp 12" };
+  const book = bookLabels[bookSelect?.value || "auto"] || "Tự động";
+  const grade = gradeLabels[gradeSelect?.value || "auto"] || "Tự động";
+  chatBookInfo.textContent = `${book} - ${grade}`;
 }
 function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 function scrollBottom() { chatBody.scrollTop = chatBody.scrollHeight; }

@@ -29,15 +29,27 @@
           Cuộc trò chuyện mới
         </button>
 
-        <!-- Book Selector -->
+        <!-- Scope Selectors -->
         <div class="book-section">
           <label class="book-label">Bộ sách đang dùng</label>
           <div class="book-select-wrapper">
             <select class="book-select" id="bookSelect">
-              <option value="CD">Cánh Diều - Tin học 10</option>
-              <option value="KNTT" selected>Kết nối tri thức - Tin học 10</option>
-              <option value="CD11">Cánh Diều - Tin học 11</option>
-              <option value="KNTT11">Kết nối tri thức - Tin học 11</option>
+              <option value="auto">Tự động</option>
+              <option value="CD">Cánh Diều</option>
+              <option value="KNTT" selected>Kết nối tri thức</option>
+            </select>
+            <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </div>
+
+        <div class="book-section">
+          <label class="book-label">Khối lớp</label>
+          <div class="book-select-wrapper">
+            <select class="book-select" id="gradeSelect">
+              <option value="auto">Tự động</option>
+              <option value="10" selected>Lớp 10</option>
+              <option value="11">Lớp 11</option>
+              <option value="12">Lớp 12</option>
             </select>
             <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
           </div>
@@ -89,7 +101,7 @@
           <h1 class="chat-title" id="chatTitle">Soạn giáo án Mạng LAN</h1>
           <div class="chat-meta">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-            <span id="chatBookInfo">Kết nối tri thức - Tin học 10</span>
+            <span id="chatBookInfo">Kết nối tri thức - Lớp 10</span>
           </div>
         </div>
         <button class="download-all-btn" id="downloadAllBtn">

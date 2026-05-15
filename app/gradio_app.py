@@ -37,7 +37,6 @@ from src.llm.orchestrator import Orchestrator
 searcher = None
 reranker = None
 orchestrator = None
-current_user_id = None  # Track current user_id from Gradio session hash
 
 
 # ============================================================
@@ -83,10 +82,8 @@ def init_components():
 # CHAT HANDLER
 # ============================================================
 
-def chat_response(message, history, book_option, request: gr.Request):
+def chat_response(message, history, book_option, grade_option, request: gr.Request):
     """Process message through Orchestrator pipeline."""
-    global current_user_id
-    
     if not message or not message.strip():
         return history, ""
 
@@ -97,22 +94,35 @@ def chat_response(message, history, book_option, request: gr.Request):
     elif book_option == "Kết Nối Tri Thức (KNTT)":
         ui_book = "KNTT"
 
+    ui_grade = None
+    if grade_option == "Lớp 10":
+        ui_grade = "10"
+    elif grade_option == "Lớp 11":
+        ui_grade = "11"
+    elif grade_option == "Lớp 12":
+        ui_grade = "12"
+
     history = history + [{"role": "user", "content": message}]
 
     # Stable identity per browser tab/session
     user_id = getattr(request, "session_hash", None) or "anonymous"
-    current_user_id = user_id
 
     full_response = ""
+    debug_info = None
     try:
-        for chunk in orchestrator.ask(message, ui_book=ui_book, user_id=user_id):
+        for chunk in orchestrator.ask(message, ui_book=ui_book, ui_grade=ui_grade, user_id=user_id):
             full_response += chunk
         history = history + [{"role": "assistant", "content": full_response}]
     except Exception as e:
         history = history + [{"role": "assistant", "content": f"Loi: {str(e)[:300]}"}]
+        debug_info = {
+            "user_id": user_id,
+            "query": message,
+            "error": str(e)[:300],
+        }
 
-    # Build debug text from orchestrator.last_debug_info
-    debug_text = format_debug_info(orchestrator.last_debug_info)
+    # Build debug text for this Gradio user/session
+    debug_text = format_debug_info(debug_info or orchestrator.get_debug_info(user_id))
 
     return history, debug_text
 
@@ -166,6 +176,13 @@ def format_debug_info(debug_info: dict) -> str:
             )
             if step.get("round_id") is not None:
                 lines.append(f"  - Round ID: {step.get('round_id')}")
+
+        elif node == "ScopeResolver":
+            lines.append(
+                f"**[ScopeResolver]**\n"
+                f"  - UI book: `{step.get('ui_book')}` | LLM book: `{step.get('llm_book')}` | Effective: `{step.get('effective_book')}`\n"
+                f"  - UI grade: `{step.get('ui_grade')}` | Effective: `{step.get('effective_grade')}`"
+            )
 
         elif node == "RAG":
             if step.get("error"):
@@ -253,20 +270,18 @@ def format_debug_info(debug_info: dict) -> str:
 
 def clear_chat(request: gr.Request):
     """Clear current user's active session mapping only."""
-    global current_user_id
     user_id = getattr(request, "session_hash", None) or "anonymous"
     orchestrator.memory.clear_user_session(user_id)
-    if current_user_id == user_id:
-        current_user_id = None
     return [], "*Reset — chưa có debug info*"
 
 
-def get_student_stats():
+def get_student_stats(request: gr.Request):
     """Get current student's profile stats from shared tracker."""
-    if not current_user_id:
+    user_id = getattr(request, "session_hash", None) or "anonymous"
+    if not user_id:
         return "*Chưa có dữ liệu học tập*"
 
-    profile = orchestrator.quiz_service.student_tracker.profile_manager.get(current_user_id)
+    profile = orchestrator.quiz_service.student_tracker.profile_manager.get(user_id)
     if not profile or not profile.lessons_studied:
         return "*Chưa có dữ liệu học tập*"
     
@@ -391,6 +406,12 @@ def build_ui():
                 label="📚 Bộ sách",
                 scale=1,
             )
+            grade_dropdown = gr.Dropdown(
+                choices=["Không chọn (Auto)", "Lớp 10", "Lớp 11", "Lớp 12"],
+                value="Không chọn (Auto)",
+                label="🎓 Khối lớp",
+                scale=1,
+            )
             chat_send = gr.Button(
                 "📤 Gửi", variant="primary", scale=1,
                 elem_classes=["primary-btn"],
@@ -460,13 +481,13 @@ def build_ui():
         # ── Event Handlers ──
         chat_send.click(
             fn=chat_response,
-            inputs=[chat_input, chatbot_ui, book_dropdown],
+            inputs=[chat_input, chatbot_ui, book_dropdown, grade_dropdown],
             outputs=[chatbot_ui, debug_output],
         ).then(lambda: "", outputs=chat_input)
 
         chat_input.submit(
             fn=chat_response,
-            inputs=[chat_input, chatbot_ui, book_dropdown],
+            inputs=[chat_input, chatbot_ui, book_dropdown, grade_dropdown],
             outputs=[chatbot_ui, debug_output],
         ).then(lambda: "", outputs=chat_input)
 

@@ -27,10 +27,10 @@ class RAGService:
     ) -> List[Dict]:
         # Lấy topic và grade từ IntentRouter
         topic_hint = None
-        grade_hint = None
+        grade_hint = ctx.effective_grade
         if ctx.intent_result:
             topic_hint = ctx.intent_result.topic
-            if topic_hint:
+            if topic_hint and not grade_hint:
                 grade_hint = self._extract_grade_from_topic(topic_hint)
 
         book = ctx.effective_book

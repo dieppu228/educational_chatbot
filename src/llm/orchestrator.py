@@ -1,6 +1,7 @@
 import time
 import asyncio
 import logging
+import threading
 from typing import Generator, Optional, Dict, AsyncGenerator
 
 from src.config.config import settings
@@ -80,6 +81,24 @@ class Orchestrator:
 
         # ── Debug (backward compat cho app_gradio.py) ──────
         self.last_debug_info: Dict = {}
+        self._debug_info_by_user: Dict[str, Dict] = {}
+        self._debug_lock = threading.RLock()
+
+    def get_debug_info(self, user_id: Optional[str] = None) -> Dict:
+        uid = user_id or "anonymous"
+        with self._debug_lock:
+            return dict(self._debug_info_by_user.get(uid) or self.last_debug_info)
+
+    def _set_debug_info(self, ctx: RequestContext, full_response: str):
+        debug_info = ctx.to_debug_dict()
+        debug_info["total_time_s"] = ctx.elapsed_time
+        debug_info["response"] = {
+            "length": len(full_response),
+            "preview": full_response[:500],
+        }
+        with self._debug_lock:
+            self.last_debug_info = debug_info
+            self._debug_info_by_user[ctx.user_id] = debug_info
 
     # ============================================================
     # MAIN ENTRY POINT (sync - for Gradio compatibility)
@@ -89,6 +108,7 @@ class Orchestrator:
         self,
         query: str,
         ui_book: Optional[str] = None,
+        ui_grade: Optional[str] = None,
         user_id: Optional[str] = None,
         **kwargs,
     ) -> Generator[str, None, None]:
@@ -96,7 +116,7 @@ class Orchestrator:
         loop = asyncio.new_event_loop()
         try:
             asyncio.set_event_loop(loop)
-            gen = self.ask_async(query, ui_book=ui_book, user_id=user_id, **kwargs)
+            gen = self.ask_async(query, ui_book=ui_book, ui_grade=ui_grade, user_id=user_id, **kwargs)
             while True:
                 try:
                     chunk = loop.run_until_complete(gen.__anext__())
@@ -114,11 +134,12 @@ class Orchestrator:
         self,
         query: str,
         ui_book: Optional[str] = None,
+        ui_grade: Optional[str] = None,
         user_id: Optional[str] = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         # ① Tạo RequestContext — thay thế toàn bộ global state
-        ctx = RequestContext(query=query, ui_book=ui_book, user_id=user_id or "anonymous")
+        ctx = RequestContext(query=query, ui_book=ui_book, ui_grade=ui_grade, user_id=user_id or "anonymous")
         ctx.auto_approve_outline = bool(kwargs.get("auto_approve_outline", False))
         ctx.graph_debug_stream = bool(kwargs.get("graph_debug_stream", True))
 
@@ -152,11 +173,26 @@ class Orchestrator:
 
         # ⑥ Book Resolution
         ctx.resolve_book()
+        ctx.resolve_grade()
         logger.info(f"Book: ui={ui_book}, llm={ctx.intent_result.book if ctx.intent_result else None}, "
                      f"session={ctx.session.book} -> effective={ctx.effective_book}")
+        logger.info(f"Grade: ui={ui_grade} -> effective={ctx.effective_grade}")
+        ctx.add_debug_step(
+            "ScopeResolver",
+            ui_book=ui_book,
+            llm_book=ctx.intent_result.book if ctx.intent_result else None,
+            effective_book=ctx.effective_book,
+            ui_grade=ui_grade,
+            effective_grade=ctx.effective_grade,
+        )
 
         # ⑦ Execute via Dispatcher — Agentic multi-action loop
         response_chunks = []
+        scope_notice = self._build_scope_override_notice(ctx)
+        if scope_notice:
+            response_chunks.append(scope_notice)
+            yield scope_notice
+
         for i, plan in enumerate(ctx.action_plans):
             # OBSERVE: Swap context to match current sub-task
             ctx.action_plan = plan
@@ -185,16 +221,38 @@ class Orchestrator:
         await self.session_store.auto_save_async(ctx.session)
 
         # ⑨ Write trace
-        self.last_debug_info = ctx.to_debug_dict()
-        self.last_debug_info["total_time_s"] = ctx.elapsed_time
-        self.last_debug_info["response"] = {
-            "length": len(full_response),
-            "preview": full_response[:500],
-        }
+        self._set_debug_info(ctx, full_response)
         trace_service.write_trace(ctx, full_response)
 
         logger.info(f"Total tigit stame: {ctx.elapsed_time}s")
         logger.info("=" * 60)
+
+    def _build_scope_override_notice(self, ctx: RequestContext) -> Optional[str]:
+        query_book = RequestContext._extract_book(ctx.query)
+        intent_book = ctx.intent_result.book if ctx.intent_result else None
+        query_grade = RequestContext._extract_grade(ctx.query)
+        intent_grade = RequestContext._extract_grade(ctx.intent_result.topic) if ctx.intent_result else None
+
+        explicit_book = query_book or intent_book
+        explicit_grade = query_grade or intent_grade
+        overrides = []
+
+        if ctx.ui_book and explicit_book and explicit_book != ctx.ui_book:
+            overrides.append(f"bộ sách {self._book_label(explicit_book)}")
+        if ctx.ui_grade and explicit_grade and explicit_grade != ctx.ui_grade:
+            overrides.append(f"lớp {explicit_grade}")
+
+        if not overrides:
+            return None
+
+        return (
+            "Mình sẽ dùng " + ", ".join(overrides) +
+            " theo nội dung câu hỏi của bạn.\n\n"
+        )
+
+    @staticmethod
+    def _book_label(book: str) -> str:
+        return {"CD": "Cánh Diều", "KNTT": "Kết Nối Tri Thức"}.get(book, book)
 
     async def _resume_hitl_if_waiting_async(self, ctx: RequestContext) -> Optional[list[str]]:
         current_session = self.memory.get_current_session(ctx.user_id)
@@ -203,6 +261,7 @@ class Orchestrator:
 
         ctx.session = current_session
         ctx.resolve_book()
+        ctx.resolve_grade()
         ctx.session.add_message("user", ctx.query)
         ctx.add_debug_step(
             "HITLResume",
@@ -216,12 +275,7 @@ class Orchestrator:
         )
         full_response = "".join(response_chunks)
         await self.session_store.auto_save_async(ctx.session)
-        self.last_debug_info = ctx.to_debug_dict()
-        self.last_debug_info["total_time_s"] = ctx.elapsed_time
-        self.last_debug_info["response"] = {
-            "length": len(full_response),
-            "preview": full_response[:500],
-        }
+        self._set_debug_info(ctx, full_response)
         trace_service.write_trace(ctx, full_response)
         logger.info("HITL resume complete: %s", ctx.elapsed_time)
         return response_chunks
@@ -368,8 +422,7 @@ class Orchestrator:
         yield msg
 
         # Write trace for this early return
-        self.last_debug_info = ctx.to_debug_dict()
-        self.last_debug_info["total_time_s"] = ctx.elapsed_time
+        self._set_debug_info(ctx, msg)
         trace_service.write_trace(ctx, msg)
 
 
