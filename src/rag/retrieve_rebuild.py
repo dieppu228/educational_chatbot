@@ -228,7 +228,14 @@ class CustomSearch:
         if not doc_indices:
             return []
 
-        idx_set = set(doc_indices)
+        doc_indices = [
+            int(i)
+            for i in doc_indices
+            if 0 <= int(i) < self.corpus_size and 0 <= int(i) < self.embeddings.shape[0]
+        ]
+        if not doc_indices:
+            return []
+
         top_n = min(top_n, len(doc_indices))
 
         # === BM25 scoped ===

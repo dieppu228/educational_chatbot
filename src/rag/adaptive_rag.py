@@ -1,4 +1,5 @@
 import time
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List, Dict
@@ -197,7 +198,7 @@ class AdaptiveRAGAgent:
         elif profile.strategy == RAGStrategy.HIERARCHICAL:
             chunks = self._hierarchical_retrieval(query, profile, book_indices=book_indices)
             # Fallback: nếu HRAG < 3 chunks → bổ sung standard
-            if len(chunks) < 3:
+            if len(chunks) < 3 and not self._is_scoped_topic_search(profile, book_indices):
                 standard = self._standard_retrieval(query, book_indices=book_indices)
                 chunks = self._merge_deduplicate(chunks, standard)
 
@@ -318,6 +319,7 @@ class AdaptiveRAGAgent:
 
         # ── Phase 1: Coarse — tìm parents (Level 1-2) ──────────────
         parent_indices = []
+        topic_parent_indices = []
         for i, chunk in enumerate(all_chunks):
             if scope_set is not None and i not in scope_set:
                 continue
@@ -329,10 +331,17 @@ class AdaptiveRAGAgent:
             if profile.grade and m.get("grade") != profile.grade:
                 continue
             parent_indices.append(i)
+            if profile.topic_hint and self._matches_topic_hint(chunk, profile.topic_hint):
+                topic_parent_indices.append(i)
+
+        if self._is_scoped_topic_search(profile, book_indices):
+            if not topic_parent_indices:
+                return []
+            parent_indices = topic_parent_indices
 
         if not parent_indices:
             # HRAG Phase 1: no parent chunks found → fallback standard
-            return self._standard_retrieval(query, book_indices=book_indices)
+            return []
 
         # Semantic search chỉ trên parents
         parent_results = self.retriever.search_scoped(
@@ -362,7 +371,7 @@ class AdaptiveRAGAgent:
 
         if not child_indices:
             # HRAG Phase 2: no children found → returning parent chunks
-            return parent_results
+            return parent_results if not self._is_scoped_topic_search(profile, book_indices) else []
 
 
 
@@ -398,6 +407,60 @@ class AdaptiveRAGAgent:
             if chunk.get("metadata", {}).get("book") == book:
                 indices.append(i)
         return indices
+
+    @staticmethod
+    def _is_scoped_topic_search(profile: QueryProfile, book_indices: List[int] = None) -> bool:
+        return bool(profile.topic_hint and (profile.grade or book_indices is not None))
+
+    @classmethod
+    def _matches_topic_hint(cls, chunk: Dict, topic_hint: str) -> bool:
+        metadata = chunk.get("metadata", {})
+        haystack = " ".join(
+            str(metadata.get(key, ""))
+            for key in ("topic_name", "lesson_name", "title")
+        )
+        haystack = f"{haystack} {chunk.get('context', '')}"
+        normalized_hint = cls._normalize_text(topic_hint)
+        normalized_haystack = cls._normalize_text(haystack)
+        if normalized_hint and normalized_hint in normalized_haystack:
+            return True
+
+        hint_tokens = cls._meaningful_tokens(topic_hint)
+        if not hint_tokens or len(hint_tokens) > 2:
+            return False
+        haystack_tokens = set(cls._meaningful_tokens(haystack))
+        return all(token in haystack_tokens for token in hint_tokens)
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        normalized = text.lower()
+        normalized = (
+            normalized
+            .replace("á", "a").replace("à", "a").replace("ả", "a").replace("ã", "a").replace("ạ", "a")
+            .replace("ă", "a").replace("ắ", "a").replace("ằ", "a").replace("ẳ", "a").replace("ẵ", "a").replace("ặ", "a")
+            .replace("â", "a").replace("ấ", "a").replace("ầ", "a").replace("ẩ", "a").replace("ẫ", "a").replace("ậ", "a")
+            .replace("é", "e").replace("è", "e").replace("ẻ", "e").replace("ẽ", "e").replace("ẹ", "e")
+            .replace("ê", "e").replace("ế", "e").replace("ề", "e").replace("ể", "e").replace("ễ", "e").replace("ệ", "e")
+            .replace("í", "i").replace("ì", "i").replace("ỉ", "i").replace("ĩ", "i").replace("ị", "i")
+            .replace("ó", "o").replace("ò", "o").replace("ỏ", "o").replace("õ", "o").replace("ọ", "o")
+            .replace("ô", "o").replace("ố", "o").replace("ồ", "o").replace("ổ", "o").replace("ỗ", "o").replace("ộ", "o")
+            .replace("ơ", "o").replace("ớ", "o").replace("ờ", "o").replace("ở", "o").replace("ỡ", "o").replace("ợ", "o")
+            .replace("ú", "u").replace("ù", "u").replace("ủ", "u").replace("ũ", "u").replace("ụ", "u")
+            .replace("ư", "u").replace("ứ", "u").replace("ừ", "u").replace("ử", "u").replace("ữ", "u").replace("ự", "u")
+            .replace("ý", "y").replace("ỳ", "y").replace("ỷ", "y").replace("ỹ", "y").replace("ỵ", "y")
+            .replace("đ", "d")
+        )
+        return " ".join(re.findall(r"[a-z0-9]+", normalized))
+
+    @classmethod
+    def _meaningful_tokens(cls, text: str) -> List[str]:
+        stopwords = {"ve", "về", "va", "và", "cua", "của", "cac", "các", "hoc", "học"}
+        normalized = cls._normalize_text(text)
+        return [
+            token
+            for token in re.findall(r"[a-z0-9]+", normalized)
+            if len(token) > 1 and token not in stopwords
+        ]
 
 
 __all__ = ["AdaptiveRAGAgent", "RAGStrategy", "RAGResult", "QueryClassifier"]

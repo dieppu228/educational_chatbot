@@ -93,21 +93,28 @@ def _summarize_output(val, max_len=300):
 
 def trace_node(name: str):
     def decorator(func):
+        if inspect.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                input_summary = _build_input_summary(func, args, kwargs)
+                logger.info(f"[START] {name} | {input_summary}")
+
+                t0 = time.time()
+                try:
+                    result = await func(*args, **kwargs)
+                    elapsed = time.time() - t0
+                    logger.info(f"[ DONE] {name} | {_summarize_output(result)} | {elapsed:.2f}s")
+                    return result
+                except Exception as e:
+                    elapsed = time.time() - t0
+                    logger.error(f"[ERROR] {name} | {type(e).__name__}: {e} | {elapsed:.2f}s")
+                    raise
+
+            return async_wrapper
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            # Build input summary (skip 'self')
-            sig = inspect.signature(func)
-            params = list(sig.parameters.keys())
-            input_parts = []
-            for i, arg in enumerate(args):
-                param_name = params[i] if i < len(params) else f"arg{i}"
-                if param_name == "self":
-                    continue
-                input_parts.append(f"{param_name}={_summarize_arg(arg)}")
-            for k, v in kwargs.items():
-                input_parts.append(f"{k}={_summarize_arg(v)}")
-
-            input_summary = ", ".join(input_parts) if input_parts else "(no args)"
+            input_summary = _build_input_summary(func, args, kwargs)
             logger.info(f"[START] {name} | {input_summary}")
 
             t0 = time.time()
@@ -129,6 +136,20 @@ def trace_node(name: str):
 
         return wrapper
     return decorator
+
+
+def _build_input_summary(func, args, kwargs) -> str:
+    sig = inspect.signature(func)
+    params = list(sig.parameters.keys())
+    input_parts = []
+    for i, arg in enumerate(args):
+        param_name = params[i] if i < len(params) else f"arg{i}"
+        if param_name == "self":
+            continue
+        input_parts.append(f"{param_name}={_summarize_arg(arg)}")
+    for k, v in kwargs.items():
+        input_parts.append(f"{k}={_summarize_arg(v)}")
+    return ", ".join(input_parts) if input_parts else "(no args)"
 
 
 def _trace_generator(name, gen, t0):
