@@ -21,6 +21,7 @@ class OutlineAgent(BaseSlideAgent):
     def _execute(self, *, context_map: str, topic: str, grade: str, book: str,
                  task_type: str = "slide", **kwargs) -> dict:
         template = _OUTLINE_TEMPLATES.get(task_type, SLIDE_OUTLINE_TEMPLATE)
+        revision_instruction = kwargs.get("revision_instruction")
 
         prompt = template.format(
             topic=topic,
@@ -28,6 +29,12 @@ class OutlineAgent(BaseSlideAgent):
             book=book,
             context_map=context_map,
         )
+        if revision_instruction:
+            prompt += (
+                "\n\n=== QUALITY REVIEW REVISION INSTRUCTION ===\n"
+                f"{revision_instruction}\n"
+                "Chỉ sửa các phần bị nêu trong instruction, giữ nguyên các phần đã đạt."
+            )
 
         response = self._call_llm(prompt, temperature=0.3)
         payload = self._parse_json(response)
@@ -93,4 +100,3 @@ class OutlineAgent(BaseSlideAgent):
 
 
 __all__ = ["OutlineAgent"]
-

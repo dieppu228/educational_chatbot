@@ -24,6 +24,7 @@ def generate_outline(
 
     context_map = state.get("context_map", "")
     task_type = state.get("task_type", "slide")
+    revision_instruction = state.get("revision_instruction")
 
     if not context_map:
         return json.dumps({"error": "Chưa có context_map. Cần preprocess trước.", "status": "failed"})
@@ -35,10 +36,14 @@ def generate_outline(
         grade=grade,
         book=book,
         task_type=task_type,
+        revision_instruction=revision_instruction,
     )
 
     if result.status == "failed":
         return json.dumps({"error": result.error_message, "status": "failed"})
+
+    if revision_instruction:
+        return json.dumps(result.payload)
 
     # ── HITL: pause cho user review ──
     task_label = "giáo án" if task_type == "lesson_plan" else "bài giảng"
@@ -78,11 +83,14 @@ def generate_content(
     if not outline_slides:
         return json.dumps({"error": "Outline trống.", "status": "failed"})
 
+    revision_instruction = state.get("revision_instruction")
+
     agent = ContentAgent()
     result = agent.run(
         outline_slides=outline_slides,
         chunk_map=chunk_map,
         task_type=task_type,
+        revision_instruction=revision_instruction,
     )
 
     if result.status == "failed":
@@ -199,39 +207,37 @@ def merge_results(
 def check_quality(
     state: Annotated[dict, InjectedState],
 ) -> str:
-    """Kiểm tra chất lượng slides sau khi merge."""
+    """Review chất lượng slide/giáo án sau khi merge."""
 
-    from src.llm.services.slide_merger import SlideQualityGate
-    from src.schemas.slide_schemas import MergedSlide
+    from src.llm.services.quality_reviewer import get_quality_reviewer
 
     merged_data = state.get("merged_slides")
     if not merged_data:
-        return json.dumps({"passed": False, "issues": ["Chưa có slides để kiểm tra."]})
-
-    # Parse slides
-    slides_raw = merged_data.get("slides", []) if isinstance(merged_data, dict) else merged_data
-    slides = []
-    for s in slides_raw:
-        if isinstance(s, dict):
-            slides.append(MergedSlide(**s))
-        elif isinstance(s, MergedSlide):
-            slides.append(s)
-
-    gate = SlideQualityGate()
-    passed, issues = gate.validate(slides)
-
-    if not passed:
-
-        fixed_slides = gate.auto_fix(slides, issues)
-        passed_after_fix, issues_after = gate.validate(fixed_slides)
         return json.dumps({
-            "passed": passed_after_fix,
-            "auto_fixed": True,
-            "issues": issues_after,
-            "slides": [s.model_dump() for s in fixed_slides],
-        })
+            "passed": False,
+            "score": 0,
+            "reason_fail": "FORMAT_INVALID",
+            "summary": "Chưa có output để kiểm tra.",
+            "issues": [{
+                "case": "FORMAT_INVALID",
+                "severity": "critical",
+                "target": "merged_slides",
+                "message": "merged_slides rỗng hoặc không tồn tại",
+                "suggestion": "Kiểm tra lại bước merge_results",
+            }],
+            "reflection_action": "block",
+            "revision_instruction": "Cần chạy lại merge_results trước khi quality check.",
+            "requires_human_review": True,
+        }, ensure_ascii=False)
 
-    return json.dumps({"passed": True, "issues": [], "slides": [s.model_dump() for s in slides]})
+    task_type = state.get("task_type", "slide")
+    reviewer = get_quality_reviewer(task_type)
+    review = reviewer.review(
+        query=state.get("query", ""),
+        context=state.get("synthesized_context") or state.get("context_map", ""),
+        output=merged_data,
+    )
+    return json.dumps(review.model_dump(), ensure_ascii=False)
 
 
 # ════════════════════════════════════════════════════════
@@ -254,6 +260,7 @@ TOOL_STATE_MAPPING = {
     "generate_media": "media_payload",
     "generate_quiz": "quiz_payload",
     "merge_results": "merged_slides",
+    "check_quality": "quality_review",
 }
 
 

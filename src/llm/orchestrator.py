@@ -119,6 +119,8 @@ class Orchestrator:
     ) -> AsyncGenerator[str, None]:
         # ① Tạo RequestContext — thay thế toàn bộ global state
         ctx = RequestContext(query=query, ui_book=ui_book, user_id=user_id or "anonymous")
+        ctx.auto_approve_outline = bool(kwargs.get("auto_approve_outline", False))
+        ctx.graph_debug_stream = bool(kwargs.get("graph_debug_stream", True))
 
         logger.info("=" * 60)
         logger.info(
@@ -126,6 +128,12 @@ class Orchestrator:
             if len(query) > 80
             else f"QUERY [{ctx.request_id}] (user={ctx.user_id}): '{query}'"
         )
+
+        hitl_response_chunks = await self._resume_hitl_if_waiting_async(ctx)
+        if hitl_response_chunks is not None:
+            for chunk in hitl_response_chunks:
+                yield chunk
+            return
 
         # ② Context enrichment + Query Rewriting (async)
         await self._enrich_context_async(ctx)
@@ -187,6 +195,36 @@ class Orchestrator:
 
         logger.info(f"Total tigit stame: {ctx.elapsed_time}s")
         logger.info("=" * 60)
+
+    async def _resume_hitl_if_waiting_async(self, ctx: RequestContext) -> Optional[list[str]]:
+        current_session = self.memory.get_current_session(ctx.user_id)
+        if not current_session or not self.slide_service.is_waiting_hitl(current_session):
+            return None
+
+        ctx.session = current_session
+        ctx.resolve_book()
+        ctx.session.add_message("user", ctx.query)
+        ctx.add_debug_step(
+            "HITLResume",
+            status="resuming",
+            session_id=current_session.session_id,
+            feedback=ctx.query,
+        )
+
+        response_chunks = await asyncio.to_thread(
+            lambda: list(self.slide_service.resume_outline(ctx, ctx.query))
+        )
+        full_response = "".join(response_chunks)
+        await self.session_store.auto_save_async(ctx.session)
+        self.last_debug_info = ctx.to_debug_dict()
+        self.last_debug_info["total_time_s"] = ctx.elapsed_time
+        self.last_debug_info["response"] = {
+            "length": len(full_response),
+            "preview": full_response[:500],
+        }
+        trace_service.write_trace(ctx, full_response)
+        logger.info("HITL resume complete: %s", ctx.elapsed_time)
+        return response_chunks
 
     # ============================================================
     # PIPELINE STAGES (async versions)

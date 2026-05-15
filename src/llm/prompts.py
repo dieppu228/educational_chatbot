@@ -1137,6 +1137,111 @@ CONTEXT_BUILD_TEMPLATE = PromptTemplate(
 
 
 # ============================================================
+# 12. QUALITY REVIEWERS
+# ============================================================
+
+QUALITY_REVIEW_JSON_CONTRACT = """
+HÃY TRẢ VỀ JSON HỢP LỆ, KHÔNG markdown, KHÔNG giải thích ngoài JSON.
+Schema:
+{{
+  "passed": true|false,
+  "score": number từ 0 đến 10,
+  "reason_fail": string hoặc null,
+  "summary": string,
+  "issues": [
+    {{
+      "case": "LOW_SCORE|GROUNDING_WEAK|MISSING_REQUIRED_SECTION|CONTENT_TOO_GENERIC|PEDAGOGY_WEAK|QUIZ_INVALID|FORMAT_INVALID|SAFETY_OR_POLICY_RISK|UNCLEAR_REQUIREMENT",
+      "severity": "minor|major|critical",
+      "target": string hoặc null,
+      "message": string,
+      "suggestion": string hoặc null
+    }}
+  ],
+  "reflection_action": "approve|revise_outline|revise_content|revise_quiz|ask_human|block",
+  "revision_instruction": string hoặc null,
+  "requires_human_review": true|false
+}}
+
+QUY TẮC RA QUYẾT ĐỊNH:
+- Nếu score >= 8 và không có issue critical: passed=true, reflection_action="approve".
+- Nếu output có thể sửa bằng regenerate: passed=false và chọn action revise phù hợp.
+- Nếu yêu cầu user mơ hồ: reflection_action="ask_human".
+- Nếu output có lỗi nghiêm trọng hoặc hallucination nặng: reflection_action="block".
+- revision_instruction phải cụ thể: nêu phần cần sửa, giữ phần nào, dùng nguồn/context nào nếu có.
+"""
+
+QUIZ_QUALITY_REVIEW_PROMPT = """
+Bạn là Quiz Quality Reviewer cho hệ thống trợ lý giáo dục Tin học THPT.
+
+NHIỆM VỤ:
+Kiểm tra bộ câu hỏi được sinh ra có đủ tốt để dùng cho học sinh không.
+Tập trung vào:
+1. Câu hỏi rõ ràng, không mơ hồ.
+2. Đáp án đúng và nằm trong options nếu là trắc nghiệm.
+3. Giải thích hợp lý, bám context SGK.
+4. Độ khó phù hợp yêu cầu user.
+5. Không bịa kiến thức ngoài context.
+
+YÊU CẦU USER:
+{query}
+
+CONTEXT GỐC:
+{context}
+
+QUIZ OUTPUT CẦN REVIEW:
+{output}
+
+""" + QUALITY_REVIEW_JSON_CONTRACT
+
+SLIDE_QUALITY_REVIEW_PROMPT = """
+Bạn là Slide Quality Reviewer cho hệ thống trợ lý giáo dục Tin học THPT.
+
+NHIỆM VỤ:
+Kiểm tra slide bài giảng có đủ tốt để giáo viên sử dụng không.
+Tập trung vào:
+1. Flow sư phạm rõ: mở đầu -> nội dung -> hoạt động/ví dụ -> tổng kết.
+2. Bullet ngắn, phù hợp trình chiếu.
+3. Nội dung có trọng tâm, không quá chung chung.
+4. Bám context SGK, không bịa ngoài context.
+5. Nếu có bài tập, câu hỏi phải rõ và đúng ngữ cảnh.
+
+YÊU CẦU USER:
+{query}
+
+CONTEXT GỐC:
+{context}
+
+SLIDE OUTPUT CẦN REVIEW:
+{output}
+
+""" + QUALITY_REVIEW_JSON_CONTRACT
+
+LESSON_PLAN_QUALITY_REVIEW_PROMPT = """
+Bạn là Lesson Plan Quality Reviewer cho hệ thống trợ lý giáo dục Tin học THPT.
+
+NHIỆM VỤ:
+Kiểm tra giáo án có đủ tốt để giáo viên dùng trong dạy học không.
+Tập trung vào:
+1. Mục tiêu bài học rõ ràng.
+2. Tiến trình dạy học hợp lý.
+3. Hoạt động giáo viên/học sinh rõ nếu output có cấu trúc đó.
+4. Nội dung trọng tâm bám context SGK.
+5. Có kiểm tra/đánh giá hoặc câu hỏi củng cố phù hợp.
+6. Không bịa kiến thức ngoài context.
+
+YÊU CẦU USER:
+{query}
+
+CONTEXT GỐC:
+{context}
+
+GIÁO ÁN OUTPUT CẦN REVIEW:
+{output}
+
+""" + QUALITY_REVIEW_JSON_CONTRACT
+
+
+# ============================================================
 # EXPORTS
 # ============================================================
 
@@ -1177,4 +1282,9 @@ __all__ = [
     "QUERY_REWRITE_PROMPT", "QUERY_REWRITE_TEMPLATE",
     # Context Builder
     "CONTEXT_BUILD_PROMPT", "CONTEXT_BUILD_TEMPLATE",
+    # Quality Reviewers
+    "QUALITY_REVIEW_JSON_CONTRACT",
+    "QUIZ_QUALITY_REVIEW_PROMPT",
+    "SLIDE_QUALITY_REVIEW_PROMPT",
+    "LESSON_PLAN_QUALITY_REVIEW_PROMPT",
 ]

@@ -9,6 +9,7 @@ from src.llm.memory import Session, QuestionRecord, QuizRound
 from src.llm.handlers.question.scorer import QuestionScorer
 from src.llm.validators.question_validator import QuestionValidator
 from src.llm.handlers.explain_handler import ExplainHandler
+from src.llm.services.quality_reviewer import get_quality_reviewer
 from src.llm.student_tracker import StudentTracker
 from src.llm.utils import extract_num_questions
 from src.rag.context_builder import ContextBuilder
@@ -73,6 +74,51 @@ class QuizService:
                 if raw_questions is None:
                     logger.warning(f"Handler returned None (attempt {attempt+1})")
                     yield "Lỗi khi sinh câu hỏi. Đang thử lại..."
+                    continue
+
+                quality_reviewer = get_quality_reviewer(f"quiz:{task_type}")
+                quality_review = quality_reviewer.review(
+                    query=query,
+                    context=context_text,
+                    output=raw_questions.model_dump(),
+                )
+                reflection_attempts = 0
+
+                if quality_review.reflection_action == "revise_quiz":
+                    reflection_attempts = 1
+                    revised_query = (
+                        f"{query}\n\n"
+                        "Quality reviewer yêu cầu sửa bộ câu hỏi trước khi trả cho học sinh:\n"
+                        f"{quality_review.revision_instruction or quality_review.summary}\n"
+                        "Giữ đúng số lượng câu hỏi, chỉ sửa các lỗi được nêu."
+                    )
+                    raw_questions = handler.handle(revised_query, context_text, num_questions=num_q)
+                    if raw_questions is None:
+                        yield "Câu hỏi chưa đạt chất lượng sau reflection. Bạn thử hỏi cụ thể hơn nhé!"
+                        continue
+                    quality_review = quality_reviewer.review(
+                        query=query,
+                        context=context_text,
+                        output=raw_questions.model_dump(),
+                    )
+
+                ctx.add_debug_step(
+                    "QualityReviewer",
+                    target=f"quiz:{task_type}",
+                    passed=quality_review.passed,
+                    score=quality_review.score,
+                    reason_fail=quality_review.reason_fail,
+                    summary=quality_review.summary,
+                    reflection_action=quality_review.reflection_action,
+                    reflection_attempts=reflection_attempts,
+                    issues=[issue.model_dump() for issue in quality_review.issues],
+                )
+
+                if quality_review.reflection_action in ("block", "ask_human") or not quality_review.passed:
+                    yield (
+                        f"Câu hỏi chưa đạt chất lượng ({quality_review.reason_fail}). "
+                        f"{quality_review.revision_instruction or quality_review.summary}"
+                    )
                     continue
 
                 # Validate
@@ -413,6 +459,55 @@ class QuizService:
                 if raw_questions is None:
                     logger.warning(f"Handler returned None (attempt {attempt+1})")
                     yield "Lỗi khi sinh câu hỏi. Đang thử lại..."
+                    continue
+
+                quality_reviewer = get_quality_reviewer(f"quiz:{task_type}")
+                quality_review = await quality_reviewer.review_async(
+                    query=query,
+                    context=context_text,
+                    output=raw_questions.model_dump(),
+                )
+                reflection_attempts = 0
+
+                if quality_review.reflection_action == "revise_quiz":
+                    reflection_attempts = 1
+                    revised_query = (
+                        f"{query}\n\n"
+                        "Quality reviewer yêu cầu sửa bộ câu hỏi trước khi trả cho học sinh:\n"
+                        f"{quality_review.revision_instruction or quality_review.summary}\n"
+                        "Giữ đúng số lượng câu hỏi, chỉ sửa các lỗi được nêu."
+                    )
+                    raw_questions = await handler.handle_async(
+                        revised_query,
+                        context_text,
+                        num_questions=num_q,
+                    )
+                    if raw_questions is None:
+                        yield "Câu hỏi chưa đạt chất lượng sau reflection. Bạn thử hỏi cụ thể hơn nhé!"
+                        continue
+                    quality_review = await quality_reviewer.review_async(
+                        query=query,
+                        context=context_text,
+                        output=raw_questions.model_dump(),
+                    )
+
+                ctx.add_debug_step(
+                    "QualityReviewer",
+                    target=f"quiz:{task_type}",
+                    passed=quality_review.passed,
+                    score=quality_review.score,
+                    reason_fail=quality_review.reason_fail,
+                    summary=quality_review.summary,
+                    reflection_action=quality_review.reflection_action,
+                    reflection_attempts=reflection_attempts,
+                    issues=[issue.model_dump() for issue in quality_review.issues],
+                )
+
+                if quality_review.reflection_action in ("block", "ask_human") or not quality_review.passed:
+                    yield (
+                        f"Câu hỏi chưa đạt chất lượng ({quality_review.reason_fail}). "
+                        f"{quality_review.revision_instruction or quality_review.summary}"
+                    )
                     continue
 
                 # Validate (async)

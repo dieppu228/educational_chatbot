@@ -22,16 +22,23 @@ class EmbeddingModel:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.batch_size = batch_size
         self.model = None  # Lazy load
+        self.load_failed = False
     
     def _load_model(self):
+        if self.load_failed:
+            raise RuntimeError(f"Embedding model unavailable: {self.model_name}")
         if self.model is None:
-            print(f"Loading embedding model: {self.model_name}...")
-            self.model = SentenceTransformer(
-                self.model_name, 
-                trust_remote_code=True, 
-                device=self.device
-            )
-            print(f"Model loaded on {self.device}")
+            try:
+                print(f"Loading embedding model: {self.model_name}...")
+                self.model = SentenceTransformer(
+                    self.model_name,
+                    trust_remote_code=True,
+                    device=self.device
+                )
+                print(f"Model loaded on {self.device}")
+            except Exception:
+                self.load_failed = True
+                raise
     
     def encode(self, texts: List[str], show_progress: bool = True) -> np.ndarray:
         self._load_model()

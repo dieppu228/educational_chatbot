@@ -1,6 +1,6 @@
 
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from src.llm.handlers.content.slide_agents.base_slide_agent import BaseSlideAgent
@@ -37,6 +37,7 @@ class ContentAgent(BaseSlideAgent):
         failed_slides = []
 
         template = _CONTENT_TEMPLATES.get(task_type, SLIDE_CONTENT_TEMPLATE)
+        revision_instruction = kwargs.get("revision_instruction")
 
         # Dùng ThreadPoolExecutor cho parallel slide writing
         with ThreadPoolExecutor(max_workers=MAX_CONTENT_WORKERS) as executor:
@@ -51,6 +52,7 @@ class ContentAgent(BaseSlideAgent):
                     slide_data=slide_data,
                     chunk_map=chunk_map,
                     template=template,
+                    revision_instruction=revision_instruction,
                 )
                 futures[future] = slide_data
 
@@ -81,6 +83,7 @@ class ContentAgent(BaseSlideAgent):
         slide_data: Dict[str, Any],
         chunk_map: Dict[str, str],
         template=None,
+        revision_instruction: Optional[str] = None,
     ) -> dict:
         if template is None:
             template = SLIDE_CONTENT_TEMPLATE
@@ -107,6 +110,12 @@ class ContentAgent(BaseSlideAgent):
             key_points=", ".join(key_points),
             context_subset=context_subset,
         )
+        if revision_instruction:
+            prompt += (
+                "\n\n=== QUALITY REVIEW REVISION INSTRUCTION ===\n"
+                f"{revision_instruction}\n"
+                "Chỉ sửa các phần bị nêu trong instruction, giữ nguyên các phần đã đạt."
+            )
 
         response = self._call_llm(prompt, temperature=0.3)
         result = self._parse_json(response)
@@ -129,4 +138,3 @@ class ContentAgent(BaseSlideAgent):
 
 
 __all__ = ["ContentAgent"]
-

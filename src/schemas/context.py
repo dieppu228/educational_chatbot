@@ -1,12 +1,16 @@
 
 import time
 import uuid
+import json
+import logging
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 
 from src.llm.intent_router import IntentResult
 from src.llm.action_planner import ActionPlan
 from src.llm.memory import Session
+
+logger = logging.getLogger("chatbot.node")
 
 
 @dataclass
@@ -42,6 +46,8 @@ class RequestContext:
     timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
     debug_steps: List[Dict[str, Any]] = field(default_factory=list)
     t0: float = field(default_factory=time.time)
+    auto_approve_outline: bool = False
+    graph_debug_stream: bool = True
 
     def __post_init__(self):
         if not self.enriched_query:
@@ -54,6 +60,28 @@ class RequestContext:
     def add_debug_step(self, node: str, **kwargs):
         step = {"node": node, **kwargs}
         self.debug_steps.append(step)
+        logger.info(
+            "[%s] %s | %s",
+            self.request_id,
+            node,
+            self._summarize_debug_step(kwargs),
+        )
+
+    @staticmethod
+    def _summarize_debug_step(step: Dict[str, Any]) -> str:
+        compact = {}
+        for key, value in step.items():
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                compact[key] = value
+            elif isinstance(value, list):
+                compact[key] = f"List[{len(value)}]"
+            elif isinstance(value, dict):
+                compact[key] = f"Dict[{len(value)} keys]"
+            else:
+                compact[key] = value.__class__.__name__
+
+        text = json.dumps(compact, ensure_ascii=False, default=str)
+        return text[:1200] + "..." if len(text) > 1200 else text
 
     def resolve_book(self):
         self.effective_book = (

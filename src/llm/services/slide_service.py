@@ -13,6 +13,7 @@ from src.llm.handlers.question.scorer import QuestionScorer
 from src.rag.rag_service import RAGService
 from src.llm.graphs.content_supervisor import build_content_supervisor, RECURSION_LIMIT
 from src.llm.graphs.stream_wrapper import invoke_graph_sync, resume_graph
+from langgraph.types import Command
 from src.utils.error_handling import safe_execute
 
 logger = logging.getLogger("chatbot.slide_service")
@@ -24,6 +25,59 @@ class SlideService:
         self.rag_service = rag_service
         self.graph = build_content_supervisor()
         self.scorer = QuestionScorer()
+
+    @staticmethod
+    def should_block_by_quality(quality_review: Optional[dict]) -> bool:
+        if not isinstance(quality_review, dict):
+            return False
+        action = quality_review.get("reflection_action")
+        return action in ("block", "ask_human")
+
+    def _run_graph_for_ctx(self, graph_input, config: dict, ctx: RequestContext, phase: str) -> dict:
+        if not getattr(ctx, "graph_debug_stream", False):
+            return invoke_graph_sync(self.graph, graph_input, config)
+        return self._stream_graph_for_ctx(graph_input, config, ctx, phase)
+
+    def _resume_graph_for_ctx(self, resume_value, config: dict, ctx: RequestContext, phase: str) -> dict:
+        if not getattr(ctx, "graph_debug_stream", False):
+            return resume_graph(self.graph, resume_value, config)
+        return self._stream_graph_for_ctx(Command(resume=resume_value), config, ctx, phase)
+
+    def _stream_graph_for_ctx(self, graph_input, config: dict, ctx: RequestContext, phase: str) -> dict:
+        try:
+            for chunk in self.graph.stream(graph_input, config=config):
+                if "__interrupt__" in chunk:
+                    ctx.add_debug_step(
+                        "GraphNode",
+                        graph_node="__interrupt__",
+                        phase=phase,
+                        status="interrupt",
+                    )
+                    return {"__interrupt__": chunk["__interrupt__"]}
+
+                for node_name, node_output in chunk.items():
+                    if node_name.startswith("__"):
+                        continue
+                    output_keys = list(node_output.keys()) if isinstance(node_output, dict) else []
+                    ctx.add_debug_step(
+                        "GraphNode",
+                        graph_node=node_name,
+                        phase=phase,
+                        output_keys=output_keys,
+                        status=(
+                            node_output.get("status")
+                            if isinstance(node_output, dict)
+                            else None
+                        ),
+                    )
+
+            state = self.graph.get_state(config)
+            return dict(state.values) if state and state.values else {}
+        except Exception as e:
+            return {
+                "status": "failed",
+                "error_message": str(e),
+            }
 
     # ────────────────────────────────────────────────────────
     # GENERATE SLIDE (v4 — Narrow Interface)
@@ -83,12 +137,20 @@ class SlideService:
         yield f"Đang chạy supervisor pipeline ({task_label})..."
 
         t0 = time.time()
-        result = invoke_graph_sync(self.graph, initial_state, config)
+        result = self._run_graph_for_ctx(initial_state, config, ctx, phase="initial")
         pipeline_time = time.time() - t0
 
         # ④ Check for HITL interrupt
         interrupts = result.get("__interrupt__")
         if interrupts:
+            if getattr(ctx, "auto_approve_outline", False):
+                yield "Auto-approve dàn ý để chạy end-to-end debug..."
+                result = self._resume_graph_for_ctx(True, config, ctx, phase="auto_resume")
+                pipeline_time = time.time() - t0
+                if not result.get("__interrupt__"):
+                    yield from self._process_completed_result(result, session, ctx, pipeline_time, task_type)
+                    return
+
             # Store thread_id và config cho resume sau
             slide_state = session.ensure_slide_state()
             slide_state.slide_output = {
@@ -194,7 +256,38 @@ class SlideService:
         status = result.get("status", "unknown")
         merged = result.get("merged_slides")
         outline = result.get("outline_payload", {})
+        quality_review = result.get("quality_review")
+        reflection_attempts = int(result.get("reflection_attempts") or 0)
         lesson_title = outline.get("lesson_title", "") if isinstance(outline, dict) else ""
+
+        if result.get("quality_blocked") or self.should_block_by_quality(quality_review):
+            reason = (
+                quality_review.get("reason_fail")
+                if isinstance(quality_review, dict)
+                else "QUALITY_REVIEW_FAILED"
+            )
+            summary = (
+                quality_review.get("summary")
+                if isinstance(quality_review, dict)
+                else result.get("error_message", "Quality review failed")
+            )
+            instruction = result.get("revision_instruction") or summary
+            yield f"Không thể tạo {task_label}: quality review failed ({reason}). {instruction}"
+            ctx.add_debug_step(
+                "QualityReviewer",
+                target=task_type,
+                passed=False,
+                reason_fail=reason,
+                summary=summary,
+                reflection_action=(
+                    quality_review.get("reflection_action")
+                    if isinstance(quality_review, dict)
+                    else "block"
+                ),
+                reflection_attempts=reflection_attempts,
+                quality_review=quality_review,
+            )
+            return
 
         if not merged or status == "failed":
             error_msg = result.get("error_message", "Pipeline không trả về kết quả")
@@ -217,6 +310,8 @@ class SlideService:
             "lesson_title": lesson_title,
             "slides": slides_data,
             "total_slides": total_slides,
+            "quality_review": quality_review,
+            "reflection_attempts": reflection_attempts,
             "_interrupt": False,
             "_task_type": task_type,
         }
@@ -246,6 +341,8 @@ class SlideService:
         session.add_message("assistant", display)
 
         yield f"\n\n✅ Đã tạo {total_slides} {task_label} sections cho '{lesson_title}' (⏱️ {pipeline_time:.1f}s)"
+        if reflection_attempts > 0 and isinstance(quality_review, dict) and quality_review.get("passed"):
+            yield "\n\nQuality reviewer đã yêu cầu chỉnh sửa và hệ thống đã regenerate output đạt yêu cầu."
         yield "\n\n" + display
 
         if task_type == "slide" and slide_state.has_exercises:
@@ -258,6 +355,18 @@ class SlideService:
             lesson_title=lesson_title,
             exercises_extracted=exercise_count,
         )
+        if isinstance(quality_review, dict):
+            ctx.add_debug_step(
+                "QualityReviewer",
+                target=task_type,
+                passed=quality_review.get("passed"),
+                score=quality_review.get("score"),
+                reason_fail=quality_review.get("reason_fail"),
+                summary=quality_review.get("summary"),
+                reflection_action=quality_review.get("reflection_action"),
+                reflection_attempts=reflection_attempts,
+                issues=quality_review.get("issues", []),
+            )
 
     # ────────────────────────────────────────────────────────
     # DISPLAY FORMATTERS
@@ -412,12 +521,39 @@ class SlideService:
         yield f"Đang chạy supervisor pipeline ({task_label})..."
 
         t0 = time.time()
-        result = await asyncio.to_thread(invoke_graph_sync, self.graph, initial_state, config)
+        result = await asyncio.to_thread(
+            self._run_graph_for_ctx,
+            initial_state,
+            config,
+            ctx,
+            "initial",
+        )
         pipeline_time = time.time() - t0
 
         # ④ Check for HITL interrupt
         interrupts = result.get("__interrupt__")
         if interrupts:
+            if getattr(ctx, "auto_approve_outline", False):
+                yield "Auto-approve dàn ý để chạy end-to-end debug..."
+                result = await asyncio.to_thread(
+                    self._resume_graph_for_ctx,
+                    True,
+                    config,
+                    ctx,
+                    "auto_resume",
+                )
+                pipeline_time = time.time() - t0
+                if not result.get("__interrupt__"):
+                    async for chunk in self._process_completed_result_async(
+                        result,
+                        session,
+                        ctx,
+                        pipeline_time,
+                        task_type,
+                    ):
+                        yield chunk
+                    return
+
             slide_state = session.ensure_slide_state()
             slide_state.slide_output = {
                 "_graph_thread_id": thread_id,
@@ -472,7 +608,38 @@ class SlideService:
         status = result.get("status", "unknown")
         merged = result.get("merged_slides")
         outline = result.get("outline_payload", {})
+        quality_review = result.get("quality_review")
+        reflection_attempts = int(result.get("reflection_attempts") or 0)
         lesson_title = outline.get("lesson_title", "") if isinstance(outline, dict) else ""
+
+        if result.get("quality_blocked") or self.should_block_by_quality(quality_review):
+            reason = (
+                quality_review.get("reason_fail")
+                if isinstance(quality_review, dict)
+                else "QUALITY_REVIEW_FAILED"
+            )
+            summary = (
+                quality_review.get("summary")
+                if isinstance(quality_review, dict)
+                else result.get("error_message", "Quality review failed")
+            )
+            instruction = result.get("revision_instruction") or summary
+            yield f"Không thể tạo {task_label}: quality review failed ({reason}). {instruction}"
+            ctx.add_debug_step(
+                "QualityReviewer",
+                target=task_type,
+                passed=False,
+                reason_fail=reason,
+                summary=summary,
+                reflection_action=(
+                    quality_review.get("reflection_action")
+                    if isinstance(quality_review, dict)
+                    else "block"
+                ),
+                reflection_attempts=reflection_attempts,
+                quality_review=quality_review,
+            )
+            return
 
         if not merged or status == "failed":
             error_msg = result.get("error_message", "Pipeline không trả về kết quả")
@@ -495,6 +662,8 @@ class SlideService:
             "lesson_title": lesson_title,
             "slides": slides_data,
             "total_slides": total_slides,
+            "quality_review": quality_review,
+            "reflection_attempts": reflection_attempts,
             "_interrupt": False,
             "_task_type": task_type,
         }
@@ -524,6 +693,8 @@ class SlideService:
         session.add_message("assistant", display)
 
         yield f"\n\n✅ Đã tạo {total_slides} {task_label} sections cho '{lesson_title}' (⏱️ {pipeline_time:.1f}s)"
+        if reflection_attempts > 0 and isinstance(quality_review, dict) and quality_review.get("passed"):
+            yield "\n\nQuality reviewer đã yêu cầu chỉnh sửa và hệ thống đã regenerate output đạt yêu cầu."
         yield "\n\n" + display
 
         if task_type == "slide" and slide_state.has_exercises:
@@ -536,6 +707,18 @@ class SlideService:
             lesson_title=lesson_title,
             exercises_extracted=exercise_count,
         )
+        if isinstance(quality_review, dict):
+            ctx.add_debug_step(
+                "QualityReviewer",
+                target=task_type,
+                passed=quality_review.get("passed"),
+                score=quality_review.get("score"),
+                reason_fail=quality_review.get("reason_fail"),
+                summary=quality_review.get("summary"),
+                reflection_action=quality_review.get("reflection_action"),
+                reflection_attempts=reflection_attempts,
+                issues=quality_review.get("issues", []),
+            )
 
     async def answer_exercise_async(
         self, ctx: RequestContext, original_query: str

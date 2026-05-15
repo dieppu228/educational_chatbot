@@ -160,7 +160,11 @@ class CustomSearch:
     
     def search(self, query: str, top_k: int = 10, top_n: int = 30) -> List[Dict]:
         bm25_results = self._bm25_search(query, top_n=top_n)
-        semantic_results = self._semantic_search(query, top_n=top_n)
+        try:
+            semantic_results = self._semantic_search(query, top_n=top_n)
+        except Exception as e:
+            logger.warning(f"Semantic search failed, falling back to BM25 only: {e}")
+            semantic_results = []
         combined = self._rrf_combine(bm25_results, semantic_results, top_k=top_k)
         
         return [
@@ -237,15 +241,19 @@ class CustomSearch:
         bm25_results = bm25_scored[:top_n]
 
         # === Semantic scoped ===
-        query_embedding = self.model.encode_query(query)
-        # Chỉ tính cosine trên subset
-        subset_embeddings = self.embeddings[doc_indices]
-        scores = np.dot(subset_embeddings, query_embedding)
-        # Map lại về global indices
-        local_top = np.argsort(scores)[::-1][:top_n]
-        semantic_results = [
-            (doc_indices[li], float(scores[li])) for li in local_top
-        ]
+        try:
+            query_embedding = self.model.encode_query(query)
+            # Chỉ tính cosine trên subset
+            subset_embeddings = self.embeddings[doc_indices]
+            scores = np.dot(subset_embeddings, query_embedding)
+            # Map lại về global indices
+            local_top = np.argsort(scores)[::-1][:top_n]
+            semantic_results = [
+                (doc_indices[li], float(scores[li])) for li in local_top
+            ]
+        except Exception as e:
+            logger.warning(f"Scoped semantic search failed, falling back to BM25 only: {e}")
+            semantic_results = []
 
         # === RRF ===
         combined = self._rrf_combine(bm25_results, semantic_results, top_k=top_k)

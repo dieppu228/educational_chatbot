@@ -63,6 +63,10 @@ class ContentPipelineInput:
             "content_payload": None,
             "media_payload": None,
             "quiz_payload": None,
+            "quality_review": None,
+            "reflection_attempts": 0,
+            "revision_instruction": None,
+            "quality_blocked": False,
             # ── Output (graph sẽ populate) ──
             "merged_slides": None,
             "final_output": None,
@@ -181,6 +185,54 @@ class MergedSlide(BaseModel):
     source_chunk_ids: List[str] = Field(default_factory=list)
 
 
+# ============================================================
+# QUALITY REVIEW — Shared reviewer output contract
+# ============================================================
+
+class QualityIssue(BaseModel):
+    case: str
+    severity: Literal["minor", "major", "critical"] = "major"
+    target: Optional[str] = None
+    message: str
+    suggestion: Optional[str] = None
+
+
+class QualityReviewResult(BaseModel):
+    passed: bool = False
+    score: float = Field(default=0.0, ge=0.0, le=10.0)
+    reason_fail: Optional[str] = None
+    summary: str = ""
+    issues: List[QualityIssue] = Field(default_factory=list)
+    reflection_action: Literal[
+        "approve",
+        "revise_outline",
+        "revise_content",
+        "revise_quiz",
+        "ask_human",
+        "block",
+    ] = "block"
+    revision_instruction: Optional[str] = None
+    requires_human_review: bool = False
+
+    @classmethod
+    def fallback_fail(cls, reason: str, message: str) -> "QualityReviewResult":
+        return cls(
+            passed=False,
+            score=0.0,
+            reason_fail=reason,
+            summary=message,
+            issues=[QualityIssue(
+                case=reason,
+                severity="critical",
+                target="quality_reviewer",
+                message=message,
+            )],
+            reflection_action="block",
+            revision_instruction=message,
+            requires_human_review=True,
+        )
+
+
 
 
 __all__ = [
@@ -191,4 +243,5 @@ __all__ = [
     "ContentSlide", "ContentPayload",
     "SlideQuizItem", "QuizPayload",
     "MergedSlide",
+    "QualityIssue", "QualityReviewResult",
 ]

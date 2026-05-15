@@ -11,36 +11,46 @@ class Reranker:
         self.model_name = model_name
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._model = None  # Lazy load
+        self._load_failed = False
     
     def _load_model(self):
+        if self._load_failed:
+            raise RuntimeError(f"Reranker model unavailable: {self.model_name}")
         if self._model is None:
-            self._model = CrossEncoder(
-                self.model_name,
-                device=self.device,
-                trust_remote_code=True
-            )
+            try:
+                self._model = CrossEncoder(
+                    self.model_name,
+                    device=self.device,
+                    trust_remote_code=True
+                )
+            except Exception:
+                self._load_failed = True
+                raise
     
     @trace_node("Reranker.rerank")
     def rerank(self, query: str, results: List[Dict], top_n: int = 10) -> List[Dict]:
         if not results:
             return []
-        
-        self._load_model()
-        
-        # Tạo (query, doc) pairs
-        pairs = [[query, r["content"]] for r in results]
-        
-        # Cross-encoder scoring
-        scores = self._model.predict(pairs)
-        
-        # Gắn score vào results
-        for i, score in enumerate(scores):
-            results[i]["rerank_score"] = float(score)
-        
-        # Sort giảm dần theo rerank_score
-        results_sorted = sorted(results, key=lambda x: x["rerank_score"], reverse=True)
-        
-        return results_sorted[:top_n]
+
+        try:
+            self._load_model()
+
+            # Tạo (query, doc) pairs
+            pairs = [[query, r["content"]] for r in results]
+
+            # Cross-encoder scoring
+            scores = self._model.predict(pairs)
+
+            # Gắn score vào results
+            for i, score in enumerate(scores):
+                results[i]["rerank_score"] = float(score)
+
+            # Sort giảm dần theo rerank_score
+            results_sorted = sorted(results, key=lambda x: x["rerank_score"], reverse=True)
+
+            return results_sorted[:top_n]
+        except Exception:
+            return results[:top_n]
     
     @trace_node("Reranker.rerank_async")
     async def rerank_async(self, query: str, results: List[Dict], top_n: int = 10) -> List[Dict]:
@@ -76,4 +86,3 @@ class Reranker:
             filtered = filtered[:top_n]
         
         return filtered
-

@@ -15,6 +15,24 @@ _log_dir = _project_root / "logs"
 _log_dir.mkdir(exist_ok=True)
 _log_file = _log_dir / "app.log"
 
+NOISY_HTTP_LOGGERS = (
+    "uvicorn.access",
+    "uvicorn.error",
+    "httpx",
+    "httpcore",
+    "urllib3",
+    "huggingface_hub",
+    "gradio",
+    "multipart",
+)
+
+
+def suppress_http_request_logs():
+    for logger_name in NOISY_HTTP_LOGGERS:
+        noisy_logger = logging.getLogger(logger_name)
+        noisy_logger.setLevel(logging.WARNING)
+        noisy_logger.propagate = False
+
 logger = logging.getLogger("chatbot")
 logger.setLevel(logging.DEBUG)
 logger.propagate = False
@@ -37,6 +55,8 @@ if not logger.handlers:
         datefmt="%Y-%m-%d %H:%M:%S"
     ))
     logger.addHandler(_fh)
+
+suppress_http_request_logs()
 
 
 # ============================================================
@@ -125,4 +145,4 @@ def _trace_generator(name, gen, t0):
         logger.info(f"[ DONE] {name} (generator) | {elapsed:.2f}s")
 
 
-__all__ = ["trace_node", "logger"]
+__all__ = ["trace_node", "logger", "suppress_http_request_logs"]

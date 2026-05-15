@@ -12,7 +12,9 @@ from src.llm.graphs.state import ContentSupervisorState
 from src.llm.graphs.tools import ALL_TOOLS, TOOL_STATE_MAPPING
 
 # ── Config ──
-RECURSION_LIMIT = 15
+RECURSION_LIMIT = 25
+MAX_REFLECTION_ATTEMPTS = 1
+REVISION_ACTIONS = {"revise_outline", "revise_content"}
 
 
 # ════════════════════════════════════════════════════════
@@ -211,6 +213,72 @@ def post_tool_processor(state: ContentSupervisorState) -> dict:
     return updates
 
 
+def _latest_tool_name(state: ContentSupervisorState) -> Optional[str]:
+    for msg in reversed(state.get("messages", [])):
+        if isinstance(msg, ToolMessage):
+            return getattr(msg, "name", None)
+    return None
+
+
+def reflection_decision_node(state: ContentSupervisorState) -> dict:
+    review = state.get("quality_review")
+    if not isinstance(review, dict):
+        return {
+            "status": "failed",
+            "quality_blocked": True,
+            "revision_instruction": "Quality reviewer không trả về JSON hợp lệ.",
+            "error_message": "Quality review result missing or invalid.",
+        }
+
+    action = review.get("reflection_action", "block")
+    passed = bool(review.get("passed"))
+    attempts = int(state.get("reflection_attempts") or 0)
+    instruction = (
+        review.get("revision_instruction")
+        or review.get("summary")
+        or "Sửa output theo các issues của quality reviewer."
+    )
+
+    if passed and action == "approve":
+        return {
+            "status": "success",
+            "quality_blocked": False,
+            "revision_instruction": None,
+        }
+
+    if action in REVISION_ACTIONS and attempts < MAX_REFLECTION_ATTEMPTS:
+        updates = {
+            "reflection_attempts": attempts + 1,
+            "revision_instruction": instruction,
+            "quality_blocked": False,
+            "messages": [HumanMessage(content=(
+                "Quality reviewer yêu cầu sửa output trước khi trả cho user.\n"
+                f"Action: {action}\n"
+                f"Instruction: {instruction}\n"
+                "Hãy gọi tool phù hợp để regenerate phần bị lỗi, sau đó merge_results và check_quality lại."
+            ))],
+        }
+        if action == "revise_outline":
+            updates.update({
+                "outline_payload": None,
+                "content_payload": None,
+                "merged_slides": None,
+            })
+        elif action == "revise_content":
+            updates.update({
+                "content_payload": None,
+                "merged_slides": None,
+            })
+        return updates
+
+    return {
+        "status": "failed",
+        "quality_blocked": True,
+        "revision_instruction": instruction,
+        "error_message": f"Quality review blocked output: {review.get('reason_fail') or action}",
+    }
+
+
 # ════════════════════════════════════════════════════════
 # ROUTING LOGIC
 # ════════════════════════════════════════════════════════
@@ -225,6 +293,28 @@ def should_continue(state: ContentSupervisorState) -> str:
     # Check tool_calls
     if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
         return "tools"
+
+    return END
+
+
+def route_after_post_tool(state: ContentSupervisorState) -> str:
+    latest_tool = _latest_tool_name(state)
+    if latest_tool == "check_quality":
+        return "reflection_decision"
+    return "supervisor"
+
+
+def route_after_reflection(state: ContentSupervisorState) -> str:
+    if state.get("quality_blocked"):
+        return END
+
+    review = state.get("quality_review")
+    if isinstance(review, dict) and review.get("passed") and review.get("reflection_action") == "approve":
+        return END
+
+    action = review.get("reflection_action") if isinstance(review, dict) else "block"
+    if action in REVISION_ACTIONS and int(state.get("reflection_attempts") or 0) <= MAX_REFLECTION_ATTEMPTS:
+        return "supervisor"
 
     return END
 
@@ -248,6 +338,7 @@ def build_content_supervisor(checkpointer=None):
     builder.add_node("supervisor", supervisor_node)
     builder.add_node("tools", tool_node)
     builder.add_node("post_tool", post_tool_processor)
+    builder.add_node("reflection_decision", reflection_decision_node)
 
     # Edges
     builder.add_edge(START, "preprocess")
@@ -262,7 +353,22 @@ def build_content_supervisor(checkpointer=None):
 
     # Tools → post_tool → supervisor (vòng lặp)
     builder.add_edge("tools", "post_tool")
-    builder.add_edge("post_tool", "supervisor")
+    builder.add_conditional_edges(
+        "post_tool",
+        route_after_post_tool,
+        {
+            "reflection_decision": "reflection_decision",
+            "supervisor": "supervisor",
+        },
+    )
+    builder.add_conditional_edges(
+        "reflection_decision",
+        route_after_reflection,
+        {
+            "supervisor": "supervisor",
+            END: END,
+        },
+    )
 
     graph = builder.compile(checkpointer=checkpointer)
 
@@ -271,4 +377,4 @@ def build_content_supervisor(checkpointer=None):
     return graph
 
 
-__all__ = ["build_content_supervisor", "RECURSION_LIMIT"]
+__all__ = ["build_content_supervisor", "RECURSION_LIMIT", "MAX_REFLECTION_ATTEMPTS"]
