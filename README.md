@@ -225,7 +225,7 @@ The system is developed in separate modules to ensure high scalability.
 
 **3. Infrastructure & UI:**
 
-- **User Interface:** `Gradio` Web Framework.
+- **User Interface:** FastAPI serving the custom HTML/CSS/JavaScript frontend in `app/frontend`.
 - **Evaluation System:** `ragas==0.4.3` running via CLI Argument Parser (`run_eval.py`).
 - **Data Engineering:** Regular Expression (Regex) combined with Hierarchical Document Splitting handles unstructured text (Markdown).
 
@@ -246,8 +246,8 @@ pip install -r requirements.txt
 # 3. Assign API Keys
 echo GENAI_API_KEY=your_key_here > .env
 
-# 4. Launch UI Server Application
-python app_gradio.py
+# 4. Launch API + UI Server Application
+python app/api.py
 ```
 
 Run the RAGAS Metric Report evaluation script (Optional):

@@ -22,7 +22,6 @@ NOISY_HTTP_LOGGERS = (
     "httpcore",
     "urllib3",
     "huggingface_hub",
-    "gradio",
     "multipart",
 )
 

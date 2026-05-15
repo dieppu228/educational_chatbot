@@ -42,6 +42,12 @@ app = FastAPI(title="EduBot API")
 
 FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 
+NO_CACHE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
 
 # ── Schemas ──
 class ChatRequest(BaseModel):
@@ -81,21 +87,35 @@ async def chat(req: ChatRequest):
     return ChatResponse(content=full_response, debug=debug_info)
 
 
+@app.get("/api/frontend-info")
+async def frontend_info():
+    index_path = FRONTEND_DIR / "index.html"
+    index_html = index_path.read_text(encoding="utf-8")
+    return {
+        "frontend_dir": str(FRONTEND_DIR),
+        "index_path": str(index_path),
+        "index_mtime": index_path.stat().st_mtime,
+        "ui_version": "scope-ui-2",
+        "has_book_select": 'id="bookSelect"' in index_html,
+        "has_grade_select": 'id="gradeSelect"' in index_html,
+    }
+
+
 # ── Serve Frontend ──
 app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR)), name="assets")
 
 
 @app.get("/")
 async def root():
-    return FileResponse(str(FRONTEND_DIR / "index.html"))
+    return FileResponse(str(FRONTEND_DIR / "index.html"), headers=NO_CACHE_HEADERS)
 
 
 @app.get("/{path:path}")
 async def static_files(path: str):
     file_path = FRONTEND_DIR / path
     if file_path.is_file():
-        return FileResponse(str(file_path))
-    return FileResponse(str(FRONTEND_DIR / "index.html"))
+        return FileResponse(str(file_path), headers=NO_CACHE_HEADERS)
+    return FileResponse(str(FRONTEND_DIR / "index.html"), headers=NO_CACHE_HEADERS)
 
 
 if __name__ == "__main__":
