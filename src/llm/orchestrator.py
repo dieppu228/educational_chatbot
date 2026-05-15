@@ -79,7 +79,7 @@ class Orchestrator:
             rag_service=self.rag_service,
         )
 
-        # ── Debug (backward compat cho app_gradio.py) ──────
+        # ── Debug info per user/session ────────────────────
         self.last_debug_info: Dict = {}
         self._debug_info_by_user: Dict[str, Dict] = {}
         self._debug_lock = threading.RLock()
@@ -101,7 +101,7 @@ class Orchestrator:
             self._debug_info_by_user[ctx.user_id] = debug_info
 
     # ============================================================
-    # MAIN ENTRY POINT (sync - for Gradio compatibility)
+    # MAIN ENTRY POINT (sync)
     # ============================================================
 
     def ask(
@@ -184,6 +184,9 @@ class Orchestrator:
             effective_book=ctx.effective_book,
             ui_grade=ui_grade,
             effective_grade=ctx.effective_grade,
+            scope_source=ctx.scope_source,
+            scope_is_soft=ctx.scope_is_soft,
+            requested_scope=ctx.requested_scope,
         )
 
         # ⑦ Execute via Dispatcher — Agentic multi-action loop
@@ -198,6 +201,8 @@ class Orchestrator:
             ctx.action_plan = plan
             if i < len(ctx.intent_results):
                 ctx.intent_result = ctx.intent_results[i]
+                ctx.resolve_book()
+                ctx.resolve_grade()
 
             # DECIDE: Check if this action can proceed
             if plan.action in self.ACTIONS_REQUIRING_BOOK and not ctx.effective_book:

@@ -53,6 +53,9 @@ class QuizService:
             yield "Không tìm thấy tài liệu phù hợp để tạo câu hỏi."
             return
 
+        if ctx.scope_fallback_notice:
+            yield ctx.scope_fallback_notice
+
         context_text = self.context_builder.build(
             query=query, chunks=contexts, action="generate_quiz"
         )
@@ -437,6 +440,9 @@ class QuizService:
         if not contexts:
             yield "Không tìm thấy tài liệu phù hợp để tạo câu hỏi."
             return
+
+        if ctx.scope_fallback_notice:
+            yield ctx.scope_fallback_notice
 
         context_text = await self.context_builder.build_async(
             query=query, chunks=contexts, action="generate_quiz"

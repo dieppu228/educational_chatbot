@@ -43,6 +43,14 @@ class RequestContext:
     # ── Book Resolution ────────────────────────────────────
     effective_book: Optional[str] = None
     effective_grade: Optional[str] = None
+    scope_source: str = "none"
+    scope_is_soft: bool = False
+    scope_fallback_used: bool = False
+    scope_book_source: Optional[str] = None
+    scope_grade_source: Optional[str] = None
+    requested_scope: Dict[str, Optional[str]] = field(default_factory=dict)
+    actual_scope: Dict[str, Optional[str]] = field(default_factory=dict)
+    scope_fallback_notice: Optional[str] = None
 
     # ── Debug / Trace ──────────────────────────────────────
     request_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
@@ -89,23 +97,62 @@ class RequestContext:
     def resolve_book(self):
         query_book = self._extract_book(self.query)
         intent_book = self.intent_result.book if self.intent_result else None
+        session_book = self.session.book if self.session else None
         self.effective_book = (
             query_book
             or intent_book
             or self.ui_book
-            or (self.session.book if self.session else None)
+            or session_book
+        )
+        self.scope_book_source = self._first_scope_source(
+            ("query", query_book),
+            ("intent", intent_book),
+            ("ui", self.ui_book),
+            ("session", session_book),
         )
         # Persist explicit query/router book for follow-up turns.
         if self.effective_book and self.session and (query_book or intent_book or self.ui_book or not self.session.book):
             self.session.book = self.effective_book
+        self._refresh_scope_metadata()
 
     def resolve_grade(self):
         query_grade = self._extract_grade(self.query)
         intent_grade = self._extract_grade(self.intent_result.topic) if self.intent_result else None
         session_grade = self.session.metadata.get("grade") if self.session else None
         self.effective_grade = query_grade or intent_grade or self.ui_grade or session_grade
+        self.scope_grade_source = self._first_scope_source(
+            ("query", query_grade),
+            ("intent", intent_grade),
+            ("ui", self.ui_grade),
+            ("session", session_grade),
+        )
         if self.effective_grade and self.session and (query_grade or intent_grade or self.ui_grade or not session_grade):
             self.session.metadata["grade"] = self.effective_grade
+        self._refresh_scope_metadata()
+
+    @staticmethod
+    def _first_scope_source(*candidates) -> Optional[str]:
+        for source, value in candidates:
+            if value:
+                return source
+        return None
+
+    def _refresh_scope_metadata(self):
+        sources = {s for s in (self.scope_book_source, self.scope_grade_source) if s}
+        if not sources:
+            self.scope_source = "none"
+        elif len(sources) == 1:
+            self.scope_source = next(iter(sources))
+        else:
+            self.scope_source = "mixed"
+
+        has_hard_scope = bool(sources.intersection({"query", "intent"}))
+        self.scope_is_soft = not has_hard_scope and "ui" in sources
+        self.requested_scope = {
+            "book": self.effective_book,
+            "grade": self.effective_grade,
+            "source": self.scope_source,
+        }
 
     @staticmethod
     def _extract_grade(text: Optional[str]) -> Optional[str]:
@@ -136,6 +183,11 @@ class RequestContext:
             "timestamp": self.timestamp,
             "effective_book": self.effective_book,
             "effective_grade": self.effective_grade,
+            "scope_source": self.scope_source,
+            "scope_is_soft": self.scope_is_soft,
+            "scope_fallback_used": self.scope_fallback_used,
+            "requested_scope": self.requested_scope,
+            "actual_scope": self.actual_scope,
             "steps": self.debug_steps,
         }
 

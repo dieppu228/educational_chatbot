@@ -117,6 +117,9 @@ class SlideService:
             yield f"Không tìm thấy nội dung bài học phù hợp."
             return
 
+        if ctx.scope_fallback_notice:
+            yield ctx.scope_fallback_notice
+
         if len(contexts) < 3:
             yield f"Không đủ tài liệu để tạo {task_label} (cần ít nhất 3 nguồn)."
             return
@@ -500,6 +503,9 @@ class SlideService:
         if not contexts:
             yield f"Không tìm thấy nội dung bài học phù hợp."
             return
+
+        if ctx.scope_fallback_notice:
+            yield ctx.scope_fallback_notice
 
         if len(contexts) < 3:
             yield f"Không đủ tài liệu để tạo {task_label} (cần ít nhất 3 nguồn)."

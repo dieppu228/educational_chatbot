@@ -35,106 +35,57 @@ class RAGService:
 
         book = ctx.effective_book
         queries = ctx.queries_for_rag
+        ctx.scope_fallback_used = False
+        ctx.actual_scope = {}
+        ctx.scope_fallback_notice = None
 
         try:
-            if len(queries) <= 1:
-                # ── Single query (fast path) ──
-                result = self.rag_agent.retrieve(
-                    queries[0] if queries else ctx.query,
-                    intent_hint=intent_hint,
-                    topic_hint=topic_hint,
-                    grade_hint=grade_hint,
-                    book=book,
-                )
-                ctx.add_debug_step(
-                    "RAG",
-                    queries_used=queries,
-                    strategy=result.strategy_used.value,
-                    chunks_returned=len(result.chunks),
-                    time_s=result.total_time_s,
-                    filter=result.metadata_filter,
-                    reason=result.reason,
-                )
-
-                # Task-aware rerank: slide/lesson_plan giữ nhiều chunks hơn
-                rerank_top_n = self._get_rerank_top_n(task_type)
-                if len(result.chunks) > rerank_top_n:
-                    result_chunks = self.reranker.rerank(
-                        queries[0] if queries else ctx.query,
-                        result.chunks,
-                        top_n=rerank_top_n,
-                    )
-                else:
-                    result_chunks = result.chunks
-
-                # Score cutoff: loại chunks chất lượng thấp
-                min_score = getattr(settings, 'RERANKER_MIN_SCORE', 0.15)
-                before_count = len(result_chunks)
-                filtered = self.reranker.filter_context(
-                    result_chunks, min_score=min_score,
-                )
-                # Safety net: nếu cutoff loại hết, giữ top 3
-                if not filtered and result_chunks:
-                    filtered = result_chunks[:3]
-
-                return filtered
-
-            # ── Multi-query: loop → gom → deduplicate ──
-            all_chunks = []
-            seen_doc_ids = set()
-            strategies = []
-            total_time = 0.0
-
-            for q in queries:
-                result = self.rag_agent.retrieve(
-                    q,
-                    intent_hint=intent_hint,
-                    topic_hint=topic_hint,
-                    grade_hint=grade_hint,
-                    book=book,
-                )
-                strategies.append(result.strategy_used.value)
-                total_time += result.total_time_s
-
-                for chunk in result.chunks:
-                    if chunk["doc_id"] not in seen_doc_ids:
-                        all_chunks.append(chunk)
-                        seen_doc_ids.add(chunk["doc_id"])
-
-
-
-            # Task-aware rerank: slide/lesson_plan giữ nhiều chunks hơn
-            rerank_top_n = self._get_rerank_top_n(task_type)
-            if len(all_chunks) > rerank_top_n:
-                primary_query = queries[0]
-                all_chunks = self.reranker.rerank(
-                    primary_query, all_chunks,
-                    top_n=rerank_top_n,
-                )
-
-            # Score cutoff: loại chunks chất lượng thấp
-            min_score = getattr(settings, 'RERANKER_MIN_SCORE', 0.15)
-            before_count = len(all_chunks)
-            filtered = self.reranker.filter_context(
-                all_chunks, min_score=min_score,
+            primary_chunks = self._retrieve_filtered(
+                ctx=ctx,
+                queries=queries,
+                intent_hint=intent_hint,
+                topic_hint=topic_hint,
+                grade_hint=grade_hint,
+                book=book,
+                task_type=task_type,
+                debug_node="RAG",
             )
-            # Safety net
-            if not filtered and all_chunks:
-                filtered = all_chunks[:3]
+            if not self._should_fallback_scope(ctx, primary_chunks, task_type):
+                return primary_chunks
 
-            all_chunks = filtered
+            fallback_chunks = self._retrieve_filtered(
+                ctx=ctx,
+                queries=queries,
+                intent_hint=intent_hint,
+                topic_hint=topic_hint,
+                grade_hint=None,
+                book=None,
+                task_type=task_type,
+                debug_node="RAGFallbackSearch",
+            )
+
+            if fallback_chunks and len(fallback_chunks) > len(primary_chunks):
+                ctx.scope_fallback_used = True
+                ctx.actual_scope = self._extract_actual_scope(fallback_chunks)
+                ctx.scope_fallback_notice = self._build_scope_fallback_notice(ctx)
+                ctx.add_debug_step(
+                    "ScopeFallback",
+                    requested_scope=ctx.requested_scope,
+                    primary_chunks=len(primary_chunks),
+                    fallback_chunks=len(fallback_chunks),
+                    actual_scope=ctx.actual_scope,
+                    status="used",
+                )
+                return fallback_chunks
 
             ctx.add_debug_step(
-                "RAG",
-                queries_used=queries,
-                multi_query=True,
-                strategies=strategies,
-                chunks_returned=len(all_chunks),
-                time_s=round(total_time, 2),
-                filter={"grade": grade_hint, "topic": topic_hint, "book": book},
-                reason=f"Multi-query search ({len(queries)} queries)",
+                "ScopeFallback",
+                requested_scope=ctx.requested_scope,
+                primary_chunks=len(primary_chunks),
+                fallback_chunks=len(fallback_chunks),
+                status="not_used",
             )
-            return all_chunks
+            return primary_chunks
 
         except Exception as e:
             # KHÔNG swallow — log rõ ràng và re-raise nếu cần
@@ -142,6 +93,173 @@ class RAGService:
             # Trả về empty thay vì crash pipeline,
             # nhưng log đủ thông tin để debug
             return []
+
+    def _retrieve_filtered(
+        self,
+        ctx: RequestContext,
+        queries: List[str],
+        intent_hint: Optional[str],
+        topic_hint: Optional[str],
+        grade_hint: Optional[str],
+        book: Optional[str],
+        task_type: Optional[str],
+        debug_node: str,
+    ) -> List[Dict]:
+        if len(queries) <= 1:
+            query = queries[0] if queries else ctx.query
+            result = self.rag_agent.retrieve(
+                query,
+                intent_hint=intent_hint,
+                topic_hint=topic_hint,
+                grade_hint=grade_hint,
+                book=book,
+            )
+            ctx.add_debug_step(
+                debug_node,
+                queries_used=queries,
+                strategy=result.strategy_used.value,
+                chunks_returned=len(result.chunks),
+                time_s=result.total_time_s,
+                filter=result.metadata_filter,
+                reason=result.reason,
+            )
+            return self._rerank_and_filter(query, result.chunks, task_type)
+
+        return self._retrieve_multi_query(
+            ctx=ctx,
+            queries=queries,
+            intent_hint=intent_hint,
+            topic_hint=topic_hint,
+            grade_hint=grade_hint,
+            book=book,
+            task_type=task_type,
+            debug_node=debug_node,
+        )
+
+    def _retrieve_multi_query(
+        self,
+        ctx: RequestContext,
+        queries: List[str],
+        intent_hint: Optional[str],
+        topic_hint: Optional[str],
+        grade_hint: Optional[str],
+        book: Optional[str],
+        task_type: Optional[str],
+        debug_node: str,
+    ) -> List[Dict]:
+        # ── Multi-query: loop → gom → deduplicate ──
+        all_chunks = []
+        seen_doc_ids = set()
+        strategies = []
+        total_time = 0.0
+
+        for q in queries:
+            result = self.rag_agent.retrieve(
+                q,
+                intent_hint=intent_hint,
+                topic_hint=topic_hint,
+                grade_hint=grade_hint,
+                book=book,
+            )
+            strategies.append(result.strategy_used.value)
+            total_time += result.total_time_s
+
+            for chunk in result.chunks:
+                if chunk["doc_id"] not in seen_doc_ids:
+                    all_chunks.append(chunk)
+                    seen_doc_ids.add(chunk["doc_id"])
+
+        ctx.add_debug_step(
+            debug_node,
+            queries_used=queries,
+            multi_query=True,
+            strategies=strategies,
+            chunks_returned=len(all_chunks),
+            time_s=round(total_time, 2),
+            filter={"grade": grade_hint, "topic": topic_hint, "book": book},
+            reason=f"Multi-query search ({len(queries)} queries)",
+        )
+        return self._rerank_and_filter(queries[0], all_chunks, task_type)
+
+    def _rerank_and_filter(
+        self,
+        query: str,
+        chunks: List[Dict],
+        task_type: Optional[str],
+    ) -> List[Dict]:
+        rerank_top_n = self._get_rerank_top_n(task_type)
+        if len(chunks) > rerank_top_n:
+            result_chunks = self.reranker.rerank(
+                query,
+                chunks,
+                top_n=rerank_top_n,
+            )
+        else:
+            result_chunks = chunks
+
+        min_score = getattr(settings, 'RERANKER_MIN_SCORE', 0.15)
+        filtered = self.reranker.filter_context(
+            result_chunks, min_score=min_score,
+        )
+        if not filtered and result_chunks:
+            filtered = result_chunks[:3]
+        return filtered
+
+    @staticmethod
+    def _should_fallback_scope(
+        ctx: RequestContext,
+        chunks: List[Dict],
+        task_type: Optional[str],
+    ) -> bool:
+        if not ctx.scope_is_soft:
+            return False
+        if not (ctx.effective_book or ctx.effective_grade):
+            return False
+        min_chunks = 3 if task_type in ("slide", "slide_generate", "lesson_plan", "giao_an") else 1
+        return len(chunks) < min_chunks
+
+    @staticmethod
+    def _extract_actual_scope(chunks: List[Dict]) -> Dict[str, Optional[str]]:
+        books = set()
+        grades = set()
+        for chunk in chunks:
+            metadata = chunk.get("metadata", {})
+            if metadata.get("book"):
+                books.add(metadata["book"])
+            if metadata.get("grade"):
+                grades.add(metadata["grade"])
+
+        return {
+            "book": next(iter(books)) if len(books) == 1 else ("mixed" if books else None),
+            "grade": next(iter(grades)) if len(grades) == 1 else ("mixed" if grades else None),
+            "source": "fallback",
+        }
+
+    @classmethod
+    def _build_scope_fallback_notice(cls, ctx: RequestContext) -> str:
+        requested = cls._scope_label(ctx.requested_scope)
+        actual = cls._scope_label(ctx.actual_scope)
+        return (
+            f"Mình chưa tìm thấy đủ tài liệu phù hợp trong {requested}, "
+            "nên đã mở rộng tìm kiếm trong toàn bộ SGK. "
+            f"Nguồn đang dùng: {actual}.\n\n"
+        )
+
+    @classmethod
+    def _scope_label(cls, scope: Dict[str, Optional[str]]) -> str:
+        book = scope.get("book")
+        grade = scope.get("grade")
+        parts = []
+        if book:
+            parts.append(cls._book_label(book))
+        if grade:
+            parts.append(f"Lớp {grade}" if grade != "mixed" else "nhiều lớp")
+        return " - ".join(parts) if parts else "phạm vi đã chọn"
+
+    @staticmethod
+    def _book_label(book: str) -> str:
+        labels = {"CD": "Cánh Diều", "KNTT": "Kết nối tri thức", "mixed": "nhiều bộ sách"}
+        return labels.get(book, book)
 
     @trace_node("RAGService.get_context_async")
     async def get_context_async(

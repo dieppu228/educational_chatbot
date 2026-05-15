@@ -121,6 +121,9 @@ class ExecutionDispatcher:
             query=ctx.enriched_query, chunks=contexts, action="explain_concept"
         ) if contexts else ""
 
+        if ctx.scope_fallback_notice:
+            yield ctx.scope_fallback_notice
+
         t0 = time.time()
         response = self.explain_handler.handle(ctx.enriched_query, context=context_text)
         explain_time = time.time() - t0
@@ -218,6 +221,9 @@ class ExecutionDispatcher:
         context_text = await self.context_builder.build_async(
             query=ctx.enriched_query, chunks=contexts, action="explain_concept"
         ) if contexts else ""
+
+        if ctx.scope_fallback_notice:
+            yield ctx.scope_fallback_notice
 
         t0 = time.time()
         response = await self.explain_handler.handle_async(ctx.enriched_query, context=context_text)
