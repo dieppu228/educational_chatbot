@@ -21,18 +21,21 @@ from src.config.config import settings
 from src.rag.retrieve_rebuild import CustomSearch
 from src.rag.reranker import Reranker
 from src.llm.orchestrator import Orchestrator
+from src.utils.trace_decorator import logger, suppress_http_request_logs
+
+suppress_http_request_logs()
 
 # ── Init components ──
 DATA_DIR = PROJECT_ROOT / "data"
 
-print("Loading components...", flush=True)
+logger.info("Loading API components")
 searcher = CustomSearch(
     chunks_path=str(DATA_DIR / "rag_chunks_v2.json"),
     embeddings_path=str(DATA_DIR / "embeddings.npy"),
 )
 reranker = Reranker()
 orchestrator = Orchestrator(retriever=searcher, reranker=reranker)
-print("All components ready!", flush=True)
+logger.info("All API components ready")
 
 # ── FastAPI app ──
 app = FastAPI(title="EduBot API")
@@ -59,7 +62,7 @@ async def chat(req: ChatRequest):
 
     full_response = ""
     try:
-        for chunk in orchestrator.ask(req.message, ui_book=ui_book, user_id=req.user_id):
+        async for chunk in orchestrator.ask_async(req.message, ui_book=ui_book, user_id=req.user_id):
             full_response += chunk
     except Exception as e:
         full_response = f"Lỗi: {str(e)[:300]}"
@@ -88,5 +91,8 @@ async def static_files(path: str):
 
 if __name__ == "__main__":
     import uvicorn
-    print("Starting EduBot API on http://127.0.0.1:8000", flush=True)
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    suppress_http_request_logs()
+    host = os.getenv("EDUBOT_HOST", "127.0.0.1")
+    port = int(os.getenv("EDUBOT_PORT", "8000"))
+    logger.info("Starting EduBot API on http://%s:%s", host, port)
+    uvicorn.run(app, host=host, port=port, access_log=False)

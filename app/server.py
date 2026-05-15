@@ -1,4 +1,5 @@
 import sys
+import os
 from pathlib import Path
 import uvicorn
 
@@ -10,10 +11,13 @@ for p in [str(PROJECT_ROOT), str(PROJECT_ROOT / "src")]:
 from dotenv import load_dotenv
 load_dotenv(PROJECT_ROOT / ".env")
 
+from src.utils.trace_decorator import logger, suppress_http_request_logs
 from app.gradio_app import init_components, build_ui
 
 
 def create_app():
+    suppress_http_request_logs()
+    logger.info("Initializing production Gradio components")
     init_components()
     demo = build_ui()
 
@@ -23,13 +27,14 @@ def create_app():
 
 
 if __name__ == "__main__":
+    suppress_http_request_logs()
     demo, app = create_app()
 
-    print("Starting production server on http://0.0.0.0:7860", flush=True)
+    server_port = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
+    logger.info("Starting Gradio server on http://127.0.0.1:%s", server_port)
     demo.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
+        server_name="127.0.0.1",
+        server_port=server_port,
         share=False,
         show_error=False,
-        show_api=False,
     )

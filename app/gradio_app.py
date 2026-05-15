@@ -203,6 +203,39 @@ def format_debug_info(debug_info: dict) -> str:
             if step.get('response_length'):
                 lines.append(f"  - Response length: {step.get('response_length')} chars")
 
+        elif node == "QualityReviewer":
+            lines.append(
+                f"**[QualityReviewer]**\n"
+                f"  - Target: `{step.get('target', 'content')}`\n"
+                f"  - Passed: `{step.get('passed')}`\n"
+                f"  - Score: `{step.get('score')}`\n"
+                f"  - Reason fail: `{step.get('reason_fail')}`\n"
+                f"  - Action: `{step.get('reflection_action')}`\n"
+                f"  - Reflection attempts: `{step.get('reflection_attempts', 0)}`\n"
+                f"  - Summary: {step.get('summary')}"
+            )
+            for issue in step.get("issues", [])[:5]:
+                lines.append(
+                    f"  - {issue.get('severity', '?')} | {issue.get('case', '?')}: "
+                    f"{issue.get('message', '')}"
+                )
+
+        elif node == "GraphNode":
+            lines.append(
+                f"**[GraphNode]** `{step.get('graph_node', '?')}`\n"
+                f"  - Phase: `{step.get('phase', '?')}`\n"
+                f"  - Status: `{step.get('status')}`\n"
+                f"  - Output keys: `{step.get('output_keys', [])}`"
+            )
+
+        elif node == "HITLResume":
+            lines.append(
+                f"**[HITLResume]**\n"
+                f"  - Status: `{step.get('status')}`\n"
+                f"  - Session ID: `{step.get('session_id')}`\n"
+                f"  - Feedback: `{step.get('feedback')}`"
+            )
+
         elif node == "BookFilter":
             lines.append(
                 f"**[5] BookFilter** — `{step.get('status')}`\n"
@@ -340,9 +373,8 @@ def build_ui():
         # ── Main Chat ──
         chatbot_ui = gr.Chatbot(
             height=520,
-            show_copy_button=True,
             show_label=False,
-            type="messages",
+            buttons=["copy"],
             placeholder="Hãy hỏi bất cứ điều gì: tạo câu hỏi, sinh slide, giải thích kiến thức...",
         )
 
@@ -459,11 +491,11 @@ if __name__ == "__main__":
     demo = build_ui()
 
     # 3. Launch
-    print("Starting server on http://127.0.0.1:7860", flush=True)
+    server_port = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
+    print(f"Starting server on http://127.0.0.1:{server_port}", flush=True)
     demo.launch(
         server_name="127.0.0.1",
-        server_port=7860,
+        server_port=server_port,
         share=False,
         show_error=True,
-        show_api=False,
     )
