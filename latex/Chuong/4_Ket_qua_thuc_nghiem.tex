@@ -6,9 +6,7 @@
 Hệ thống được xây dựng chủ yếu dựa trên ngôn ngữ lập trình Python, kết hợp cùng các thư viện xử lý toán học như Numpy và Pandas để thao tác với ma trận vector nhúng (Embedding Vector Matrix). 
 Các tác vụ lớn và phức tạp trong hệ thống được định tuyến và phân rã nhờ mô hình đa tác tử (Multi-Agent System) xây dựng trên nền tảng tiến trình của thư viện \textit{LangGraph}. 
 Việc truy xuất (Retrieval) và sinh ngôn ngữ tự nhiên (Natural Language Generation) được thực hiện thông qua API của mô hình ngôn ngữ lớn (Large Language Model) Google Gemini 2.5 Flash, qua thư viện \textit{google-genai}. 
-Đối với giải thuật đo lường sự tương đồng (Similarity Search), hệ thống sử dụng mô hình nhúng (Embedding Model) \textit{dangvantuan/vietnamese-document-embedding} cho ra kết quả vector 768 chiều. 
-Giai đoạn tái xếp hạng (Reranking) ở bước cuối quy trình truy xuất được đảm nhiệm chuyên biệt bởi mô hình học máy Cross-Encoder \textit{AITeamVN/Vietnamese\_Reranker}. 
-Khác với các hệ thống phụ thuộc thư viện đóng gói sẵn, nền tảng logic tìm kiếm từ khoá (Keyword Search) với thuật toán Custom BM25 được lập trình thủ công và tinh chỉnh linh hoạt ở mức công thức toán học (TF, DF, IDF), tạo sự chủ động tuyệt đối trong quá trình tối ưu văn bản tiếng Việt.
+Đối với giải thuật đo lường sự tương đồng (Similarity Search) và truy xuất dữ liệu, hệ thống tự phát triển bộ máy tìm kiếm độc lập bao gồm tìm kiếm từ khóa cục bộ (Custom BM25) và tìm kiếm ngữ nghĩa trên vector (Semantic Cosine Search) thay vì phụ thuộc vào các thư viện đóng gói sẵn thường mang lại sự cồng kềnh khó kiểm soát. Quá trình hòa trộn điểm số được thực hiện qua thuật toán RRF (Reciprocal Rank Fusion) kết hợp cùng mô hình nhúng (Embedding Model) \textit{dangvantuan/vietnamese-document-embedding} cho ra kết quả vector 768 chiều. Nhờ thao tác tính toán trực tiếp trên ma trận Numpy thay vì cơ chế xấp xỉ của FAISS, hệ thống đạt được độ chính xác tuyệt đối (Exact Match) trong việc so khớp ngữ nghĩa. Giai đoạn tái xếp hạng (Reranking) ở bước cuối quy trình truy xuất được đảm nhiệm chuyên biệt bởi mô hình học máy Cross-Encoder \textit{AITeamVN/Vietnamese\_Reranker}. Bổ trợ cho bộ máy trên là hạ tầng giao tiếp chuẩn hóa Model Context Protocol (MCP), giúp kết nối các tác tử AI định tuyến linh hoạt đến công cụ nội bộ lẫn bên ngoài một cách thống nhất.
 
 \subsection{Dữ liệu thực nghiệm}
 Nguồn dữ liệu gốc được khai thác từ toàn bộ tài liệu Sách Giáo Khoa Tin học lớp 10, 11 và 12, thuộc cả hai bộ sách Cánh Diều và Kết Nối Tri Thức. 
@@ -22,42 +20,44 @@ Kiến trúc tổng thể của dự án được thiết kế thành một pipe
 
 \textbf{Cụm Xây dựng Cơ sở tri thức (Knowledge Base Construction):} Văn bản Markdown sau quá trình làm sạch sẽ được phân rã (Chunking) theo đúng phân cấp. Mỗi khối dữ liệu (chunk) được nhúng (Embedding) thành ma trận vector và lưu trữ vĩnh viễn ở Cơ sở tri thức (Knowledge Base / Vector DB) cùng với metadata (\textit{hệ cấp} và \textit{ID cha con}).
 
-\textbf{Cụm Phân hệ Truy xuất (Retrieval \& Reranking):} Ở chặng run-time, hệ thống đón nhận truy vấn (User Query) từ người dùng. Cụm RAG làm nhiệm vụ định tuyến hướng đi, tìm kiếm không gian vector, tìm kiếm từ khoá và lai ghép (Hybrid Search + Reranker) nhằm đánh giá và rút trích các khối tri thức chứa ngữ cảnh sát nhất.
+\textbf{Cụm Phân hệ Truy xuất (Retrieval \& Reranking):} Ở chặng run-time, hệ thống đón nhận truy vấn (User Query) từ người dùng. Cụm RAG làm nhiệm vụ định tuyến hướng đi, tiến hành tìm kiếm theo phương pháp lai ghép (Hybrid Search) phối hợp giữa phân tích từ khóa và không gian vector cùng cơ chế RRF, sau đó dùng mô hình Reranker nhằm đánh giá và rút trích các khối tri thức chứa ngữ cảnh sát nhất.
 
-\textbf{Cụm Sinh ngôn ngữ (LLM Generation):} Nhận Top-K ngữ cảnh cô đặc ở đầu ra của cụm Truy xuất, kết hợp cùng Prompt (câu hỏi gốc) để truyền vào mô hình ngôn ngữ lớn (Google Gemini). LLM sẽ phân tích, đối chiếu nội dung ngữ cảnh từ tri thức và sinh ra câu trả lời theo ngôn ngữ tự nhiên.
+\textbf{Cụm Công cụ Trung gian (MCP Tool Architecture):} Đây là lớp giao tiếp chuẩn hóa mới được áp dụng, làm cầu nối giữa các Tác tử xử lý dịch vụ với các công cụ tra cứu tri thức (như Vector DB) và công cụ nền tảng web (như Web Search) nhằm đảm bảo sự liền mạch trong luồng dữ liệu.
 
-Sơ đồ tổng quan được biểu diễn tại Hình \ref{fig:overall_architecture_repo}, mô tả toàn bộ quy trình xử lý từ khi tiếp nhận truy vấn của người dùng (Query / UI Request) cho đến khi sinh ra câu trả lời cuối cùng. Kiến trúc hệ thống theo mô hình tuổi thọ yêu cầu (request lifecycle) được nâng cấp và tối ưu hóa thành 6 lớp (layer) xử lý liên tục: Context \& Intent Layer (Ngữ cảnh \& Ý định), Planning Layer (Lập kế hoạch), Execution Layer (Thực thi), Knowledge Layer (Truy xuất Tri thức), Generation Layer (Sinh đa phương thức) và Response \& Memory (Phản hồi \& Ghi nhớ). 
+\textbf{Cụm Sinh ngôn ngữ và Khởi tạo nội dung (Generation \& Multi-Agent Parallel):} Nhận Top-K ngữ cảnh cô đặc ở đầu ra của cụm Truy xuất, kết hợp cùng truy vấn gốc để truyền vào mô hình ngôn ngữ. LLM sẽ không chỉ đóng vai trò phân tích nội dung, mà còn được triển khai dưới dạng kiến trúc đa tác tử song song (Fan-out async), phân chia đồng thời các nhiệm vụ chuyên biệt như sinh cấu trúc nội dung, tạo hội thoại hoặc tự động thiết kế câu hỏi luyện tập.
+
+Sơ đồ tổng quan được biểu diễn tại Hình \ref{fig:overall_architecture_repo}, mô tả toàn bộ quy trình xử lý từ khi tiếp nhận truy vấn của người dùng cho đến khi sinh ra câu trả lời cuối cùng. Kiến trúc hệ thống theo mô hình vòng đời yêu cầu được nâng cấp và tối ưu hóa thành 6 lớp xử lý liên tục: Lớp Ngữ cảnh và Ý định (Context \& Intent Layer), Lớp Lập kế hoạch (Planning Layer), Lớp Thực thi (Execution Layer), Lớp Truy xuất và Giao thức Tri thức (Unified MCP \& Knowledge Layer), Lớp Sinh phản hồi (Generation Layer), cùng Lớp Phản hồi và Ghi nhớ (Response \& Memory). Bằng việc chia nhỏ từng chặng xử lý và ứng dụng quy chuẩn Model Context Protocol, hệ thống đảm bảo duy trì độ độc lập, dễ dàng bổ sung thêm cấu trúc công cụ mới.
 
 \begin{figure}[H]
     \centering
-    \resizebox{0.8\textwidth}{!}{
+    \resizebox{0.85\textwidth}{!}{
     \begin{tikzpicture}[
         node distance = 1.0cm and 1.5cm,
         font=\small,
         base/.style = {draw=black!80, thick, align=center, drop shadow={opacity=0.15, shadow xshift=2pt, shadow yshift=-2pt}},
         io/.style = {base, ellipse, fill=orange!15, minimum width=4cm, minimum height=1.2cm},
-        layer/.style = {base, rectangle, rounded corners=6pt, fill=blue!10, minimum width=6cm, minimum height=1.5cm, text width=6cm},
-        rag/.style = {base, rectangle, rounded corners=6pt, fill=green!15, minimum width=5.5cm, minimum height=1.5cm, text width=5cm},
-        gen/.style = {base, rectangle, rounded corners=6pt, fill=cyan!15, minimum width=6cm, minimum height=1.5cm, text width=6cm},
-        mem/.style = {base, rectangle, rounded corners=6pt, fill=gray!15, minimum width=6cm, minimum height=1.5cm, text width=6cm},
+        layer/.style = {base, rectangle, rounded corners=6pt, fill=blue!10, minimum width=6.5cm, minimum height=1.5cm, text width=6.5cm},
+        rag/.style = {base, rectangle, rounded corners=6pt, fill=green!15, minimum width=6cm, minimum height=1.5cm, text width=5.5cm},
+        gen/.style = {base, rectangle, rounded corners=6pt, fill=cyan!15, minimum width=6.5cm, minimum height=1.5cm, text width=6.5cm},
+        mem/.style = {base, rectangle, rounded corners=6pt, fill=gray!15, minimum width=6.5cm, minimum height=1.5cm, text width=6.5cm},
         arrow/.style = {thick, -{Stealth[scale=1.2]}, draw=black!70, shorten >=2pt, shorten <=2pt}
     ]
 
     % --- Nodes ---
     \node (user_input) [io] {\textbf{User Input}\\(Query / UI Request)};
 
-    \node (context_layer) [layer, below=0.8cm of user_input] {\textbf{1. Context \& Intent Layer}\\ \footnotesize $\bullet$ ContextAnalyzer \\ $\bullet$ QueryRewriter (LLM) \\ $\bullet$ IntentRouter};
+    \node (context_layer) [layer, below=0.8cm of user_input] {\textbf{1. Context \& Intent Layer}\\ Viết lại truy vấn đa dạng hóa \\ Nội suy, bóc tách ý định cốt lõi};
 
-    \node (planning_layer) [layer, below=0.8cm of context_layer] {\textbf{2. Planning Layer}\\ \footnotesize $\bullet$ SessionManager \\ $\bullet$ ActionPlanner};
+    \node (planning_layer) [layer, below=0.8cm of context_layer] {\textbf{2. Planning Layer}\\ Quản lý cấu trúc phiên làm việc \\ Định hình danh sách kế hoạch hành động};
 
-    \node (exec_layer) [layer, below=0.8cm of planning_layer] {\textbf{3. Execution Layer}\\ \footnotesize $\bullet$ Multi-Action Loop \\ $\bullet$ ExecutionDispatcher};
+    \node (exec_layer) [layer, below=0.8cm of planning_layer] {\textbf{3. Execution Layer}\\ Hệ thống vòng lặp đa tác vụ xử lý\\ Định tuyến tới các dịch vụ tác tử};
 
-    % RAG is beside Execution / Generation
-    \node (rag_layer) [rag, right=1.2cm of exec_layer] {\textbf{4. Knowledge Layer (RAG)}\\ \footnotesize $\bullet$ Adaptive Retrieval \\ $\bullet$ Context Processing \\ $\bullet$ Reranking};
+    % RAG is beside Execution
+    \node (rag_layer) [rag, right=1.2cm of exec_layer] {\textbf{4. Unified MCP \& KnowledgeLayer}\\ Phân giải tri thức tương thích ngữ cảnh \\ Chấm điểm lại thứ hạng và tích hợp Tìm kiếm mạng};
 
-    \node (gen_layer) [gen, below=1.2cm of exec_layer] {\textbf{5. Generation Layer}\\ \footnotesize $\bullet$ LLM Generator \\ $\bullet$ Validator (Self-check)};
+    \node (gen_layer) [gen, below=1.2cm of exec_layer] {\textbf{5. Generation Layer}\\ Phân mảnh tác tử sinh nội dung song song \\ Tự kiểm duyệt đối soát chéo ngữ cảnh nguồn};
 
-    \node (response_layer) [mem, below=0.8cm of gen_layer] {\textbf{6. Response \& Memory}\\ \footnotesize $\bullet$ Streaming Response \\ $\bullet$ Logging \\ $\bullet$ Session Store};
+    \node (response_layer) [mem, below=0.8cm of gen_layer] {\textbf{6. Response \& Memory}\\ Giao thức trả về thời gian thực\\ Khắc lưu lịch sử luồng chạy tại CSDL};
 
     % --- Connections ---
     \draw [arrow] (user_input) -- (context_layer);
@@ -70,27 +70,13 @@ Sơ đồ tổng quan được biểu diễn tại Hình \ref{fig:overall_archit
     \draw [arrow] (exec_layer.east) -- (rag_layer.west);
     \draw [arrow] (rag_layer.south) |- (gen_layer.east);
 
-    % Scope boxes if needed (optional)
-
     \end{tikzpicture}
     }
-    \caption{Sơ đồ tổng quan kiến trúc hệ thống (System Overview Architecture)}
+    \caption{Sơ đồ hệ thống tổng quan theo kiến trúc Mạng lưới Tác tử và Hệ sinh thái phân tầng}
     \label{fig:overall_architecture_repo}
 \end{figure}
 
-Trong Hình \ref{fig:overall_architecture_repo}, kiến trúc hệ thống hoạt động theo các lớp liên kết chặt chẽ trong một vòng tuần hoàn khép kín:
-
-\textbf{1. Context \& Intent Layer (Lớp Ngữ cảnh \& Ý định):} Xử lý truy vấn đầu vào, phân tích định danh lịch sử bằng \textit{ContextAnalyzer}, viết lại câu hỏi hoặc tạo đa truy vấn (multi-queries) bằng \textit{QueryRewriter}, và dùng \textit{IntentRouter} để nội suy, phân nhánh ý định cốt lõi của người dùng.
-
-\textbf{2. Planning Layer (Lớp Lập kế hoạch):} Đóng vai trò lớp phối hợp, hệ thống quản lý phiên làm việc thông qua \textit{SessionManager} và định hình chiến lược/danh sách các hành động chi tiết bắt buộc phải làm nhờ bộ \textit{ActionPlanner}.
-
-\textbf{3. Execution Layer (Lớp Thực thi):} Thông qua vòng lặp \textit{Multi-Action Loop} kết hợp cùng lõi \textit{ExecutionDispatcher}, lớp này sẽ điều phối linh hoạt các mô-đun dịch vụ (Quiz, Slides, v.v.) và gọi lớp RAG khi nhận thấy tác vụ cần tri thức ngoài.
-
-\textbf{4. Knowledge Layer (Lớp Tri thức - RAG):} Đảm nhận khâu phân giải kiến thức. Hệ thống truy xuất theo cấu hình chiến lược (\textit{Adaptive Retrieval}), thu thập văn bản liên quan (\textit{Context Processing}) và sắp xếp đo lường lại mức độ liên quan thông qua mô hình chấm điểm (\textit{Reranking}).
-
-\textbf{5. Generation Layer (Lớp Sinh nội dung):} Kết hợp các kết quả thực thi và tri thức được truy xuất cô đặc vào \textit{LLM Generator} để sinh ra đáp án và văn bản cuối cùng, có sự kiểm duyệt đối soát chéo của mô-đun \textit{Validator} để đảm bảo chuẩn mực chất lượng.
-
-\textbf{6. Response \& Memory (Lớp Phản hồi \& Ghi nhớ):} Các kết quả cuối cùng được trả về cho người dùng qua giao thức thời gian thực (\textit{Streaming Response}), ghi nhận lịch sử vết lỗi (\textit{Logging}) và lưu lại dữ liệu hội thoại vào cơ sở dữ liệu hệ thống (\textit{Session Store}) làm tài nguyên cho luồng thao tác kế tiếp.
+Trong Hình \ref{fig:overall_architecture_repo}, kiến trúc hệ thống hoạt động thông qua một chuỗi xử lý tinh chế khép kín, trong đó Lớp số 4 đóng vai trò cốt lõi trong việc chuẩn hóa thao tác lấy thông tin gốc, chuyển đổi mọi tác vụ gọi hàm tự do thành một mạng lưới MCP có kiểm soát. Kế tiếp, năng lực giải quyết được chuyển hóa cho khối Lớp Số 5, phân rã để hoàn tất các nghiệp vụ phức tạp mà không để chậm trễ đường truyền.
 
 \section{Thiết kế chi tiết các thành phần hệ thống}
 \label{sec:system_details}
@@ -161,7 +147,7 @@ Nhờ kiến trúc này, hệ thống giải quyết xuất sắc các yêu cầ
 
 \begin{figure}[H]
     \centering
-    \resizebox{0.55\textwidth}{!}{
+    \resizebox{0.45\textwidth}{!}{
     \begin{tikzpicture}[
         node distance = 1.6cm,
         font=\small,
@@ -287,15 +273,17 @@ Lớp Thực thi đóng vai trò trung tâm trong chuỗi xử lý đa nhiệm c
 
 Quá trình thực thi trong lớp này gồm các thành phần cốt lõi:
 
-\textbf{Multi-Action Loop:} Hệ thống sẽ duyệt qua mảng hành động (ActionPlans) theo phương thức lặp vòng. Vòng lặp đóng vai trò như một bộ đếm trạng thái, dừng lại khi tất cả Action đã được bóc tách hoàn chỉnh.
+Cơ chế điều phối Đa hành động (Multi-Action Loop) tiến hành duyệt qua danh sách các thao tác đã được chốt từ tầng Lập kế hoạch theo hình thức vòng lặp. Cụm tác vụ này đóng vai trò như một bộ đếm trạng thái, chỉ thả luồng hoàn tất khi hệ thống đã bóc tách và phân bố triệt để tất cả các nhiệm vụ.
 
-\textbf{Execution Dispatcher:} Dựa vào khóa định danh của mỗi tác vụ, Dispatcher sử dụng cơ chế định tuyến thông qua nối kết từ điển (Registry-based) để chọn ra dịch vụ thích hợp gồm các module lớn như: Tạo Quiz/Slide, Xử lý Chấm điểm tương tác, hay Chat tự do (không cần RAG).
+Trạm rẽ nhánh (Execution Dispatcher) dựa vào đặc tính của mỗi danh mục tác vụ để truyền tín hiệu tới Dịch vụ lĩnh vực (Domain Service) tương ứng. Lớp dịch vụ lĩnh vực là các cụm xử lý logic chuyên biệt. Đối với Hệ trợ lý học thuật này, các dịch vụ tiêu biểu có thể kể đến quá trình kiến tạo bài tập (QuizService), sinh giáo án đa phương tiện (SlideService), và cụm Handler trả lời trực tiếp. Đặc tính quan trọng nhất là các lớp dịch vụ này sẽ đóng vai trò như Tác tử Đại diện (Agent Client), thiết lập giao thức gọi Công cụ chuẩn hóa (MCP Tool Client) để liên lạc sâu xuống Lớp công cụ trung tâm của MCP Server.
 
-Kết thúc một luồng lệnh đơn lẻ, dữ liệu sẽ được trả về dạng Stream thời gian thực ra giao diện và gọi sâu xuống tầng Tri thức. Sau đó, tín hiệu sẽ vòng ngược lại Multi-Action Loop để tiếp tục gỡ lệnh kế tiếp.
+Kết thúc một luồng lệnh đơn lẻ, dữ liệu sẽ được kích hoạt đẩy song song ra luồng hiển thị (streaming) ra màn hình và đồng thời lưu chuyển ngược mốc tín hiệu về vòng lặp chính để xử lý kế hoạch hành động tiếp theo.
 
-\subsection{Thiết kế Lớp Tri thức (Knowledge Layer)}
+\subsection{Thiết kế Lớp Tri thức và Trạm Công cụ MCP (Knowledge Layer \& MCP Server)}
 \label{subsec:knowledge_layer}
-Lớp Tri thức (Knowledge Layer) đóng vai trò nòng cốt trong việc giải quyết các tác vụ chuyên sâu (Knowledge-Intensive Tasks). Kiến trúc này được nâng cấp thành \textit{Advanced Adaptive RAG}, không hoạt động trên một luồng cố định mà sử dụng Bộ phân loại (Classifier) để tự động định hướng cách thức truy xuất linh hoạt dựa trên dạng câu hỏi.
+Lớp Tri thức đóng vai trò nòng cốt trong việc giải quyết các tác vụ chuyên sâu (Knowledge-Intensive Tasks) lấy trọng tâm chuẩn hóa Sách giáo khoa. Để giao tiếp với lớp này, hệ thống áp dụng kỹ thuật bọc giao diện theo quy chuẩn Model Context Protocol (MCP). Bằng cách thiết kế công cụ \textit{KnowledgeRetrievalTool} trên một MCP Server trung tâm, mọi yêu cầu truy xuất dữ liệu từ các Tác tử cấp trên đều được thống nhất về một chuẩn duy nhất, hoàn toàn tách biệt khỏi logic luồng thực thi (Decoupled Layer).
+
+Kiến trúc tìm kiếm RAG của hệ thống đã được tinh luyện lại thành \textit{Advanced Adaptive RAG}. Tầng này không hoạt động trên một luồng tĩnh cố định mà sử dụng Bộ phân loại (Classifier) để tự động định hướng cách thức truy xuất linh hoạt dựa trên dạng câu hỏi. Đáng nói, tầng xử lý phía bên dưới là sự kết hợp sâu sắc của các giải thuật xây dựng thủ công. Điển hình là sự nâng cấp của Khối Lai ghép (Hybrid Searcher), trực tiếp tổng lũy số liệu từ Hàm truy vết từ khóa (Custom BM25) cùng giải thuật tương đồng Cosine của Vector ma trận thuần (Numpy Dot Product) thông qua công thức hội tụ cực trị Reciprocal Rank Fusion (RRF). Việc giải quyết toán học trực tiếp trên vi mạch Vector Numpy mang lại lợi ích bám sát tuyệt đối đáp án chính xác (Exact Match) so với các giải thuật độ xấp xỉ của các nhóm thư viện bên thứ 3.
 
 \begin{figure}[H]
 \centering
@@ -312,27 +300,27 @@ Lớp Tri thức (Knowledge Layer) đóng vai trò nòng cốt trong việc gi�
 ]
 
 % ================= INPUT =================
-\node (input) [io, yshift=-0.5cm] {\textbf{Đầu vào:}\\ queries\_for\_rag \& Filters};
+\node (input) [io, yshift=-0.5cm] {\textbf{Đầu vào qua MCP:}\\ Yêu cầu từ Tác tử};
 
 \node (loop_box) [labelbox, draw=gray!50, fill=gray!15, below=of input] 
-{Lặp qua từng truy vấn};
+{Lặp qua truy vấn đa luồng};
 
 % ================= CLASSIFIER =================
 \node (classifier) [diamond_box, below=of loop_box] 
-{\textbf{Classifier}\\(Phân loại câu hỏi)};
+{\textbf{Classifier}\\Phân loại chiều tìm kiếm};
 
 % ================= SPLIT POINT =================
 \coordinate (split) at ($(classifier.south)+(0,-0.9)$);
 
 % ================= BRANCHES =================
 \node (broad) [process, fill=blue!15, below left=2.6cm and 3cm of classifier] 
-{\textbf{BROAD / CURRICULUM}\\(Tìm diện rộng)};
+{\textbf{BROAD / CURRICULUM}\\Chỉ quét siêu dữ liệu (Metadata)};
 
 \node (hrag) [process, fill=blue!15, below right=2.6cm and 3cm of classifier] 
-{\textbf{HIERARCHICAL (HRAG)}\\(Truy xuất phân cấp)};
+{\textbf{HIERARCHICAL (HRAG)}\\Lọc sâu hệ cấp cây bài học};
 
 \node (standard) [process, fill=blue!15, below=3.2cm of classifier] 
-{\textbf{STANDARD RAG}\\(Vector + BM25)};
+{\textbf{STANDARD RAG}\\BM25 + Cosine Vector + RRF};
 
 % ================= FLOW =================
 \draw [arrow] (input) -- (loop_box);
@@ -343,17 +331,17 @@ Lớp Tri thức (Knowledge Layer) đóng vai trò nòng cốt trong việc gi�
 
 % --- BROAD ---
 \draw [arrow]
-(split) -| node[labelbox, pos=0.25] {Hỏi tổng quan}
+(split) -| node[labelbox, pos=0.25] {Hỏi dạng chủ đề}
 (broad.north);
 
 % --- HRAG ---
 \draw [arrow]
-(split) -| node[labelbox, pos=0.25] {Cần bối cảnh sâu}
+(split) -| node[labelbox, pos=0.25] {Cần truy vết SGK sâu}
 (hrag.north);
 
 % --- STANDARD (đi thẳng) ---
 \draw [arrow]
-(classifier.south) -- node[labelbox, right, pos=0.6] {Hỏi nhanh}
+(classifier.south) -- node[labelbox, right, pos=0.6] {Tra sát thực tế}
 (standard.north);
 
 % ================= FALLBACK =================
@@ -369,17 +357,17 @@ Lớp Tri thức (Knowledge Layer) đóng vai trò nòng cốt trong việc gi�
 
 % ================= CONTEXT =================
 \node (context) [process, below=of standard, text width=5cm] 
-{\textbf{2. Context Processing}\\(Gom cụm \& Tiền xử lý)};
+{\textbf{2. Định dạng Ngữ cảnh}\\Khử trùng lặp và Gom cụm};
 
 \node (rerank) [process, fill=purple!15, below=of context] 
-{\textbf{3. Reranking}\\(Đánh giá \& Lọc Top-K)};
+{\textbf{3. Reranking}\\Xếp hạng chéo (Cross-Encoder)};
 
 \node (output) [io, below=of rerank] 
-{\textbf{Đầu ra:}\\Ngữ cảnh tối ưu};
+{\textbf{Đầu ra:}\\Top Đoạn tri thức ưu việt};
 
 % ================= FINAL FLOW =================
-\draw [arrow] (standard) -- node[labelbox, fill=none, draw=none, right=0.15cm] {Raw chunks} (context);
-\draw [arrow] (context) -- node[labelbox, fill=none, draw=none, right=0.15cm] {Tài liệu sạch} (rerank);
+\draw [arrow] (standard) -- node[labelbox, fill=none, draw=none, right=0.15cm] {Gói thô sơ} (context);
+\draw [arrow] (context) -- node[labelbox, fill=none, draw=none, right=0.15cm] {Tập chuẩn hóa} (rerank);
 \draw [arrow] (rerank) -- (output);
 
 % ================= BOX =================
@@ -390,36 +378,32 @@ Lớp Tri thức (Knowledge Layer) đóng vai trò nòng cốt trong việc gi�
         fit=(top_layer)(broad)(hrag)(bottom_layer), inner sep=12pt] (layer_box) {};
 
     \node [anchor=north, font=\bfseries]
-    at (layer_box.north) {Advanced Adaptive RAG};
+    at (layer_box.north) {MCP Server - Bộ công cụ Knowledge Retrieval};
 
     \coordinate (top_agent) at ($(classifier.north)+(0,0.6)$);
     \node [rectangle, draw=gray!60, dashed, fill=gray!5,
         fit=(top_agent)(broad)(hrag)(standard), inner sep=10pt] (agent_box) {};
 
     \node [anchor=north west, font=\bfseries\small, xshift=2pt]
-    at (agent_box.north west) {1. Adaptive RAG Agent};
+    at (agent_box.north west) {1. Adaptive Router Tool};
 \end{scope}
 
 \end{tikzpicture}
 }
-\caption{Cấu trúc xử lý và truy xuất thông tin của Knowledge Layer}
+\caption{Cấu trúc Máy chủ Công cụ MCP và Quá trình Truy xuất sâu (Knowledge Layer)}
 \label{fig:knowledge_layer}
 \end{figure}
 
-Đầu vào là mảng kết quả \textit{queries} và các luồng lọc (filters) nhận được từ Lớp trước đó. Quy trình chiết xuất thông tin tuần tự như sau:
-
-\textbf{1. Adaptive RAG Agent:} Bộ phân loại (Classifier) phân tích ý định sâu của truy vấn (hỏi nhanh, hỏi tổng quan hay cần bối cảnh sâu) để định tuyến sang dạng RAG tiêu chuẩn hoặc HRAG. Một thiết kế chốt chặn (Fallback Agent) sẽ tự động quay hồi về quy trình thông thường nếu việc rà soát trước đó rơi vào ngõ cụt do tìm kiếm được quá ít ngữ cảnh.
-
-\textbf{2. Context Processing:} Sau khi các Agent nhả ra đa dạng mảnh nguyên liệu (Raw chunks), quy trình sẽ gom tập trung toàn bộ khối dữ liệu này và lọc đi các đoạn trùng lặp (Deduplication).
-
-\textbf{3. Reranking:} Cuối cùng, rổ tài liệu sau chuẩn hóa sẽ đi qua mô hình học máy chéo (Cross-Encoder) để chấm điểm và tái xếp hạng. Top 5 Chunk giá trị nhất ở kết quả xuất ra sẽ làm thành phần ghép cốt lõi bổ trợ cho Prompt truyền vào mô hình Generative phản hồi.
+Đầu vào là tổng quát lệnh được chuyển từ máy khách vào Máy chủ MCP Tools. Hệ thống tự động phân loại mức ý định (hỏi cấu trúc, hỏi sâu, hoặc tìm kiếm quy mô rộng) để tối ưu chi phí tính toán. Cụ thể quy trình chiết xuất thông tin được thực hiện qua các giai đoạn lọc triệt để. Tuyến đường trung tâm phụ trách khâu rà quét thô bằng kỹ thuật RRF (Reciprocal Rank Fusion) để hợp nhất sức mạnh dò tìm văn bản và hình học ma trận. Rổ dư liệu sau khi khử những đoạn trùng lặp tiếp tục trải qua mô hình đánh giá chéo máy học chéo (Cross-Encoder Reranking). Top những phân đoạn xếp hạng cao nhất được xem là nguyên liệu thuần túy nhất để nhồi vào prompt điều khiển cho khối tác tử xử lý ngôn ngữ đầu xả (Generative Generation Layer).
 
 \subsection{Thiết kế Lớp Sinh phản hồi và Hậu kiểm (Generation \& Validation)}
-Cuối cùng, Response Generation nhận ngữ cảnh tinh lọc để biên soạn câu trả lời. Điểm khác biệt quan trọng là sự xuất hiện của Validator Agent, một lớp hậu kiểm phân luồng thực hiện đối soát câu trả lời vừa sinh ra với nguồn tri thức gốc để phát hiện các lỗi "hallucination", đảm bảo rằng mọi thông tin gửi tới người dùng đều đạt độ chính xác cao nhất (Hình \ref{fig:generation_layer_detail}).
+Lớp Sinh phản hồi đóng vai trò hợp nhất dữ liệu từ khối kiến thức và ý định người dùng để sản sinh câu trả lời cuối cùng. Để tối ưu hóa độ trễ tính toán, mô-đun phát sinh giao án và giáo cụ học tập được tái cấu trúc hoàn toàn sang mô hình Đa tác tử song song (Fan-out async Multi-Agent Architecture). Cụ thể, khi người dùng yêu cầu soạn một bài giảng có độ dài phức hợp, một trạm điều phối sẽ đánh thức đồng thời ba tác tử phụ (Sub-agents) chạy bất đồng bộ. Nhánh thứ nhất chuyên lo về phần mở đầu và định hướng mà không cần truy xuất dữ liệu RAG. Nhánh thứ hai tập trung khai thác lượng văn bản từ SGK để biên soạn lý thuyết. Nhánh thứ ba kế thừa chức năng tạo bài tập trắc nghiệm để sinh các câu hỏi củng cố. Tính năng này giúp triệt tiêu hoàn toàn độ trễ so với việc chạy phản hồi chuỗi tuyến tính.
+
+Cộng hưởng cùng quy trình song song trên, một Tác tử Đa phương tiện (Media Agent) có khả năng kích hoạt công cụ Tìm kiếm mạng lưới (Web Search Tool qua giao thức liên kết MCP) để phân tích bối cảnh bài học, sau đó tự động cào ảnh nền, biểu đồ minh hoạ từ Internet và chèn thẳng vào đầu ra giao diện thay vì chỉ hiển thị dạng văn bản thuần túy. Trước khi được hiển thị, mọi đầu ra đều phải vượt qua trạm Kiểm duyệt viên AI (Validator Agent) thực hiện đối soát chéo văn bản hệ thống sinh ra với nguồn tri thức cơ sở, chấm dứt hiện tượng ảo giác (hallucination) cũng như các lỗi định dạng sai lệch. Thiết kế phân luồng này được mô tả chi tiết tại Hình \ref{fig:generation_layer_detail}.
 
 \begin{figure}[H]
 \centering
-\resizebox{0.95\textwidth}{!}{
+\resizebox{0.85\textwidth}{!}{
 \begin{tikzpicture}[
     node distance = 1.2cm and 2cm,
     font=\small,
@@ -522,7 +506,7 @@ Cuối cùng, Response Generation nhận ngữ cảnh tinh lọc để biên so�
 \label{fig:generation_layer_detail}
 \end{figure}
 
-\subsection{Thiết kế Streaming Responsen, History Memory và Logging}
+\subsection{Thiết kế Streaming Response, History Memory và Logging}
 
 Đây là chặng cuối cùng (Block 6) trong vòng đời xử lý của hệ thống, đóng vai trò như một cầu nối giao tiếp trực tiếp với người dùng và đồng thời dọn dẹp, lưu trữ trạng thái trước khi kết thúc phiên làm việc. Thiết kế của lớp này ưu tiên hai yếu tố: tốc độ hiển thị cho trải nghiệm người dùng (mượt mà thông qua Streaming) và tính toàn vẹn dư liệu của hệ thống (lưu vết và ngữ cảnh). Sơ đồ thao tác của Block 6 được thể hiện tại Hình \ref{fig:response_layer_detail}.
 
@@ -594,9 +578,14 @@ Cuối cùng, Response Generation nhận ngữ cảnh tinh lọc để biên so�
     \label{fig:response_layer_detail}
 \end{figure}
 
-\section{Đánh giá hiệu năng và Kết quả thực nghiệm}
-\subsection{Phương pháp đánh giá}
-Hệ thống sử dụng phương pháp đánh giá định lượng (Quantitative Evaluation) dành riêng cho hệ thống Retrieval-Augmented Generation (RAG) thông qua Ragas framework. Tập dữ liệu kiểm thử (Testset) bao gồm 246 mẫu câu hỏi và đáp án tham chiếu (Reference) được trích xuất từ dữ liệu giáo khoa, tập trung vào nhiều cấp độ hành vi nhận thức từ Nhận biết, Thông hiểu đến Vận dụng.
+\section{Đánh giá hiệu năng và Lịch trình theo dõi năng lực}
+\subsection{Phương pháp đánh giá và Điểm tựa hiệu năng (Baseline)}
+Hệ thống sử dụng phương pháp đánh giá định lượng (Quantitative Evaluation) dành riêng cho kiến trúc RAG thông qua nền tảng đo lường tự động Ragas Framework. Quy trình kiểm thử (RAGAS Pipeline) diễn ra liên tục từ bước Trình phát sinh bộ câu hỏi (TestsetGenerator), tự động sinh hàng trăm mẫu truy vấn và tham chiếu (Ground Truth) từ 2348 phân đoạn tri thức trong ngân hàng dữ liệu. Sau đó, Bộ thu thập và đánh giá (Evaluator) sẽ chấm điểm chéo dựa trên bốn hệ số thiết yếu: mức độ trung thành với tài liệu gốc (Faithfulness), sự bám sát của câu trả lời với truy vấn (Answer Relevancy), sự chuẩn xác khi thả ngữ cảnh (Context Precision) và độ bao phủ của văn bản hồi đáp (Context Recall).
+
+Do việc xử lý tính toán liên quan đến ma trận đa chiều, thời gian phản hồi (Latency) Baseline khi hệ thống hoạt động đầy đủ tính năng tiêu tốn xấp xỉ 21 giây trên CPU phổ thông. Phân tích nguyên lý hoạt động cho thấy công đoạn viết lại câu hỏi (Query Rewrite) mất khoảng một giây, việc tìm kiếm hỗn hợp mất chưa tới 0.3 giây; tuy nhiên, mô hình chấm hạng chéo (Reranker) đang đứng điểm nghẽn (bottleneck) chiếm trọn 95\% thời lượng. Nguyên do đến từ giới hạn phần cứng không tận dụng sức mạnh thẻ đồ họa tăng tốc. Bù lại, người dùng nhận được sự bù đắp nhờ chức năng xử lý đa tác vụ hiển thị Streaming theo thời gian thực.
+
+\subsection{Theo dõi và Lưu vết năng lực cá nhân (Student Tracking)}
+Bên cạnh đánh giá chất lượng mô hình, hệ thống còn tập trung cung cấp giá trị cho người học thông qua tính năng theo dõi tiến độ (Student Tracking). Mọi bài kiểm tra trắc nghiệm sinh ra đều được Hệ thống đính kèm định danh độ khó và khóa phân mảnh chủ đề. Ngay khi người dùng nộp bài, Cơ sở dữ liệu Hồ sơ Học viên (StudentProfile) sẽ tự động lưu lại các chỉ số phần trăm hoàn thiện. Theo thời gian, hệ thống có khả năng tái tạo một Bản đồ tri thức (Knowledge Map) của cá nhân, biểu thị rõ liên kết giữa các bài học mà học sinh nắm vững hay còn yếu điểm để gợi ý ôn tập chính xác, vượt qua ranh giới đánh giá thông thường của một Chatbot hỏi đáp.
 
 Quá trình đánh giá được thực hiện trên 4 độ đo (Metrics) cốt lõi của Ragas:
 

@@ -5,9 +5,12 @@
     \Large{\textbf{ABSTRACT}}\\
 \end{center}
 \vspace{1cm}
-Mục này khuyến khích sinh viên viết lại mục “Tóm tắt” đồ án tốt nghiệp ở trang trước bằng tiếng Anh. Phần này phải có đầy đủ các nội dung như trong phần tóm tắt bằng tiếng Việt.
-Sinh viên không nhất thiết phải trình bày mục này. 
+In the digital transformation of education, high school students and teachers face notable challenges in Computer Science. Students need interactive self-study environments, while teachers spend excessive time planning lessons, creating quizzes, and grading. Although Large Language Models (LLMs) offer high potential, they suffer critically from information hallucination and a lack of grounding to authorized curricula. Thus, this project proposes an automated, intelligent virtual educational assistant strictly bounded by standardized knowledge bases.
 
-Nhưng nếu lựa chọn trình bày, sinh viên cần đảm bảo câu từ và ngữ pháp chuẩn tắc, nếu không sẽ có tác dụng ngược, gây phản cảm.
+To resolve these challenges, the research introduces a system structured on a Retrieval-Augmented Generation (RAG) architecture orchestrated by a Multi-Agent LLM approach. A vector database was built indexing textbook content from grades 10 to 12. The retrieval pipeline employs a Hybrid Search strategy optimized by Reciprocal Rank Fusion and a Cross-Encoder model for precise Vietnamese document reranking. Driven by a Thin Pipeline Controller that supports dynamic multi-intent routing, domain services parallelly handle complex workflows. These include standard knowledge queries, context-aware quiz generation in varying formats, criteria-based semantic answer grading, and structured lesson plan generation.
+
+Evaluated using the RAGAS framework across 246 comprehensive test instances, the system attained outstanding metrics. It recorded a Faithfulness score of 0.975 (virtually eliminating hallucinations), a Context Recall score of 0.959, and an Answer Relevancy score of 0.857. Furthermore, the framework demonstrated robust performance, achieving an average response latency of 6.5 seconds per multi-intent query.
+
+Ultimately, this thesis presents a scalable EdTech solution that pragmatically automates pedagogical steps for High School Computer Science. It empirically affirms the capability of hybrid retrieval architectures coupled with multi-agent orchestration to mitigate language model hallucinations structurally. This establishes a firm foundation for deploying proactive, personalized learning ecosystems in Vietnam.
 
 \end{document}
