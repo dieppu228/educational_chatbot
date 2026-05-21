@@ -67,6 +67,9 @@ class ContentPipelineInput:
             "reflection_attempts": 0,
             "revision_instruction": None,
             "quality_blocked": False,
+            "agent_tasks": [],
+            "agent_results": [],
+            "artifacts": {},
             # ── Output (graph sẽ populate) ──
             "merged_slides": None,
             "final_output": None,

@@ -10,11 +10,12 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from src.llm.graphs.state import ContentSupervisorState
 from src.llm.graphs.tools import ALL_TOOLS, TOOL_STATE_MAPPING
+from src.schemas.agent_protocol import is_agent_task_result
 
 # ── Config ──
 RECURSION_LIMIT = 25
 MAX_REFLECTION_ATTEMPTS = 1
-REVISION_ACTIONS = {"revise_outline", "revise_content"}
+REVISION_ACTIONS = {"revise_outline", "revise_content", "revise_quiz"}
 
 
 # ════════════════════════════════════════════════════════
@@ -23,8 +24,9 @@ REVISION_ACTIONS = {"revise_outline", "revise_content"}
 
 SUPERVISOR_SYSTEM_PROMPT = """Bạn là Content Supervisor — điều phối viên tạo nội dung giáo dục.
 
-NHIỆM VỤ: Điều phối các công cụ (tools) để tạo {task_description}.
-Bạn KHÔNG tự viết nội dung. Bạn CHỈ quyết định gọi tool nào, với tham số gì, theo thứ tự nào.
+NHIỆM VỤ: Điều phối các specialist agent để tạo {task_description}.
+Bạn KHÔNG tự viết nội dung. Bạn CHỈ quyết định delegate task nào, cho agent nào, theo thứ tự nào.
+Các tool được bind dưới đây là adapter để gửi AgentTask và nhận AgentTaskResult từ specialist agents.
 
 THÔNG TIN BÀI HỌC:
 - Chủ đề: {topic}
@@ -34,20 +36,20 @@ THÔNG TIN BÀI HỌC:
 === BỐI CẢNH KIẾN THỨC (để bạn hiểu phạm vi bài học, KHÔNG dùng để tự sinh nội dung) ===
 {synthesized_context}
 
-CÔNG CỤ CÓ SẴN:
-1. generate_outline — Thiết kế dàn ý (GỌI ĐẦU TIÊN, bắt buộc). Sub-agent sẽ dùng tài liệu gốc để tạo outline.
-2. generate_content — Viết nội dung chi tiết (cần outline trước). Sub-agent sẽ dùng tài liệu gốc.
-3. generate_media — Gợi ý media minh họa (tùy chọn)
-4. generate_quiz — Sinh câu hỏi luyện tập (tùy chọn)
-5. merge_results — Ghép tất cả thành slides hoàn chỉnh (sau khi có outline + content)
-6. check_quality — Kiểm tra chất lượng cuối (sau merge)
+AGENT ADAPTERS CÓ SẴN:
+1. generate_outline — Delegate cho PedagogyPlannerAgent thiết kế dàn ý (GỌI ĐẦU TIÊN, bắt buộc).
+2. generate_content — Delegate cho ContentDraftingAgent viết nội dung chi tiết cho slide/section giáo án (cần outline trước).
+3. generate_media — Delegate cho MediaResearchAgent gợi ý media minh họa (tùy chọn).
+4. generate_quiz — Delegate cho ContentAssessmentAgent sinh đánh giá nhúng trong slide/giáo án (tùy chọn, KHÔNG phải quiz standalone).
+5. merge_results — Deterministic service ghép tất cả artifacts thành slides hoàn chỉnh (sau khi có outline + content).
+6. check_quality — Delegate cho QualityReviewerAgent kiểm tra chất lượng cuối (sau merge).
 
 QUY TẮC NGHIÊM NGẶT:
 - LUÔN gọi generate_outline TRƯỚC TIÊN
 - generate_content CHỈ được gọi SAU KHI outline đã có
 - merge_results CHỈ được gọi SAU KHI có outline + content
 - check_quality CHỈ được gọi SAU merge_results
-- Nếu một tool trả về lỗi, KHÔNG retry quá 1 lần
+- Nếu một agent trả về lỗi, KHÔNG retry quá 1 lần
 - Sau check_quality thành công, KHÔNG gọi thêm tool nào nữa — trả lời tóm tắt kết quả
 
 THỨ TỰ KHUYẾN NGHỊ:
@@ -189,6 +191,20 @@ def supervisor_node(state: ContentSupervisorState) -> dict:
 
 def post_tool_processor(state: ContentSupervisorState) -> dict:
     updates = {}
+    processed_state_keys = set()
+    agent_results = list(state.get("agent_results", []))
+    agent_tasks = list(state.get("agent_tasks", []))
+    artifacts = dict(state.get("artifacts", {}))
+    seen_results = {
+        (r.get("task_id"), r.get("agent_id"))
+        for r in agent_results
+        if isinstance(r, dict)
+    }
+    seen_tasks = {
+        t.get("task_id")
+        for t in agent_tasks
+        if isinstance(t, dict)
+    }
 
     # Scan messages từ cuối lên, tìm ToolMessages mới nhất
     for msg in reversed(state.get("messages", [])):
@@ -199,16 +215,39 @@ def post_tool_processor(state: ContentSupervisorState) -> dict:
         if tool_name and tool_name in TOOL_STATE_MAPPING:
             state_key = TOOL_STATE_MAPPING[tool_name]
             # Chỉ update nếu chưa có (lấy kết quả mới nhất)
-            if state_key not in updates:
+            if state_key not in processed_state_keys:
+                processed_state_keys.add(state_key)
                 try:
                     parsed = json.loads(msg.content)
-                    # Bỏ qua kết quả lỗi
-                    if isinstance(parsed, dict) and parsed.get("status") != "failed":
+                    if is_agent_task_result(parsed):
+                        result_key = (parsed.get("task_id"), parsed.get("agent_id"))
+                        if result_key not in seen_results:
+                            agent_results.append(parsed)
+                            seen_results.add(result_key)
+
+                        task = parsed.get("task")
+                        if isinstance(task, dict) and task.get("task_id") not in seen_tasks:
+                            agent_tasks.append(task)
+                            seen_tasks.add(task.get("task_id"))
+
+                        artifact_type = parsed.get("artifact_type") or state_key
+                        artifact = parsed.get("artifact") or {}
+                        if parsed.get("status") != "failed" or artifact:
+                            artifacts[artifact_type] = artifact
+                            updates[state_key] = artifact
+                    # Bỏ qua kết quả lỗi legacy
+                    elif isinstance(parsed, dict) and parsed.get("status") != "failed":
+                        artifacts[state_key] = parsed
                         updates[state_key] = parsed
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-
+    if agent_results != list(state.get("agent_results", [])):
+        updates["agent_results"] = agent_results
+    if agent_tasks != list(state.get("agent_tasks", [])):
+        updates["agent_tasks"] = agent_tasks
+    if artifacts != dict(state.get("artifacts", {})):
+        updates["artifacts"] = artifacts
 
     return updates
 
@@ -267,6 +306,11 @@ def reflection_decision_node(state: ContentSupervisorState) -> dict:
         elif action == "revise_content":
             updates.update({
                 "content_payload": None,
+                "merged_slides": None,
+            })
+        elif action == "revise_quiz":
+            updates.update({
+                "quiz_payload": None,
                 "merged_slides": None,
             })
         return updates

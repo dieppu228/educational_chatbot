@@ -262,6 +262,7 @@ class SlideService:
         quality_review = result.get("quality_review")
         reflection_attempts = int(result.get("reflection_attempts") or 0)
         lesson_title = outline.get("lesson_title", "") if isinstance(outline, dict) else ""
+        agent_results_summary = self._summarize_agent_results(result.get("agent_results"))
 
         if result.get("quality_blocked") or self.should_block_by_quality(quality_review):
             reason = (
@@ -315,6 +316,7 @@ class SlideService:
             "total_slides": total_slides,
             "quality_review": quality_review,
             "reflection_attempts": reflection_attempts,
+            "agent_results": agent_results_summary,
             "_interrupt": False,
             "_task_type": task_type,
         }
@@ -357,6 +359,7 @@ class SlideService:
             total_slides=total_slides,
             lesson_title=lesson_title,
             exercises_extracted=exercise_count,
+            agent_results=len(agent_results_summary),
         )
         if isinstance(quality_review, dict):
             ctx.add_debug_step(
@@ -370,6 +373,27 @@ class SlideService:
                 reflection_attempts=reflection_attempts,
                 issues=quality_review.get("issues", []),
             )
+
+    @staticmethod
+    def _summarize_agent_results(agent_results) -> list:
+        if not isinstance(agent_results, list):
+            return []
+
+        summary = []
+        for result in agent_results:
+            if not isinstance(result, dict):
+                continue
+            summary.append({
+                "task_id": result.get("task_id"),
+                "agent_id": result.get("agent_id"),
+                "status": result.get("status"),
+                "artifact_type": result.get("artifact_type"),
+                "confidence": result.get("confidence"),
+                "used_tools": result.get("used_tools") or [],
+                "latency_ms": result.get("latency_ms"),
+                "error_code": result.get("error_code"),
+            })
+        return summary
 
     # ────────────────────────────────────────────────────────
     # DISPLAY FORMATTERS
