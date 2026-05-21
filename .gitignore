@@ -72,4 +72,5 @@ slide_generate_instructions.md
 
 
 .commandcode/
-docs/
+docs/*
+!docs/multi_agent_slide_lesson_plan_refactor.md

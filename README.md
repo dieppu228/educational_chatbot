@@ -11,8 +11,8 @@ The system aims to provide a tool that automates complex academic tasks, serving
 - **Knowledge Query (QA):** Answer questions based on a standardized textbook corpus (Canh Dieu and Ket Noi Tri Thuc).
 - **Extraction and Question Generation (Quiz Generation):** Automatically initialize exercise systems in various formats (Multiple choice, Fill-in-the-blank, True/False, Essay) with customizable quantity and difficulty.
 - **Evaluation and Scoring (Answer Scoring):** Automatically score answers and provide reasoning for corrections based on actual context instead of just keyword matching.
-- **Lecture Structure Generation (Slide/Lesson Plan Generation):** Convert text content into summary structures for creating presentations or lesson plans.
-- **Media & Resource Search:** Utilize a Web Search Tool via MCP to allow the Media Agent (in Slide Service) to fetch relevant real-time images and multimedia resources from the Internet to enrich presentations.
+- **Lecture Structure Generation (Slide/Lesson Plan Generation):** Generate grounded slide decks or lesson-plan sections through a shared multi-agent content pipeline.
+- **Media & Resource Suggestion:** Use a dedicated Media Research Agent to propose relevant visuals for generated teaching artifacts. MCP-backed image search is planned as an extension point.
 
 ---
 
@@ -52,28 +52,43 @@ The system is engineered around a Clean Architecture approach with a **Thin Pipe
         │    Separator injected between multi-action outputs│
         └────────────────────┬──────────────────────────────┘
                              ▼
-    ┌────────────────────────────────┐       ┌────────────────────────────────────────┐
-    │       Domain Services          │──────▶│    3. Unified MCP Tool Architecture    │
-    │                                │       │                                        │
-    │ • QuizService  (Generate,      │       │ [MCPToolClient] ──▶ [MCPToolServer]    │
-    │   Score, Review, Stats)        │       │                           │            │
-    │ • SlideService (Slides,        │       │             ┌─────────────┴──────────┐ │
-    │   Lesson Plans)                │       │             ▼                        ▼ │
-    │ • Handlers: Explain, Chat,     │       │ [KnowledgeRetrievalTool] [WebSearchTool]│
-    │   Fallback                     │       │             │                        │ │
-    │                                │       │             ▼                        ▼ │
-    │                                │       │     [AdaptiveRAGAgent]   [Media Agent] │
-    └───────────────┬────────────────┘       └────────────────────────────────────────┘
-                    │
-                    ▼
-    ┌───────────────────────────┐
-    │  4. Generation & Validator│
-    │                           │
-    │ • Generator LLM Call      │
-    │ • QuestionValidator Agent │
-    │   (Self-Reflection loop)  │
-    └──────────────┬────────────┘
-                   ▼
+    ┌───────────────────────────────────────────────────────────────────────────┐
+    │                         3. Domain Services                               │
+    │                                                                           │
+    │ • QuizService: standalone quiz generation, scoring, review, stats         │
+    │ • SlideService: shared content pipeline for slides + lesson plans         │
+    │ • Handlers: Explain, Chat, Fallback                                       │
+    └────────────────────────────────────┬──────────────────────────────────────┘
+                                         ▼
+    ┌───────────────────────────────────────────────────────────────────────────┐
+    │             4. Content Multi-Agent Pipeline (Slide/Lesson Plan)           │
+    │                                                                           │
+    │ [ContentSupervisor / LangGraph]                                           │
+    │      │                                                                    │
+    │      ├── AgentTask ─▶ PedagogyPlannerAgent      ─▶ outline_payload        │
+    │      ├── AgentTask ─▶ ContentDraftingAgent      ─▶ content_payload        │
+    │      ├── AgentTask ─▶ MediaResearchAgent        ─▶ media_payload          │
+    │      ├── AgentTask ─▶ ContentAssessmentAgent    ─▶ embedded assessment    │
+    │      ├── deterministic merge_results service    ─▶ merged_slides         │
+    │      └── AgentTask ─▶ QualityReviewerAgent      ─▶ quality_review         │
+    │                                                                           │
+    │ Communication contract: AgentTask -> AgentTaskResult -> artifacts         │
+    └────────────────────────────────────┬──────────────────────────────────────┘
+                                         ▼
+    ┌───────────────────────────────────────────────────────────────────────────┐
+    │                   5. Tool / Retrieval Capability Layer                    │
+    │                                                                           │
+    │ [RAGService] -> [AdaptiveRAGAgent] -> Hybrid Search / HRAG / Reranker     │
+    │ [MCPToolClient/MCPToolServer] -> optional external tools                  │
+    └────────────────────────────────────┬──────────────────────────────────────┘
+                                         ▼
+    ┌───────────────────────────────────────────────────────────────────────────┐
+    │                  6. Generation, Validation & Reflection                   │
+    │                                                                           │
+    │ • QuizService: Generator -> QualityReviewer -> QuestionValidator          │
+    │ • Content pipeline: Specialist Agents -> Merge -> QualityReviewerAgent    │
+    └────────────────────────────────────┬──────────────────────────────────────┘
+                                         ▼
 ┌───────────────────────────────────────────────────────────────────────────┐
 │   Streamed Response  ──▶  TraceService log  ──▶  SessionStore Auto-Save   │
 └───────────────────────────────────────────────────────────────────────────┘
@@ -95,13 +110,45 @@ To optimize latency, all post-routing logic is entirely rule-based — zero addi
 2. **ActionPlanner** (`plan_all()`): Maps the full `List[IntentResult]` → `List[ActionPlan]` using pure rule-based logic. Deduplicates consecutive identical actions. Each `ActionPlan` contains an `Action` enum (e.g., `GENERATE_QUIZ`, `GENERATE_SLIDE`, `EXPLAIN_CONCEPT`) and execution metadata.
 3. **Agentic Multi-Action Loop**: The Orchestrator iterates over all `ActionPlan`s. For each iteration, `ctx.intent_result` is swapped to align with the current sub-task before delegating to the `ExecutionDispatcher`. Multi-action outputs are separated by a visual delimiter in the streamed response.
 
-### 2.3. Domain Services & Unified MCP Tool Architecture
+### 2.3. Domain Services
 
-Each dispatched action flows into its respective **Domain Service** (`QuizService`, `SlideService`) or **Handler** (`ExplainHandler`, `ChatHandler`). To standardize communication between the Agents and their execution capabilities, the system employs the **Model Context Protocol (MCP)** as a unified layer. Instead of tightly coupling with specific modules, Domain Services act as Agents utilizing the `MCPToolClient` to request tools. The request is processed by the `MCPToolServer` and `ToolRegistry`.
+Each dispatched action flows into its respective **Domain Service** (`QuizService`, `SlideService`) or **Handler** (`ExplainHandler`, `ChatHandler`).
 
-Currently, the system provides two primary tools via MCP:
-1. **`knowledge_retrieval`**: Wraps the decoupled `RAGService` to extract textbook knowledge for Quiz and Content generation workflows.
-2. **`web_search`**: Empowers the **Media Agent** (specifically within the `SlideService`) to search the web for relevant images and multimedia resources to enhance lecture presentations.
+- **QuizService** owns the standalone quiz lifecycle: generation, validation, answer scoring, review wrong questions, statistics, and `StudentTracker` updates. This stateful interaction layer stays service-based for maintainability.
+- **SlideService** owns HITL resume, session persistence, display formatting, and delegates slide/lesson-plan generation to the content multi-agent pipeline.
+- **Explain/Chat/Fallback handlers** execute narrower conversational tasks with RAG context when needed.
+
+### 2.4. Content Multi-Agent Pipeline for Slide & Lesson Plan
+
+Slide and lesson-plan generation share the same business workflow, so both are handled by one `ContentSupervisor` LangGraph pipeline. The difference is passed through `task_type` (`"slide"` or `"lesson_plan"`) and prompt/template constraints, not by duplicating supervisors.
+
+Supervisor-sub-agent communication uses an internal A2A-lite contract:
+
+```text
+ContentSupervisor
+  ── AgentTask ──▶ Specialist Agent
+  ◀─ AgentTaskResult ── artifact + metadata
+```
+
+The specialist agents are:
+
+1. **`PedagogyPlannerAgent`**: creates the learning outline and sequence.
+2. **`ContentDraftingAgent`**: writes detailed slide content or lesson-plan sections from outline and source chunks.
+3. **`MediaResearchAgent`**: proposes visual/media metadata. MCP-backed search can be plugged in later.
+4. **`ContentAssessmentAgent`**: creates embedded assessment for the generated teaching artifact. This is not the standalone quiz flow.
+5. **`QualityReviewerAgent`**: checks factuality, coverage, pedagogy, and format after merge.
+
+`merge_results` remains a deterministic service/tool, not an agent. The graph records `agent_tasks`, `agent_results`, and an `artifacts` registry in `ContentSupervisorState`; `SlideService` persists only compact agent execution summaries in the session.
+
+### 2.5. Retrieval and MCP Tool Layer
+
+`RAGService` remains the main retrieval interface consumed by domain services. The codebase also includes an in-process MCP tool architecture (`MCPToolClient`, `MCPToolServer`, `ToolRegistry`) for standardized tool calls and future external capabilities.
+
+Current tool candidates include:
+
+1. **`knowledge_retrieval`**: wraps `RAGService` as a reusable tool.
+2. **`content_formatter`**: formats chunks for downstream LLM prompts.
+3. **`web_search`**: extension point for media/resource search.
 
 The internal `AdaptiveRAGAgent` classifies the query using a heuristic-based `QueryClassifier` (no LLM) and selects the optimal retrieval strategy:
 
@@ -112,12 +159,15 @@ The internal `AdaptiveRAGAgent` classifies the query using a heuristic-based `Qu
 
 After retrieval, a **ContextCombiner** formats the retrieved chunks in a task-aware manner: grouping by topic/lesson for generative tasks (slides, lesson plans) or sorting by relevance score for targeted tasks (MCQ, explanation).
 
-### 2.4. Generation & Self-Reflection
+### 2.6. Generation & Self-Reflection
 
 Filtered and reranked contexts act as the grounded information provided to the **Generator LLMs**.
-Outputs corresponding to structured formats (e.g., Quiz JSON Arrays, Raw HTML Slides) are intercepted by a recursive **Self-Reflection mechanism** using the `QuestionValidator` Agent. This agent scrutinizes accuracy and cross-checks the response against original textbook contexts and strict evaluation rubrics, optionally looping regeneration until rigid logical standards and quality benchmarks are fully met.
+Outputs corresponding to structured formats are intercepted by quality layers:
 
-### 2.5. RAGAS Evaluation Pipeline
+- Standalone quiz generation uses `QualityReviewer` and `QuestionValidator` before persisting `QuizRound` and `QuestionRecord`.
+- Slide/lesson-plan generation uses `QualityReviewerAgent` after merging artifacts. If the reviewer requests revision, the supervisor routes back to the responsible specialist artifact (`outline`, `content`, or embedded assessment).
+
+### 2.7. RAGAS Evaluation Pipeline
 
 To quantitatively evaluate the RAG system's performance, the project integrates an independent automated evaluation pipeline:
 
@@ -146,11 +196,24 @@ src/
 │   ├── knowledge_map.py        # Knowledge Map: maps topic/lesson metadata for curriculum queries.
 │   ├── student_profile.py      # Student Profile: tracks per-user learning history & performance stats.
 │   ├── student_tracker.py      # Tracker: lightweight wrapper for profile update events.
+│   ├── agents/                 # A2A-lite specialist agents for content generation:
+│   │   ├── base.py             # BaseAgent: AgentTask -> AgentTaskResult contract.
+│   │   ├── slide_planner.py    # PedagogyPlannerAgent: outline and learning sequence.
+│   │   ├── content_drafting.py # ContentDraftingAgent: slide/lesson-plan section drafting.
+│   │   ├── content_assessment.py # ContentAssessmentAgent: embedded assessment for content artifacts.
+│   │   ├── media_research.py   # MediaResearchAgent: visual/media suggestions.
+│   │   └── quality.py          # QualityReviewerAgent: artifact quality review.
+│   ├── graphs/                 # LangGraph content supervisor pipeline:
+│   │   ├── state.py            # ContentSupervisorState: messages, artifacts, agent logs.
+│   │   ├── tools.py            # Agent dispatch adapters + deterministic merge tool.
+│   │   └── content_supervisor.py # Supervisor routing, HITL, reflection, quality loop.
 │   ├── validators/             # Self-Reflection Module:
 │   │   └── question_validator.py  # Validates generated questions against source context & rubrics.
 │   ├── services/               # Domain Services (high-level orchestration per task type):
 │   │   ├── quiz_service.py     # QuizService: orchestrates Generate, Score, Review, Stats workflows.
-│   │   └── slide_service.py    # SlideService: orchestrates Slide & Lesson Plan generation workflows.
+│   │   ├── slide_service.py    # SlideService: HITL/session facade for slide & lesson-plan workflows.
+│   │   ├── slide_merger.py     # Deterministic merge of outline/content/media/assessment artifacts.
+│   │   └── quality_reviewer.py # Shared quality reviewer wrappers.
 │   └── handlers/               # Atomic Task Executors:
 │       ├── base_handler.py     # Abstract base: shared interface for all handlers.
 │       ├── chat_handler.py     # Free-form conversational chat.
@@ -159,10 +222,9 @@ src/
 │       ├── question/           # Question-type cluster:
 │       │   ├── mcq_handler.py, essay_handler.py, fill_handler.py, true_false_handler.py
 │       │   └── scorer.py       # Context-aware answer grading with rubric comparison.
-│       └── content/            # Long-form content generation:
-│           ├── slide_handler.py        # Generates structured HTML slide presentations.
-│           ├── slide_template.py       # HTML/CSS template engine for slides.
-│           └── lesson_plan_handler.py  # Generates structured lesson plans.
+│       └── content/            # Long-form content implementation workers:
+│           ├── lesson_plan_handler.py  # Legacy lesson-plan handler.
+│           └── slide_agents/           # Worker classes wrapped by src/llm/agents adapters.
 │
 ├── tools/                      # MODEL CONTEXT PROTOCOL (MCP) ARCHITECTURE
 │   ├── base_tool.py            # Base interface for all tools
@@ -173,7 +235,7 @@ src/
 │   └── implementations/        # Concrete tool implementations:
 │       ├── tool_registry.py    # Registry managing available tools
 │       ├── knowledge_retrieval_tool.py # Wraps RAGService as an MCP Tool
-│       ├── web_search_tool.py          # Provides Web Search capability for the Media Agent
+│       ├── web_search_tool.py          # Extension point for web/media search
 │       └── content_formatter_tool.py   # Utility formatting tool
 │
 ├── rag/                        # ADVANCED RAG PIPELINE
@@ -186,8 +248,10 @@ src/
 │   └── chunking.py             # Data Engineering: Markdown → Hierarchical chunk tree (Level 1-4).
 │
 ├── schemas/                    # DATA CONTRACTS & TYPE DEFINITIONS
+│   ├── agent_protocol.py       # A2A-lite AgentTask / AgentTaskResult contracts.
 │   ├── context.py              # RequestContext: the central state object flowing through the pipeline.
 │   ├── llm_outputs.py          # Typed LLM output schemas (Quiz, Slide, LessonPlan structures).
+│   ├── slide_schemas.py        # Content pipeline payloads and merged slide contracts.
 │   └── rag_outputs.py          # Typed RAG output schemas (RAGResult, QueryProfile).
 │
 ├── evaluation/                 # RAGAS EVALUATION PIPELINE
@@ -215,7 +279,7 @@ The system is developed in separate modules to ensure high scalability.
 **1. Core LLM & Orchestration:**
 
 - **Language Model:** Google Gemini (`gemini-2.5-pro` & `gemini-2.5-flash`) via `google-genai` SDK.
-- **Agent Management:** Object-Oriented Python (OOP) builds an internal State Machine architecture instead of heavy frameworks.
+- **Agent Management:** LangGraph coordinates the content supervisor; internal A2A-lite `AgentTask` / `AgentTaskResult` contracts connect the supervisor with specialist agents.
 
 **2. Retrieval & Vector Core:**
 
