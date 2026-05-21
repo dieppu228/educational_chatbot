@@ -1,9 +1,12 @@
 import json
+import logging
 import numpy as np
 import torch
 from pathlib import Path
 from typing import List, Optional
 from sentence_transformers import SentenceTransformer
+
+logger = logging.getLogger("chatbot")
 
 
 # ============================================================
@@ -35,10 +38,43 @@ class EmbeddingModel:
                     trust_remote_code=True,
                     device=self.device
                 )
+                self._repair_position_ids()
                 print(f"Model loaded on {self.device}")
             except Exception:
                 self.load_failed = True
                 raise
+
+    def _repair_position_ids(self):
+        transformer = self.model._modules.get("0") if hasattr(self.model, "_modules") else None
+        auto_model = getattr(transformer, "auto_model", None)
+        embeddings = getattr(auto_model, "embeddings", None)
+        position_ids = getattr(embeddings, "position_ids", None)
+        config = getattr(auto_model, "config", None)
+        max_positions = getattr(config, "max_position_embeddings", None)
+
+        if position_ids is None or max_positions is None:
+            return
+
+        expected_prefix = torch.arange(
+            min(8, max_positions),
+            device=position_ids.device,
+            dtype=position_ids.dtype,
+        )
+        current_prefix = position_ids[: expected_prefix.numel()]
+        if torch.equal(current_prefix, expected_prefix):
+            return
+
+        repaired = torch.arange(
+            max_positions,
+            device=position_ids.device,
+            dtype=torch.long,
+        )
+        embeddings.register_buffer("position_ids", repaired, persistent=False)
+        logger.warning(
+            "Repaired embedding model position_ids buffer | model=%s max_positions=%s",
+            self.model_name,
+            max_positions,
+        )
     
     def encode(self, texts: List[str], show_progress: bool = True) -> np.ndarray:
         self._load_model()

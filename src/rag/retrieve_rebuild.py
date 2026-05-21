@@ -15,11 +15,21 @@ except ImportError:
     _HAS_UNDERTHESEA = False
 
 logger = logging.getLogger("chatbot")
+SCOPED_SEARCH_GUARD_VERSION = "scoped-search-guard-v2"
 
 
 class CustomSearch:
     
-    def __init__(self, chunks_path: str, embeddings_path: str, k1: float = 1.2, b: float = 0.75, rrf_k: int = 60):
+    def __init__(
+        self,
+        chunks_path: str,
+        embeddings_path: str,
+        k1: float = 1.2,
+        b: float = 0.75,
+        rrf_k: int = 60,
+        bm25_sigmoid_threshold: float = 0.35,
+        bm25_sigmoid_iqr_scale: float = 0.5,
+    ):
         # === Load data ===
         with open(chunks_path, 'r', encoding='utf-8') as f:
             self.chunks = json.load(f)
@@ -33,6 +43,9 @@ class CustomSearch:
         self.k1 = k1
         self.b = b
         self.rrf_k = rrf_k
+        self.bm25_sigmoid_threshold = bm25_sigmoid_threshold
+        self.bm25_sigmoid_iqr_scale = bm25_sigmoid_iqr_scale
+        self.last_search_stats: Dict[str, int] = {}
         
         # === Tokenize corpus + tính BM25 stats ===
         logger.info(f"Tokenizing {self.corpus_size} docs with {'underthesea' if _HAS_UNDERTHESEA else 'split()'}...")
@@ -49,6 +62,13 @@ class CustomSearch:
         
         print(f"CustomSearch initialized: {self.corpus_size} docs, "
               f"vocab={len(self.df)}, avgdl={self.avgdl:.1f}")
+        logger.info(
+            "CustomSearch ready | source=%s guard=%s chunks=%s embeddings=%s",
+            __file__,
+            SCOPED_SEARCH_GUARD_VERSION,
+            self.corpus_size,
+            self.embeddings.shape,
+        )
     
     @property
     def model(self):
@@ -109,6 +129,18 @@ class CustomSearch:
             score += idf_val * (numerator / denominator)
         
         return score
+
+    def _normalize_bm25_scores(self, scores: np.ndarray) -> np.ndarray:
+        if scores.size == 0:
+            return scores
+        positive_scores = scores[scores > 0]
+        base_scores = positive_scores if positive_scores.size > 0 else scores
+        median = float(np.median(base_scores))
+        q1 = float(np.percentile(base_scores, 25))
+        q3 = float(np.percentile(base_scores, 75))
+        iqr = max(q3 - q1, 1e-6)
+        scale = max(self.bm25_sigmoid_iqr_scale * iqr, 1e-6)
+        return 1.0 / (1.0 + np.exp(-(scores - median) / scale))
     
     # ============================================================
     # SEARCH METHODS
@@ -117,15 +149,20 @@ class CustomSearch:
     def _bm25_search(self, query: str, top_n: int = 30) -> List[Tuple[int, float]]:
         query_tokens = self._tokenize(query)
         
-        scores = np.array([
+        raw_scores = np.array([
             self._bm25_score_doc(query_tokens, i)
             for i in range(self.corpus_size)
-        ])
+        ], dtype=np.float64)
+        norm_scores = self._normalize_bm25_scores(raw_scores)
         
         top_n = min(top_n, self.corpus_size)
-        top_indices = np.argsort(scores)[::-1][:top_n]
+        top_indices = np.argsort(norm_scores)[::-1]
+        filtered_indices = [
+            int(idx) for idx in top_indices
+            if float(norm_scores[idx]) >= self.bm25_sigmoid_threshold
+        ][:top_n]
         
-        return [(int(idx), float(scores[idx])) for idx in top_indices]
+        return [(idx, float(norm_scores[idx])) for idx in filtered_indices]
     
     def _semantic_search(self, query: str, top_n: int = 30) -> List[Tuple[int, float]]:
         query_embedding = self.model.encode_query(query)
@@ -166,6 +203,13 @@ class CustomSearch:
             logger.warning(f"Semantic search failed, falling back to BM25 only: {e}")
             semantic_results = []
         combined = self._rrf_combine(bm25_results, semantic_results, top_k=top_k)
+        self.last_search_stats = {
+            "mode": "search",
+            "scope_size": self.corpus_size,
+            "bm25_chunks": len(bm25_results),
+            "vector_chunks": len(semantic_results),
+            "combined_chunks": len(combined),
+        }
         
         return [
             {
@@ -236,6 +280,7 @@ class CustomSearch:
         if not doc_indices:
             return []
 
+        doc_indices_arr = np.asarray(doc_indices, dtype=np.int64)
         top_n = min(top_n, len(doc_indices))
 
         # === BM25 scoped ===
@@ -244,26 +289,68 @@ class CustomSearch:
         for i in doc_indices:
             score = self._bm25_score_doc(query_tokens, i)
             bm25_scored.append((i, score))
-        bm25_scored.sort(key=lambda x: x[1], reverse=True)
-        bm25_results = bm25_scored[:top_n]
+        bm25_doc_ids = [doc_id for doc_id, _ in bm25_scored]
+        bm25_raw_scores = np.array([score for _, score in bm25_scored], dtype=np.float64)
+        bm25_norm_scores = self._normalize_bm25_scores(bm25_raw_scores)
+        bm25_scored_norm = [
+            (int(doc_id), float(norm_score))
+            for doc_id, norm_score in zip(bm25_doc_ids, bm25_norm_scores)
+            if float(norm_score) >= self.bm25_sigmoid_threshold
+        ]
+        bm25_scored_norm.sort(key=lambda x: x[1], reverse=True)
+        bm25_results = bm25_scored_norm[:top_n]
 
         # === Semantic scoped ===
         try:
-            query_embedding = self.model.encode_query(query)
+            query_embedding = np.asarray(self.model.encode_query(query), dtype=np.float32)
+            if query_embedding.ndim > 1:
+                query_embedding = query_embedding.reshape(-1)
+
             # Chỉ tính cosine trên subset
-            subset_embeddings = self.embeddings[doc_indices]
-            scores = np.dot(subset_embeddings, query_embedding)
+            subset_embeddings = np.asarray(self.embeddings[doc_indices_arr], dtype=np.float32)
+            if subset_embeddings.ndim != 2:
+                raise ValueError(f"Scoped embedding shape invalid: {subset_embeddings.shape}")
+            if subset_embeddings.shape[1] != query_embedding.shape[0]:
+                raise ValueError(
+                    "Scoped embedding dimension mismatch: "
+                    f"docs={subset_embeddings.shape}, query={query_embedding.shape}"
+                )
+
+            scores = np.dot(subset_embeddings, query_embedding).reshape(-1)
+
+            if scores.shape[0] != len(doc_indices_arr):
+                raise ValueError(
+                    f"Scoped semantic score shape mismatch: scores={scores.shape}, docs={len(doc_indices_arr)}"
+                )
+
             # Map lại về global indices
             local_top = np.argsort(scores)[::-1][:top_n]
+            local_top = np.asarray(local_top, dtype=np.int64).reshape(-1)
             semantic_results = [
-                (doc_indices[li], float(scores[li])) for li in local_top
+                (int(doc_indices_arr[li]), float(scores[li])) for li in local_top
             ]
         except Exception as e:
-            logger.warning(f"Scoped semantic search failed, falling back to BM25 only: {e}")
+            logger.warning(
+                "Scoped semantic search failed [%s], falling back to BM25 only: "
+                "scope_size=%s top_n=%s embeddings=%s error=%s",
+                SCOPED_SEARCH_GUARD_VERSION,
+                len(doc_indices_arr),
+                top_n,
+                getattr(self.embeddings, "shape", None),
+                e,
+                exc_info=True,
+            )
             semantic_results = []
 
         # === RRF ===
         combined = self._rrf_combine(bm25_results, semantic_results, top_k=top_k)
+        self.last_search_stats = {
+            "mode": "search_scoped",
+            "scope_size": len(doc_indices_arr),
+            "bm25_chunks": len(bm25_results),
+            "vector_chunks": len(semantic_results),
+            "combined_chunks": len(combined),
+        }
 
         return [
             {

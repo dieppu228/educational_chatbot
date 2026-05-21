@@ -1,10 +1,13 @@
 import time
 import re
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List, Dict
 
 from src.utils.trace_decorator import trace_node
+
+logger = logging.getLogger("chatbot")
 
 
 # ============================================================
@@ -228,7 +231,17 @@ class AdaptiveRAGAgent:
             results = self.retriever.search(query, top_k=self.settings.RETRIEVER_TOP_K)
         if not results:
             return []
-        return self.reranker.rerank(query, results, top_n=self.settings.RERANKER_TOP_N)
+        reranked = self.reranker.rerank(query, results, top_n=self.settings.RERANKER_TOP_N)
+        stats = getattr(self.retriever, "last_search_stats", {})
+        logger.info(
+            "RAG retrieve | strategy=standard bm25_chunks=%s vector_chunks=%s combined_chunks=%s reranked_chunks=%s final_chunks=%s",
+            stats.get("bm25_chunks", 0),
+            stats.get("vector_chunks", 0),
+            stats.get("combined_chunks", len(results)),
+            len(reranked) if reranked else 0,
+            len(reranked) if reranked else len(results),
+        )
+        return reranked
 
     def _broad_retrieval(self, query: str, profile: QueryProfile, book: str = None) -> List[Dict]:
         raw = self.retriever.search_by_metadata(
@@ -316,6 +329,7 @@ class AdaptiveRAGAgent:
         all_chunks = self.retriever.chunks
         # If book_indices provided, use as base scope
         scope_set = set(book_indices) if book_indices else None
+        scoped_topic = self._is_scoped_topic_search(profile, book_indices)
 
         # ── Phase 1: Coarse — tìm parents (Level 1-2) ──────────────
         parent_indices = []
@@ -334,18 +348,34 @@ class AdaptiveRAGAgent:
             if profile.topic_hint and self._matches_topic_hint(chunk, profile.topic_hint):
                 topic_parent_indices.append(i)
 
-        if self._is_scoped_topic_search(profile, book_indices):
+        logger.info(
+            "HRAG scope | grade=%s topic=%s book_scoped=%s parents=%s topic_parents=%s",
+            profile.grade,
+            profile.topic_hint,
+            book_indices is not None,
+            len(parent_indices),
+            len(topic_parent_indices),
+        )
+
+        if scoped_topic:
             if not topic_parent_indices:
+                logger.info("HRAG result | no topic parents in scope -> 0 chunks")
                 return []
             parent_indices = topic_parent_indices
 
         if not parent_indices:
             # HRAG Phase 1: no parent chunks found → fallback standard
+            logger.info("HRAG result | no parents -> 0 chunks")
             return []
 
         # Semantic search chỉ trên parents
         parent_results = self.retriever.search_scoped(
             query, doc_indices=parent_indices, top_k=3, top_n=min(30, len(parent_indices))
+        )
+        logger.info(
+            "HRAG phase1 | parent_candidates=%s parent_results=%s",
+            len(parent_indices),
+            len(parent_results),
         )
 
         # Extract parent keys: (topic_name, lesson_name)
@@ -371,7 +401,12 @@ class AdaptiveRAGAgent:
 
         if not child_indices:
             # HRAG Phase 2: no children found → returning parent chunks
-            return parent_results if not self._is_scoped_topic_search(profile, book_indices) else []
+            final = parent_results if not scoped_topic else []
+            logger.info(
+                "HRAG phase2 | child_candidates=0 final_chunks=%s",
+                len(final),
+            )
+            return final
 
 
 
@@ -384,13 +419,29 @@ class AdaptiveRAGAgent:
         )
 
         if not child_results:
+            logger.info(
+                "HRAG phase2 | child_candidates=%s child_results=0 final_chunks=%s",
+                len(child_indices),
+                len(parent_results),
+            )
             return parent_results
 
         # Rerank kết quả
         reranked = self.reranker.rerank(
             query, child_results, top_n=self.settings.RERANKER_TOP_N
         )
-        return reranked if reranked else child_results
+        final = reranked if reranked else child_results
+        stats = getattr(self.retriever, "last_search_stats", {})
+        logger.info(
+            "HRAG phase2 | child_candidates=%s child_results=%s bm25_chunks=%s vector_chunks=%s reranked=%s final_chunks=%s",
+            len(child_indices),
+            len(child_results),
+            stats.get("bm25_chunks", 0),
+            stats.get("vector_chunks", 0),
+            len(reranked) if reranked else 0,
+            len(final),
+        )
+        return final
 
     def _merge_deduplicate(self, primary: List[Dict], secondary: List[Dict]) -> List[Dict]:
         seen_ids = {c["doc_id"] for c in primary}

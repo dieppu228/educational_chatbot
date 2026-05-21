@@ -2,6 +2,7 @@ import asyncio
 import json
 import time
 import logging
+import re
 from typing import Generator, Optional, List, Dict, AsyncGenerator
 
 from src.schemas.context import RequestContext
@@ -17,6 +18,14 @@ from src.rag.rag_service import RAGService
 from src.utils.error_handling import safe_execute
 
 logger = logging.getLogger("chatbot.quiz_service")
+
+_QUERY_STOPWORDS = {
+    "cho", "tao", "tạo", "sinh", "cau", "câu", "hoi", "hỏi", "trac", "trắc",
+    "nghiem", "nghiệm", "dien", "điền", "khuyet", "khuyết", "ve", "về", "va",
+    "và", "he", "hệ", "quan", "quản", "tri", "trị", "co", "cơ", "so", "sở",
+    "du", "dữ", "lieu", "liệu", "mcq", "fill", "blank", "true", "false",
+    "hay", "bai", "bài", "lop", "lớp", "bo", "bộ", "sach", "sách",
+}
 
 
 class QuizService:
@@ -55,6 +64,20 @@ class QuizService:
 
         if ctx.scope_fallback_notice:
             yield ctx.scope_fallback_notice
+
+        if self._should_block_generation_for_irrelevant_context(ctx, query, contexts):
+            ctx.add_debug_step(
+                "QuizContextGuard",
+                status="blocked",
+                reason="fallback_context_not_relevant",
+                rag_chunks=len(contexts),
+            )
+            yield (
+                "Mình đã mở rộng tìm kiếm ra toàn bộ SGK nhưng vẫn chưa tìm thấy tài liệu "
+                "đủ liên quan tới yêu cầu này để tạo câu hỏi đáng tin cậy. "
+                "Bạn thử đổi sang chủ đề có trong SGK hoặc cung cấp thêm nội dung nguồn nhé."
+            )
+            return
 
         context_text = self.context_builder.build(
             query=query, chunks=contexts, action="generate_quiz"
@@ -118,10 +141,13 @@ class QuizService:
                 )
 
                 if quality_review.reflection_action in ("block", "ask_human") or not quality_review.passed:
-                    yield (
-                        f"Câu hỏi chưa đạt chất lượng ({quality_review.reason_fail}). "
-                        f"{quality_review.revision_instruction or quality_review.summary}"
+                    logger.warning(
+                        "Quality review failed: reason=%s summary=%s",
+                        quality_review.reason_fail,
+                        quality_review.summary,
                     )
+                    if attempt == max_retries - 1:
+                        yield "Câu hỏi chưa đạt chất lượng. Bạn thử hỏi cụ thể hơn hoặc cung cấp thêm tài liệu nguồn nhé."
                     continue
 
                 # Validate
@@ -444,6 +470,20 @@ class QuizService:
         if ctx.scope_fallback_notice:
             yield ctx.scope_fallback_notice
 
+        if self._should_block_generation_for_irrelevant_context(ctx, query, contexts):
+            ctx.add_debug_step(
+                "QuizContextGuard",
+                status="blocked",
+                reason="fallback_context_not_relevant",
+                rag_chunks=len(contexts),
+            )
+            yield (
+                "Mình đã mở rộng tìm kiếm ra toàn bộ SGK nhưng vẫn chưa tìm thấy tài liệu "
+                "đủ liên quan tới yêu cầu này để tạo câu hỏi đáng tin cậy. "
+                "Bạn thử đổi sang chủ đề có trong SGK hoặc cung cấp thêm nội dung nguồn nhé."
+            )
+            return
+
         context_text = await self.context_builder.build_async(
             query=query, chunks=contexts, action="generate_quiz"
         )
@@ -510,10 +550,13 @@ class QuizService:
                 )
 
                 if quality_review.reflection_action in ("block", "ask_human") or not quality_review.passed:
-                    yield (
-                        f"Câu hỏi chưa đạt chất lượng ({quality_review.reason_fail}). "
-                        f"{quality_review.revision_instruction or quality_review.summary}"
+                    logger.warning(
+                        "Quality review failed: reason=%s summary=%s",
+                        quality_review.reason_fail,
+                        quality_review.summary,
                     )
+                    if attempt == max_retries - 1:
+                        yield "Câu hỏi chưa đạt chất lượng. Bạn thử hỏi cụ thể hơn hoặc cung cấp thêm tài liệu nguồn nhé."
                     continue
 
                 # Validate (async)
@@ -670,6 +713,53 @@ class QuizService:
                 scorer_time_s=round(score_time, 2),
             )
             yield f"\nKhông thể xác định câu trả lời. {result.explanation or 'Vui lòng nói rõ hơn.'}"
+
+    def _should_block_generation_for_irrelevant_context(
+        self,
+        ctx: RequestContext,
+        query: str,
+        contexts: List[Dict],
+    ) -> bool:
+        if not ctx.scope_fallback_used or not contexts:
+            return False
+
+        terms = self._important_query_terms(query)
+        if ctx.intent_result and ctx.intent_result.topic:
+            terms.update(self._important_query_terms(ctx.intent_result.topic))
+
+        if not terms:
+            return False
+
+        joined = " ".join(
+            " ".join(
+                str(part or "")
+                for part in (
+                    chunk.get("content"),
+                    chunk.get("context"),
+                    chunk.get("metadata", {}).get("topic_name"),
+                    chunk.get("metadata", {}).get("lesson_name"),
+                )
+            ).lower()
+            for chunk in contexts
+        )
+        matches = {term for term in terms if term in joined}
+        logger.info(
+            "Quiz context relevance | terms=%s matches=%s fallback=%s",
+            sorted(terms),
+            sorted(matches),
+            ctx.scope_fallback_used,
+        )
+        return len(matches) == 0
+
+    @staticmethod
+    def _important_query_terms(text: str) -> set:
+        normalized = (text or "").lower()
+        tokens = re.findall(r"[a-zA-Z0-9À-ỹ]+", normalized)
+        return {
+            token
+            for token in tokens
+            if len(token) >= 3 and token not in _QUERY_STOPWORDS
+        }
 
     # ────────────────────────────────────────────────────────
     # REVIEW WRONG (async)
