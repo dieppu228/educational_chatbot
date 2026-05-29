@@ -226,13 +226,6 @@ Phần này mô tả các luồng hoạt động (Activity) cốt lõi của h�
 \subsubsection{Quy trình Hỏi đáp kiến thức SGK}
 Quy trình này diễn tả cách hệ thống xử lý khi học sinh hoặc giáo viên đặt các câu hỏi truy vấn về kiến thức môn học. Đây là quy trình áp dụng trực tiếp kiến trúc RAG (Retrieval-Augmented Generation).
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.85\textwidth]{Hinhve/Activity Diagram UC2.png}
-    \caption{Sơ đồ luồng hoạt động chức năng Hỏi đáp kiến thức SGK}
-    \label{fig:activity_hoidap}
-\end{figure}
-
 \textbf{Diễn giải quy trình:}
 \begin{itemize}
     \item \textbf{Bước 1 (Tiếp nhận):} Người dùng nhập truy vấn vào giao diện chat.
@@ -246,13 +239,6 @@ Quy trình này diễn tả cách hệ thống xử lý khi học sinh hoặc gi
 \subsubsection{Quy trình Khởi tạo bộ câu hỏi/bài tập}
 Giáo viên hoặc học sinh có thể yêu cầu hệ thống tạo ra một bài kiểm tra hoặc danh sách câu hỏi ôn tập dựa trên một chủ đề cụ thể.
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.85\textwidth]{Hinhve/Activity Diagram UC3.png}
-    \caption{Sơ đồ luồng hoạt động chức năng Khởi tạo bài tập}
-    \label{fig:activity_taobaitap}
-\end{figure}
-
 \textbf{Diễn giải quy trình:}
 \begin{itemize}
     \item \textbf{Bước 1 (Tiếp nhận yêu cầu):} Người dùng cung cấp tham số tạo bài tập (ví dụ: "Tạo 5 câu hỏi trắc nghiệm bài Mạng máy tính lớp 10").
@@ -264,13 +250,6 @@ Giáo viên hoặc học sinh có thể yêu cầu hệ thống tạo ra một b
 
 \subsubsection{Quy trình Sinh slide bài giảng và Giáo án (Kiến trúc Multi-Agent)}
 Đây là quy trình phức tạp nhất nhằm hỗ trợ giáo viên tự động hóa việc chuẩn bị tài liệu giảng dạy. Hệ thống sử dụng cơ chế chia để trị (Fan-out) với mô hình đa tác tử (Multi-Agent).
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{Hinhve/Activity Diagram UC5_6.png}
-    \caption{Sơ đồ luồng hoạt động chức năng Sinh slide và giáo án}
-    \label{fig:activity_sinhgiaoan}
-\end{figure}
 
 \textbf{Diễn giải quy trình:}
 \begin{itemize}
@@ -291,7 +270,7 @@ Giáo viên hoặc học sinh có thể yêu cầu hệ thống tạo ra một b
 Hệ thống Trợ lý ảo Giáo dục cần tuân thủ các yêu cầu phi chức năng sau để đảm bảo chất lượng và trải nghiệm người dùng:
 \begin{itemize}
     \item \textbf{Hiệu năng (Performance):} Hệ thống phản hồi các truy vấn RAG của người dùng trong khoảng thời gian lý tưởng dưới 5 giây. Đối với các tác vụ phức tạp như sinh slide, thời gian chờ tối đa không vượt quá 30 giây.
-    \item \textbf{Độ tin cậy (Reliability):} Các kiến thức và nội dung được tạo ra phải bám sát %100% nội dung sách giáo khoa (Grounded), giảm thiểu tối đa hiện tượng "ảo giác" (Hallucination) từ LLM.
+    \item \textbf{Độ tin cậy (Reliability):} Các kiến thức và nội dung được tạo ra phải bám sát 100\% nội dung sách giáo khoa (Grounded), giảm thiểu tối đa hiện tượng "ảo giác" (Hallucination) từ LLM.
     \item \textbf{Tính dễ dùng (Usability):} Giao diện người dùng (UI) cần hiển thị trực quan, thân thiện (dựa trên Gradio), giúp giáo viên và học sinh dễ dàng tương tác mà không cần qua đào tạo về công nghệ phức tạp.
     \item \textbf{Tính mở rộng và bảo trì (Scalability \& Maintainability):} Hệ thống được thiết kế theo kiến trúc module rời rạc thuần mã nguồn (Code-level Orchestrator), cho phép dễ dàng tích hợp thêm các Agent mới hoặc nâng cấp thư viện mà không làm gián đoạn hệ thống hiện tại.
 \end{itemize}

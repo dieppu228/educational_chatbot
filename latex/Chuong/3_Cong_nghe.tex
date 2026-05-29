@@ -1,290 +1,241 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Chương này tập trung trình bày các nền tảng kiến thức cốt lõi về Trí tuệ Nhân tạo (AI) và các kỹ thuật tiên tiến được áp dụng để xây dựng hệ thống Trợ lý ảo giáo dục. Các khái niệm được triển khai từ mức cơ bản đến chuyên sâu, bám sát vào những công nghệ thực tế đang được sử dụng trong dự án.
+Sau khi Chương 2 đã khảo sát nhu cầu và xác định các yêu cầu chính của hệ thống, chương này trình bày các nền tảng lý thuyết và công nghệ được sử dụng để xây dựng trợ lý ảo giáo dục. Trọng tâm của chương không phải là mô tả chi tiết mã nguồn, mà là làm rõ các khái niệm cần thiết để hiểu các quyết định thiết kế ở các chương sau. Nội dung được tổ chức từ nền tảng xử lý ngôn ngữ tự nhiên, mô hình ngôn ngữ lớn, truy xuất tăng cường sinh, đến các cơ chế điều phối, đa tác tử và đánh giá chất lượng hệ thống.
 
 \section{Kiến thức nền tảng về Trí tuệ Nhân tạo và Xử lý ngôn ngữ tự nhiên}
-Khái quát về kiến trúc cốt lõi định hình nên các mô hình ngôn ngữ hiện đại.
 
-\subsection{Tokenization (Mã hóa từ vựng)}
-Quá trình chuyển đổi văn bản thô thành các đơn vị cơ sở (token) để máy tính hiểu được. Một trong những thuật toán phổ biến nhất hiện nay là \textbf{Byte-Pair Encoding (BPE)}. BPE bắt đầu bằng việc coi mỗi ký tự riêng lẻ là một token, sau đó lặp lại nhiều lần quá trình tìm cặp token xuất hiện cạnh nhau nhiều nhất và gộp chúng thành một token mới.
-Nguyên lý tần suất của BPE có thể biểu diễn như sau:
-\begin{equation}
-\label{eq:bpe_freq}
-freq(t_a, t_b) = \sum_{w \in D} C(w) \cdot count((t_a, t_b), w)
-\end{equation}
+Hệ thống trợ lý ảo giáo dục xử lý đầu vào chủ yếu ở dạng ngôn ngữ tự nhiên. Vì vậy, các thành phần như tách đơn vị văn bản, biểu diễn ngữ nghĩa và mô hình hóa quan hệ giữa các từ đóng vai trò nền tảng cho cả pha truy xuất tri thức và pha sinh câu trả lời.
 
-Trong đó:
-\begin{itemize}
-    \item $D$: Tập dữ liệu văn bản đào tạo.
-    \item $C(w)$: Số lần xuất hiện của từ $w$ trong $D$.
-    \item $count((t_a, t_b), w)$: Số lượng cặp token $(t_a, t_b)$ liền kề nhau bên trong từ $w$.
-\end{itemize}
-Cặp $(t_a, t_b)$ có $freq$ lớn nhất sẽ được ghép lại thành một token mới. Quy trình này giúp cân bằng giữa từ vựng kích thước cố định và khả năng biểu diễn từ chưa biết (Out-Of-Vocabulary).
+\subsection{Tokenization}
 
+Tokenization là quá trình chuyển văn bản thô thành các đơn vị nhỏ hơn gọi là token. Token có thể là ký tự, âm tiết, từ hoặc một phần của từ tùy theo bộ mã hóa được sử dụng. Với các mô hình ngôn ngữ hiện đại, tokenization thường không chỉ dựa trên khoảng trắng, vì cách làm này khó xử lý từ mới, tên riêng hoặc các biến thể chính tả. Một kỹ thuật phổ biến là Byte-Pair Encoding (BPE), trong đó hệ thống bắt đầu từ các đơn vị ký tự rồi lặp lại quá trình ghép các cặp xuất hiện thường xuyên để tạo token mới.
 
-\subsubsection*{Vietnamese Tokenization (Tách từ tiếng Việt với Underthesea)}
+Đối với tiếng Việt, tokenization cần được xem xét cẩn thận vì một từ có thể gồm nhiều âm tiết tách nhau bằng khoảng trắng. Ví dụ, cụm ``học sinh'' và ``sinh học'' đều gồm hai âm tiết nhưng mang nghĩa khác nhau. Nếu chỉ tách theo khoảng trắng, hệ thống có thể làm mất ranh giới từ ghép và ảnh hưởng đến biểu diễn ngữ nghĩa, đặc biệt khi xây dựng kho tri thức hoặc tối ưu truy xuất.
 
-Đối với tiếng Việt, do đặc thù ngôn ngữ đơn lập, các âm tiết đứng rời rạc nhưng thường kết hợp tạo thành từ ghép hoặc từ láy mang ngữ nghĩa chặt chẽ. Việc sử dụng các công cụ Tokenization đa ngữ (như BPE) cắt theo khoảng trắng có thể phá vỡ hoàn toàn cấu trúc từ vựng lõi. Để khắc phục, hệ thống tích hợp thư viện NLP \textbf{Underthesea} nhằm thực hiện tách bạch ranh giới từ (Word Segmentation) trước khi đưa vào biểu diễn Vector.
+\subsection{Biểu diễn vector}
 
-Sự cần thiết của tokenizer đặc thù được thể hiện rõ qua ví dụ kinh điển sau đây với câu: \textit{`Học sinh học sinh học''}.
+Mô hình máy học không xử lý trực tiếp văn bản như con người đọc câu chữ, mà cần biểu diễn văn bản thành vector số. Embedding là kỹ thuật ánh xạ token, câu hoặc đoạn văn thành vector dày đặc trong không gian nhiều chiều. Hai đoạn văn có ý nghĩa gần nhau thường có vector nằm gần nhau hơn so với các đoạn văn không liên quan.
 
-\begin{itemize}
-    \item \textbf{1. Phân tách đa ngữ thông thường (chia theo âm tiết khoảng trắng):} \\
-    $\rightarrow$ [`Học'', `sinh'', `học'', `sinh'', `học'']\\
-    Cách chia này làm mất hoàn toàn phân định ngữ nghĩa ban đầu của câu, khiến mô hình nhầm lẫn giữa chủ thể và cụm danh từ.
-    
-    \item \textbf{2. Tách từ tiếng Việt chuyên dụng với Underthesea:} \\
-    $\rightarrow$ [`Học\_sinh'', `học'', `sinh\_học'']\\
-    Hai từ ghép \textit{`học sinh''} (danh từ chỉ người) và \textit{`sinh học''} (danh từ chỉ môn học) được phát hiện liền mạch và nối nối với nhau chuẩn xác bằng dấu gạch dưới, giúp mô hình đọc hiểu đúng đại ý gốc một cách dễ dàng.
-\end{itemize}
-
-Quá trình tách từ đóng vai trò tiền xử lý cực kỳ quan trọng, cung cấp đầu vào chất lượng cao và bảo toàn trọn vẹn mạch ý nghĩa của văn bản tiếng Việt.
-
-\subsection{Word/Document Embeddings (Biểu diễn Vector)}
-Embeddings là cách máy tính biểu diễn token hoặc toàn bộ văn bản dưới dạng vector số học dày đặc (Dense Vector) gồm các số thực liên tục nhằm lưu giữ đặc trưng ngữ nghĩa. Các từ có nghĩa tương đồng sẽ nằm gần nhau hơn trong một không gian vector đa chiều (ví dụ 512, 768 chiều).
-Để đo mức độ tương đồng giữa hai vector mô tả ngữ nghĩa, ta sử dụng công thức \textbf{Cosine Similarity (Độ tương đồng Cosin)}:
+Độ tương đồng giữa hai vector thường được tính bằng Cosine Similarity:
 \begin{equation}
 \label{eq:cosine_sim}
 \cos(\theta) = \frac{\mathbf{A} \cdot \mathbf{B}}{\|\mathbf{A}\| \|\mathbf{B}\|} = \frac{ \sum_{i=1}^{n} A_i B_i }{ \sqrt{\sum_{i=1}^{n} A_i^2} \sqrt{\sum_{i=1}^{n} B_i^2} }
 \end{equation}
 
-Trong đó:
-\begin{itemize}
-    \item $\mathbf{A}$, $\mathbf{B}$: Là hai vector đặc trưng nhiều chiều (n-chiều) biểu diễn cho hai văn bản.
-    \item $A_i, B_i$: Thành phần thứ $i$ của vector $\mathbf{A}$ và $\mathbf{B}$.
-    \item $\|\mathbf{A}\|, \|\mathbf{B}\|$: Độ dài (norm L2) của mỗi vector.
-\end{itemize}
-Giá trị cosin nằm trong khoảng $[-1, 1]$, trong đó $1$ chỉ ra hai vector cùng hướng (ý nghĩa giống nhau hoàn toàn), $0$ là trực giao (không liên quan), và $-1$ là ngược hướng.
+Trong đó, $\mathbf{A}$ và $\mathbf{B}$ là hai vector biểu diễn văn bản. Giá trị cosine càng gần $1$ thì hai vector càng cùng hướng, tức hai văn bản càng gần nhau về mặt ngữ nghĩa. Đây là cơ sở cho tìm kiếm ngữ nghĩa trong hệ thống RAG.
 
-\subsection{Kiến trúc Transformer và Cơ chế Attention}
-Kể từ khi ra mắt vào năm 2017, kiến trúc Transformer đã trở thành sợi chỉ đỏ của NLP hiện đại. Thay vì xử lý tuần tự (như RNN/LSTM), Transformer xử lý văn bản song song thông qua cơ chế Tự chú ý (Self-Attention). 
-Cơ chế \textbf{Scaled Dot-Product Attention} cho phép mô hình đánh giá tầm quan trọng của các từ trong câu khi đang xét một từ bất kỳ. Công thức lõi của cơ chế này là:
+\subsection{Kiến trúc Transformer và cơ chế Attention}
+
+Transformer là kiến trúc nền tảng của nhiều mô hình ngôn ngữ hiện đại. Điểm khác biệt chính của Transformer so với các mô hình tuần tự trước đây là cơ chế tự chú ý, cho phép mô hình đánh giá mức độ liên quan giữa các token trong cùng một ngữ cảnh.
+
+Cơ chế Scaled Dot-Product Attention được mô tả bởi công thức:
 \begin{equation}
 \label{eq:attention}
 Attention(Q, K, V) = \text{softmax} \left( \frac{Q K^T}{\sqrt{d_k}} \right) V
 \end{equation}
 
-Trong đó:
-\begin{itemize}
-    \item $Q$ (Query - Truy vấn): Vector biểu diễn từ đang cần tìm độ tương quan phân tích (thứ ta đi tìm).
-    \item $K$ (Key - Khóa): Vector biểu diễn để đối chiếu độ tương hợp với Query cho mọi từ trong câu (thứ ta kiểm tra).
-    \item $V$ (Value - Giá trị): Vector mang nội dung ngữ nghĩa thực sự của từ đó sẽ được giữ lại.
-    \item $d_k$: Chiều không gian của vector Key, việc chia cho $\sqrt{d_k}$ giúp thu nhỏ phương sai của Tích vô hướng (dot product) tránh việc hàm softmax rơi vào vùng bão hòa gradient (gradient vanishing).
-    \item Hàm $\text{softmax}$ đảm bảo ma trận trọng số luôn có phạm vi $[0, 1]$ và tổng phân bố là $1$.
-\end{itemize}
+Trong đó, $Q$ là truy vấn, $K$ là khóa, $V$ là giá trị, và $d_k$ là số chiều của vector khóa. Thành phần $\frac{QK^T}{\sqrt{d_k}}$ tính mức độ tương hợp giữa truy vấn và khóa, sau đó hàm softmax chuyển kết quả thành trọng số chú ý. Nhờ vậy, mô hình có thể ưu tiên các phần thông tin quan trọng trong câu hoặc đoạn văn.
 
-\section{Mô hình ngôn ngữ lớn (Large Language Models - LLM)}
-Khái quát về thành phần tạo nên "bộ não" suy luận của hệ thống.
+\section{Mô hình ngôn ngữ lớn}
 
-\subsection{Tổng quan và Bản chất dự đoán}
-Sự tiến hóa từ các mô hình biểu diễn ngữ nghĩa thành các LLM có khả năng suy luận mạnh mẽ là kết quả của việc gia tăng kích thước mạng nơ-ron và dữ liệu sinh văn bản (Causal Language Modeling). Bài toán cốt lõi của LLM là \textbf{Dự đoán token tiếp theo (Next-token Prediction)} dựa trên chuỗi từ đã có.
-Xác suất tạo ra một câu chữ chiều dài $T$ được định nghĩa theo chuỗi phân phối xác suất có điều kiện:
+Mô hình ngôn ngữ lớn là thành phần sinh và suy luận ngôn ngữ trong hệ thống. Tuy nhiên, trong một trợ lý giáo dục, mô hình ngôn ngữ không nên được sử dụng như nguồn tri thức duy nhất. Các câu trả lời cần được neo vào dữ liệu sách giáo khoa và được kiểm soát bởi các lớp truy xuất, điều phối và đánh giá chất lượng.
+
+\subsection{Bản chất dự đoán token tiếp theo}
+
+LLM được huấn luyện để dự đoán token tiếp theo dựa trên chuỗi token đã có. Với một chuỗi có độ dài $T$, xác suất sinh chuỗi có thể được biểu diễn như sau:
 \begin{equation}
 \label{eq:llm_pred}
 P(w_1, w_2, ..., w_T) = \prod_{t=1}^{T} P(w_t \mid w_1, ..., w_{t-1})
 \end{equation}
 
-Trong đó:
-\begin{itemize}
-    \item $w_t$: Token mục tiêu tại vị trí $t$.
-    \item $w_1, ..., w_{t-1}$: Các token tiền cảnh (context) đã được cung cấp (từ prompt sinh ra phía trước).
-\end{itemize}
-Mô hình sẽ chọn token tiếp theo thông qua việc lấy mẫu (Sampling) theo hàm phân phối xác suất này.
+Trong đó, $w_t$ là token tại vị trí $t$, còn $w_1, ..., w_{t-1}$ là ngữ cảnh trước đó. Khi sinh văn bản, mô hình chọn token tiếp theo dựa trên phân phối xác suất này. Cơ chế đó giúp LLM tạo được câu trả lời tự nhiên, nhưng cũng khiến mô hình có thể sinh thông tin hợp lý về mặt ngôn ngữ mà không đúng với tài liệu nguồn.
 
-\subsection{Kỹ thuật Prompt Engineering}
-Là quá trình thiết kế, điều chỉnh các chỉ thị đầu vào (prompt) nhằm định hướng LLM sinh ra câu trả lời theo ý muốn mà không phải đào tạo lại trọng số. Một số kỹ thuật cốt lõi:
-\begin{itemize}
-    \item \textbf{Zero-shot}: Yêu cầu trả lời trực tiếp mà không cung cấp mẫu trước.
-    \item \textbf{Few-shot learning}: Cung cấp một vài ví dụ input-output để mô hình nội suy quy luật.
-    \item \textbf{Chain-of-Thought (CoT)}: Chỉ thị mô hình suy luận từng bước thay vì nhảy ngay ra kết quả cuối cùng (giúp giảm thiểu sai sót toán học/logic).
-\end{itemize}
+\subsection{Prompt và khả năng gọi công cụ}
 
-\subsection{Khả năng gọi hàm (Function Calling / Tool Use)}
-Đây là đặc tính quan trọng giúp LLM kết nối với thế giới bên ngoài thay vì chỉ sinh text bị cô lập. Khi cấu hình một prompt đi kèm danh sách các "Tool", mô hình khi cần dữ liệu hoặc thực hiện thao tác sẽ tự động trả về chuỗi văn bản dạng cấu trúc (JSON) mô tả tên hàm và danh sách tham số (Arguments) thay vì sinh chuỗi text tự do.
+Prompt là chỉ thị đầu vào dùng để định hướng hành vi của mô hình. Trong hệ thống trợ lý giáo dục, prompt không chỉ chứa câu hỏi của người dùng mà còn có thể chứa ngữ cảnh truy xuất từ sách giáo khoa, yêu cầu định dạng câu trả lời, hoặc ràng buộc về phạm vi lớp và bộ sách.
 
-\subsection{Hiện tượng Hallucination (Ảo giác) trong LLM}
-Bản chất của LLM là dự đoán chuỗi từ mang ý nghĩa tự nhiên nhất, chúng không "nhớ" thông tin theo các bản ghi chính xác. Vì thế, khi đối diện với thông tin chuyên ngành mới hoặc tự suy đoán sự kiện, LLM gặp ảo giác — sinh ra thông tin thoạt nhìn rất đáng tin cậy nhưng sai hoàn toàn sự thật. Nguyên nhân cốt lõi do dữ liệu đào tạo (out-of-date) và sự thiếu vắng nền tảng bám trụ kiến thức thực tế (lack of grounding). Điều này là căn cứ mạnh mẽ để đưa công nghệ RAG vào hệ thống.
+Khả năng gọi công cụ cho phép LLM không chỉ sinh văn bản tự do mà còn phát ra yêu cầu có cấu trúc để hệ thống thực hiện một thao tác cụ thể. Trong triển khai thực tế, việc gọi công cụ cần một lớp điều phối bên ngoài để kiểm soát quyền truy cập, kiểu dữ liệu vào ra và xử lý lỗi.
 
-\section{Retrieval-Augmented Generation (RAG)}
-Thành phần quan trọng nhất giúp hệ thống trả lời chính xác dựa trên Sách giáo khoa trực tiếp.
+\subsection{Hiện tượng hallucination}
+
+Hallucination là hiện tượng mô hình sinh ra thông tin không có cơ sở trong dữ liệu nguồn hoặc trái với thực tế. Nguyên nhân đến từ bản chất dự đoán xác suất của LLM, giới hạn của dữ liệu huấn luyện và việc mô hình không tự kiểm chứng được tri thức tại thời điểm trả lời. Với bài toán giáo dục, hiện tượng này có rủi ro cao vì câu trả lời sai có thể ảnh hưởng trực tiếp đến quá trình học tập.
+
+Vì vậy, hệ thống sử dụng kiến trúc RAG để truy xuất ngữ cảnh từ sách giáo khoa trước khi sinh câu trả lời. Cách tiếp cận này giúp câu trả lời có cơ sở dữ liệu rõ ràng hơn so với việc chỉ dựa vào tri thức tham số của mô hình ngôn ngữ lớn.
+
+\section{Retrieval-Augmented Generation}
+
+Retrieval-Augmented Generation (RAG) là kiến trúc kết hợp truy xuất thông tin và sinh văn bản. Thay vì để LLM trả lời trực tiếp từ tri thức đã học, hệ thống trước hết tìm các đoạn tài liệu liên quan, sau đó đưa các đoạn này vào prompt để mô hình sinh câu trả lời dựa trên ngữ cảnh.
 
 \subsection{Kiến trúc RAG cơ bản}
-Nguyên lý hoạt động cơ bản của RAG gồm 3 bước tuần tự: Truy xuất (Retrieval) - Bổ sung (Augmented) - Sinh văn bản (Generation). 
-\begin{itemize}
-    \item \textbf{Pha Offline (Chuẩn bị dữ liệu)}: Tập hợp tải nội dung tài liệu, phân mảnh nhỏ (chunking), sau đó quy đổi mảnh bằng Embedding Model và lưu trữ vào Vector Database.
-    \item \textbf{Pha Online (Truy vấn)}: Nhận câu hỏi thực, mã hóa vector câu hỏi đưa đi tìm kiếm chuỗi nội dung giống nhất (Retrieval), đưa đoạn văn bản kết quả thu được bổ sung vào Prompt hiện tại (Augmented) rồi đưa vào tính toán trả kết quả bởi LLM (Generation).
-\end{itemize}
 
-\subsection{Data Chunking (Phân mảnh dữ liệu)}
-Do các LLM có hạn chế về kích cỡ cửa sổ khung ngữ cảnh (Context Window), nguyên văn tài liệu bắt buộc phải được chia nhỏ (Chunking). Các chiến lược chia nhỏ thường gặp:
-\begin{itemize}
-    \item \textbf{Fixed-size Chunking}: Cắt nội dung theo chuỗi số lượng token nhất định liên tiếp, có dải đè (overlap) để nối mạch văn.
-    \item \textbf{Recursive Character Chunking}: Cắt theo phân cấp ngắt đoạn lô-gic như đoạn văn (\verb|\n\n|), câu xuống dòng (\verb|\n|), khoảng trắng.
-    \item \textbf{Hierarchical Chunking (Phân mảnh phân cấp)}: Rạch ròi dựa trên cấu trúc chương/mục nhằm gắn kết Metadata để duy trì cây tri thức vững chắc mà không làm đứt gãy luồng thông tin văn bản.
-\end{itemize}
+Một hệ thống RAG thường gồm hai pha. Ở pha chuẩn bị dữ liệu, tài liệu được làm sạch, chia thành các đoạn nhỏ, chuyển thành embedding và lưu cùng metadata. Ở pha truy vấn, câu hỏi của người dùng được phân tích, chuyển thành vector hoặc từ khóa tìm kiếm, sau đó hệ thống lấy các đoạn tài liệu phù hợp nhất để đưa vào LLM.
 
-\subsection{Vector Database (Cơ sở dữ liệu Vector)}
-Nơi lưu trữ Vector Embeddings và hỗ trợ việc tìm kiếm đánh giá mức độ tương đồng giữa không gian các vector. Điểm vượt trội cốt lõi của cơ sở dữ liệu Vector so với các hệ quản trị CSDL quan hệ truyền thống là khả năng tính toán ưu việt chuẩn xác khoảng cách và tọa độ (ví dụ \textit{Euclidean}, \textit{Dot-Product}, \textit{Cosine}) giữa Vector Truy vấn (Query Vector) và hàng triệu Vector gốc của các mảnh tài liệu (Document Vectors), nhằm trả về nhanh chóng các ngữ nghĩa đối sánh nhất.
+Trong đề tài này, dữ liệu truy xuất chính là nội dung sách giáo khoa Tin học THPT thuộc các bộ sách được hỗ trợ. Do dữ liệu nguồn có cấu trúc theo lớp, bộ sách, chủ đề, bài học và mục nhỏ, metadata của từng đoạn văn có ý nghĩa quan trọng. Metadata giúp hệ thống giới hạn phạm vi truy xuất và tránh trộn lẫn nội dung giữa các lớp hoặc bộ sách khi người dùng đã nêu rõ yêu cầu.
 
-\section{Kỹ thuật truy xuất thông tin nâng cao (Advanced Retrieval)}
-Đi sâu vào các thuật toán tối ưu hóa việc tìm kiếm tài liệu từ kho Sách giáo khoa (Corpus).
+\subsection{Phân mảnh dữ liệu}
 
-\subsection{Lexical Search (Tìm kiếm từ khóa)}
-Thuật toán cơ sở dùng để tra cứu sự tương đồng phần chữ cái đối với từ khóa hiếm/chuyên ngành. Nổi bật là cơ chế \textbf{TF-IDF} (Term Frequency - Inverse Document Frequency).
-\textbf{Công thức TF-IDF cơ bản}:
+Chunking là quá trình chia tài liệu dài thành các đoạn nhỏ hơn để phù hợp với giới hạn ngữ cảnh của mô hình và để tăng độ chính xác truy xuất. Nếu đoạn quá dài, kết quả truy xuất có thể chứa nhiều thông tin thừa; nếu đoạn quá ngắn, ngữ cảnh có thể bị đứt đoạn.
+
+Các chiến lược chunking thường gặp gồm cắt theo kích thước cố định, cắt theo ranh giới đoạn hoặc câu, và cắt theo cấu trúc phân cấp của tài liệu. Với dữ liệu sách giáo khoa, hướng phân cấp có lợi thế vì giữ lại quan hệ giữa lớp, chương, bài và mục nội dung.
+
+Trong phạm vi đồ án, mỗi bài học trong một cuốn sách được xem như một tài liệu nguồn tương đối độc lập. Vì vậy, việc chia nhỏ theo các heading trong bài học là lựa chọn phù hợp với bản chất dữ liệu. Cách chia này giúp mỗi chunk tương ứng với một đơn vị kiến thức có ranh giới sư phạm rõ ràng, chẳng hạn mục lý thuyết, ví dụ, hoạt động hoặc bài tập. Nếu chỉ chia theo độ dài cố định, hệ thống dễ cắt ngang một định nghĩa, một ví dụ hoặc một chuỗi hướng dẫn, làm giảm chất lượng ngữ cảnh khi truy xuất. Với dạng dữ liệu hiện có, chunking theo heading gần như là yêu cầu bắt buộc để hệ thống vừa truy xuất chính xác ở mức mục nhỏ, vừa mở rộng được phạm vi lên toàn bài khi cần sinh slide hoặc giáo án.
+
+\subsection{Tìm kiếm vector}
+
+Tìm kiếm vector sử dụng embedding để tìm các đoạn văn gần câu hỏi về mặt ngữ nghĩa. Cả câu hỏi và tài liệu đều được ánh xạ vào cùng một không gian vector. Sau đó, hệ thống dùng một độ đo tương đồng, chẳng hạn Cosine Similarity, để xếp hạng các đoạn tài liệu.
+
+Cách tiếp cận này phù hợp với các câu hỏi diễn đạt khác với tài liệu gốc nhưng có cùng ý nghĩa. Tuy nhiên, tìm kiếm vector có thể kém hiệu quả với các từ khóa hiếm, tên lệnh, thuật ngữ kỹ thuật hoặc ký hiệu cụ thể. Vì vậy, hệ thống cần kết hợp thêm tìm kiếm từ khóa.
+
+\section{Truy xuất thông tin nâng cao}
+
+Trong một trợ lý giáo dục, chất lượng câu trả lời phụ thuộc mạnh vào chất lượng ngữ cảnh được truy xuất. Nếu hệ thống lấy sai hoặc thiếu tài liệu, LLM khó sinh câu trả lời đúng dù prompt được thiết kế tốt. Vì vậy, dự án sử dụng kết hợp tìm kiếm từ khóa, tìm kiếm ngữ nghĩa, hợp nhất xếp hạng và xếp hạng lại.
+
+\subsection{Tìm kiếm từ khóa}
+
+Tìm kiếm từ khóa dựa trên sự trùng khớp bề mặt giữa truy vấn và tài liệu. Một phương pháp nền tảng là TF-IDF, trong đó điểm của một từ tăng khi từ đó xuất hiện nhiều trong tài liệu hiện tại và giảm khi từ đó xuất hiện quá phổ biến trong toàn bộ tập tài liệu:
 \begin{equation}
 \label{eq:tfidf}
 TF\_IDF(t, d, D) = TF(t,d) \times IDF(t, D)
 \end{equation}
 
-Trong đó:
-\begin{itemize}
-    \item $TF(t, d) = \frac{f_{t,d}}{\sum_{t' \in d} f_{t', d}}$: Tần suất (mật độ) từ t xuất hiện trong văn bản d.
-    \item $IDF(t, D) = \log \frac{N}{|\{d \in D : t \in d\}|}$: Cơ chế đo lường mức độ đặc trưng chuyên biệt với việc nghịch đảo số tài liệu liên quan ($N$ là tổng số văn bản).
-\end{itemize}
-
-Tuy nhiên, TF-IDF không có điểm trần và dễ bị thiên lệch chiều dài văn bản. Hiện tại phiên bản tiến tiến hơn được sử dụng là \textbf{BM25 (Best Matching 25)} với giới hạn tần suất:
+BM25 là một biến thể được sử dụng rộng rãi hơn trong truy xuất thông tin vì có cơ chế điều chỉnh ảnh hưởng của tần suất từ và độ dài tài liệu:
 \begin{equation}
 \label{eq:bm25}
 Score_{BM25}(Q, d) = \sum_{q_i \in Q} IDF(q_i) \cdot \frac{f(q_i, d) \cdot (k_1 + 1)}{f(q_i, d) + k_1 \cdot \left(1 - b + b \cdot \frac{|d|}{avgdl}\right)}
 \end{equation}
 
-Trong đó:
-\begin{itemize}
-    \item $Q$: Câu truy vấn bao gồm các từ khóa $q_i$.
-    \item $f(q_i, d)$: Số lần xuất hiện từ khóa $q_i$ trong văn bản $d$.
-    \item $|d|$ và $avgdl$: Chiều dài độ dài văn bản $d$ và trung bình cộng độ dài hệ thống.
-    \item $k_1$ và $b$: Các siêu tham số tinh chỉnh độ dốc phạt do độ dài văn bản và trần bão hòa của tần suất điểm BM25.
-\end{itemize}
+Trong đó, $Q$ là truy vấn, $f(q_i,d)$ là số lần từ khóa xuất hiện trong tài liệu $d$, $|d|$ là độ dài tài liệu và $avgdl$ là độ dài trung bình của các tài liệu. Các tham số $k_1$ và $b$ điều chỉnh mức bão hòa tần suất và mức phạt theo độ dài tài liệu.
 
-\subsection{Semantic Search (Tìm kiếm ngữ nghĩa)}
-Thay vì tra xét từ khóa theo dạng văn bản bề mặt, \textit{Semantic Search} đánh giá sự tương đồng trực tiếp về mặt ý nghĩa. Cả truy vấn $q$ và văn bản $d$ trong hệ thống đều được mô hình nhúng ánh xạ thành các dense vector $V_q$ và $V_d$ trong không gian $n$ chiều. Sự tương đồng ngữ nghĩa sau đó được xác định thông qua các độ đo khoảng cách hình học cốt lõi.
+\subsection{Tìm kiếm lai và hợp nhất xếp hạng}
 
-Hai biến thể phương trình phổ biến nhất trong hệ thống Vector Search:
+Tìm kiếm lai kết hợp ưu điểm của tìm kiếm từ khóa và tìm kiếm ngữ nghĩa. Tìm kiếm từ khóa phù hợp với thuật ngữ chính xác, còn tìm kiếm ngữ nghĩa phù hợp với cách diễn đạt linh hoạt. Khi hai cơ chế trả về hai danh sách kết quả khác nhau, hệ thống cần một phương pháp hợp nhất xếp hạng.
 
-\textbf{1. Tích vô hướng (Dot Product)}
-Đo lường trực tiếp độ lớn và mức độ đồng hướng của hai vector:
-\begin{equation}
-\label{eq:dot_product}
-Score_{dot}(q, d) = V_q \cdot V_d = \sum_{i=1}^{n} V_{q,i} V_{d,i}
-\end{equation}
-Phép đo này tính toán cực kỳ nhanh và phù hợp khi các vector đã được chuẩn hóa độ dài (normalized).
-
-\textbf{2. Độ tương đồng Cosine (Cosine Similarity)}\\
-Độ tương đồng Cosine được sử dụng để đo lường góc giữa vector truy vấn và vector tài liệu, qua đó giảm ảnh hưởng của độ dài văn bản và chỉ tập trung vào mức độ tương đồng về mặt ngữ nghĩa giữa các vector. 
-
-Điểm số xếp hạng của tài liệu lúc này được xác định trực tiếp thông qua giá trị của hàm Cosine Similarity, như đã được trình bày tại \textbf{Công thức \ref{eq:cosine_sim}}.
-
-Đoạn tài liệu nào tạo ra độ tương đồng cao nhất với vector truy vấn theo một trong hai thang đo trên sẽ được hệ thống Vector Search ưu tiên trích xuất và chuyển sang giai đoạn xếp hạng tiếp theo.
-\subsection{Hybrid Search (Tìm kiếm lai) và thuật toán RRF}
-Mục đích kết hợp sự chính xác ngữ pháp vựng từ BM25 và sự nhận thức khái niệm từ Vector Search (Semantic). \textbf{Reciprocal Rank Fusion (RRF)} là một thuật toán tích hợp ưu điểm của bảng xếp thứ hạng của hai chiến lược tìm kiếm.
-Cách tính điểm RRF bù trừ của một đoạn tìm kiếm kết quả $d$:
+Reciprocal Rank Fusion (RRF) là một cách hợp nhất đơn giản và ổn định. Điểm RRF của một tài liệu $d$ có thể được tính như sau:
 \begin{equation}
 \label{eq:rrf}
 Score_{RRF}(d) = \frac{1}{k + rank_{BM25}(d)} + \frac{1}{k + rank_{Vector}(d)}
 \end{equation}
 
-Trong đó:
-\begin{itemize}
-    \item $rank_{BM25}(d)$, $rank_{Vector}(d)$: Trật tự xếp hạng của văn bản $d$ truy được dựa theo từng cơ chế.
-    \item $k$: Hằng số giảm xóc (thường từ 60).
-\end{itemize}
+Trong đó, $rank_{BM25}(d)$ và $rank_{Vector}(d)$ là vị trí của tài liệu trong từng danh sách kết quả, còn $k$ là hằng số giảm ảnh hưởng của thứ hạng. RRF phù hợp khi kết hợp BM25 và tìm kiếm vector vì không yêu cầu hai loại điểm phải cùng thang đo.
 
-\subsection{Query Optimization (Tối ưu hóa truy vấn)}
-Tiền xử lý dùng nội tính của LLM nâng cao khả năng câu hỏi:
-\begin{itemize}
-    \item \textbf{Query Rewriting (Viết lại truy vấn)}: Chuyển câu hỏi thô thành các keywords chuyên biệt bám bản thông tin tài liệu.
-    \item \textbf{HyDE (Hypothetical Document Embeddings)}: Yêu cầu mô hình tưởng tượng (hallucinate) nội suy nhanh giả câu trả lời, sử dụng đoạn đó làm khung Vector đi tìm phần tham chiếu sát thực tiễn để tăng phần cover (độ phủ tìm kiếm).
-\end{itemize}
+\subsection{Xếp hạng lại}
 
-\subsection{Reranking (Xếp hạng lại)}
-Thay Bi-Encoder bằng việc dùng \textbf{Cross-Encoder} đánh bảng điểm Top 10-20 về lại. Bi-Encoder Embedding lưu rẽ hai chuỗi làm chậm chạp thiếu nhạy bén trong ngữ cảnh. Khối Cross-Encoder cho trượt luôn cặp chuỗi ký tự Text gốc vào một lớp Self-Attention làm cho sự đánh giá trở nên cực kỳ tinh xác (tất nhiên chi phí truy vấn thời gian nhỉnh hơn bởi đối sánh chéo đôi). 
+Sau bước truy xuất ban đầu, hệ thống thường có một tập kết quả ứng viên. Reranking là bước đánh giá lại các ứng viên này với mô hình chính xác hơn. Trong khi bi-encoder mã hóa truy vấn và tài liệu riêng biệt để tìm kiếm nhanh, cross-encoder đưa cả cặp truy vấn và tài liệu vào cùng mô hình để đánh giá mức liên quan trực tiếp.
 
-\section{Multi-Agent Systems (Hệ thống đa tác tử)}
-Lý thuyết phục vụ cho tính năng thiết kế Bài giảng, Slide hoặc cấu trúc Giáo án tự động.
+Cách làm này tốn chi phí tính toán hơn, nhưng chỉ áp dụng trên số lượng ứng viên nhỏ nên vẫn phù hợp trong pipeline RAG. Trong dự án, reranker được dùng để lọc nhiễu và chọn các đoạn ngữ cảnh cuối cùng trước khi đưa vào prompt.
 
-\subsection{AI Agent (Tác tử AI)}
-Triển khai môi trường nơi mà Agent lấy tư duy từ lõi LLM kèm hệ Tools (Công cụ tương tác được ra API hay code bên ngoài – ví dụ đọc code, gọi python tính, trích xuất wiki).
+\subsection{Tối ưu hóa truy vấn}
 
-\subsection{Khung lý thuyết ReAct (Reasoning and Acting)}
-Một vòng lặp giải bài toán chia tuần tự:
-\begin{itemize}
-    \item \textbf{Thought (Tư duy)}: Nhận xét phương hướng tương ứng tiếp diễn.
-    \item \textbf{Action (Hành động)}: Điều động chạy tham số gọi Tool cung cấp.
-    \item \textbf{Observation (Quan sát)}: Kịch bản quan sát phản hồi kết xuất rồi chạy vòng nghĩ Thought để ra trả lời kết.
-\end{itemize}
+Truy vấn của người dùng thường ngắn, phụ thuộc ngữ cảnh hội thoại hoặc dùng cách diễn đạt khác với sách giáo khoa. Vì vậy, hệ thống có thể viết lại truy vấn hoặc sinh thêm truy vấn phụ để tăng độ phủ truy xuất. Query rewriting trong bối cảnh này không nhằm trả lời người dùng trực tiếp, mà nhằm tạo các biểu thức tìm kiếm rõ hơn cho RAG.
 
-\subsection{Các kiến trúc Đa tác tử (Multi-Agent Architectures)}
+Khi câu hỏi phụ thuộc vào lịch sử hội thoại, hệ thống cần kết hợp chủ đề trước đó, lớp học hoặc bộ sách đã chọn vào truy vấn truy xuất. Điều này giúp các câu hỏi nối tiếp vẫn có đủ ngữ cảnh để tìm đúng tài liệu.
 
-Thay vì phụ thuộc vào một mô hình ngôn ngữ duy nhất để thực hiện toàn bộ tác vụ từ A đến Z, hệ thống đa tác tử (Multi-Agent) chia nhỏ bài toán phức tạp thành nhiều phần và giao cho từng tác tử chuyên biệt xử lý. Việc tổ chức các tác tử này thành một kiến trúc luồng dữ liệu hợp lý là chìa khóa để vận hành hệ thống trơn tru.
+\section{Adaptive Retrieval}
+
+Một chiến lược truy xuất cố định không phù hợp với mọi loại câu hỏi. Câu hỏi yêu cầu giải thích một khái niệm cụ thể cần các đoạn nội dung chi tiết, trong khi câu hỏi về chương trình học hoặc danh sách bài học lại cần tổng hợp metadata. Vì vậy, hệ thống sử dụng cơ chế adaptive retrieval để chọn cách truy xuất theo loại truy vấn.
+
+Trong dự án, bộ phân loại truy vấn được cài đặt bằng luật heuristic. Thành phần này không dùng LLM, mà dựa trên tín hiệu từ câu hỏi, lớp, chủ đề, bộ sách và kết quả phân tích intent. Cách tiếp cận này giúp chiến lược truy xuất dễ kiểm soát.
+
+Chiến lược STANDARD được dùng cho truy vấn cụ thể nhưng thiếu phạm vi lớp hoặc chủ đề rõ ràng. Chiến lược BROAD phù hợp với câu hỏi tổng quan, khi hệ thống cần lấy các đoạn đại diện cho nhiều bài học. Chiến lược CURRICULUM ưu tiên cấu trúc chương trình, danh sách bài hoặc chủ đề, nên sử dụng metadata nhiều hơn là tìm kiếm vector chi tiết. Chiến lược HIERARCHICAL được dùng khi truy vấn có đủ thông tin về lớp hoặc chủ đề; hệ thống trước hết chọn bài học liên quan, sau đó tìm các đoạn con chi tiết trong phạm vi đã chọn.
+
+Cơ chế này giúp hệ thống cân bằng giữa độ chính xác và độ bao phủ của truy xuất. Với các tác vụ dài như tạo slide hoặc giáo án, hệ thống có thể lấy nhiều chunk hơn so với hỏi đáp thông thường.
+
+\section{Điều phối yêu cầu và quản lý ngữ cảnh}
+
+Một trợ lý giáo dục không chỉ thực hiện một thao tác hỏi đáp đơn lẻ. Người dùng có thể yêu cầu tạo câu hỏi, chấm đáp án, giải thích câu sai, tạo slide hoặc tiếp tục một nội dung đã trao đổi trước đó. Vì vậy, hệ thống cần một lớp điều phối để phân tích ý định, lập kế hoạch hành động và duy trì trạng thái.
+
+\subsection{Phân tích ý định và lập kế hoạch hành động}
+
+Intent detection là quá trình xác định mục đích của người dùng từ câu nhập tự nhiên. Với hệ thống này, một câu có thể chứa nhiều ý định. Ví dụ, người dùng có thể yêu cầu vừa tạo slide vừa thêm câu hỏi luyện tập. Khi đó, hệ thống cần phân tích thành nhiều intent và lập nhiều hành động tương ứng.
+
+Sau khi phát hiện intent, action planning ánh xạ ý định sang thao tác cụ thể của hệ thống. Cách tách intent routing và action planning giúp phần suy luận ngôn ngữ được tách khỏi phần quyết định nghiệp vụ. LLM có thể hỗ trợ nhận diện ý định, nhưng việc chọn service xử lý cuối cùng cần được kiểm soát bằng logic rõ ràng để tránh gọi sai chức năng.
+
+\subsection{Quản lý session và state}
+
+Session memory lưu lịch sử hội thoại và trạng thái học tập của người dùng. Trạng thái này cần thiết cho các yêu cầu nối tiếp như chấm câu trả lời, ôn lại câu sai hoặc duyệt dàn ý slide.
+
+Trong kiến trúc hiện tại, request được biểu diễn bằng một đối tượng ngữ cảnh đi qua các bước xử lý. Đối tượng này lưu câu hỏi gốc, truy vấn đã làm giàu, intent, action plan, phạm vi sách/lớp, thông tin session và các bước debug. Cách tổ chức này giúp tránh truyền nhiều biến rời rạc giữa các module và hỗ trợ trace khi cần kiểm tra hệ thống.
+
+\section{Hệ thống đa tác tử và LangGraph}
+
+Multi-agent system là cách tổ chức trong đó nhiều tác tử chuyên biệt cùng tham gia giải quyết một tác vụ phức tạp. Mỗi tác tử đảm nhận một vai trò hẹp hơn, chẳng hạn lập dàn ý, viết nội dung, gợi ý media, tạo đánh giá hoặc kiểm tra chất lượng. Cách chia này phù hợp với các tác vụ dài vì đầu ra trung gian có thể được kiểm soát và kết hợp lại.
+
+\subsection{Tác tử AI và mô hình supervisor}
+
+Một tác tử AI thường gồm mô hình ngôn ngữ, chỉ thị nhiệm vụ và khả năng gọi công cụ. Trong kiến trúc supervisor, một tác tử điều phối quyết định tác tử chuyên môn nào cần được gọi ở từng bước. Mô hình này giúp kiểm soát luồng xử lý tốt hơn so với việc để các tác tử giao tiếp tự do.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.85\textwidth]{Hinhve/multi_agent_architechture.jpg}
-    \caption{Tổng quan các mô hình tổ chức trong hệ thống Đa tác tử (Multi-Agent)}
+    \caption{Tổng quan các mô hình tổ chức trong hệ thống đa tác tử}
     \label{fig:multi_agent}
 \end{figure}
 
-Như được trình bày ở Hình \ref{fig:multi_agent}, có rất nhiều kiểu kiến trúc điều phối mạng lưới AI Agent khác nhau, bao gồm:
-\begin{itemize}
-    \item \textbf{Mô hình mạng lưới (Network):} Các tác tử giao tiếp tự do với nhau không qua trung gian. Cấu trúc này linh hoạt nhưng dễ rối loạn luồng thông tin khi hệ thống phình to.
-    \item \textbf{Mô hình hội đồng (Joint / Committee):} Các tác tử cùng ngồi lại báo cáo và thảo luận giải quyết cùng một vấn đề.
-    \item \textbf{Mô hình dạng chuỗi (Chain / Sequential):} Output của tác tử này là Input của tác tử kế tiếp, theo một đường truyền cứng.
-    \item \textbf{Mô hình Giám sát (Supervisor / Hierarchical):} Một tác tử đóng vai trò nhạc trưởng (Nhà quản lý) đúng ở vị trí trung tâm, chịu trách nhiệm nhận yêu cầu, phân loại và gọi các tác tử chuyên biệt bên dưới thực thi.
-\end{itemize}
+Như minh họa ở Hình \ref{fig:multi_agent}, hệ thống đa tác tử có thể được tổ chức theo dạng mạng lưới, hội đồng, chuỗi tuần tự hoặc supervisor. Đối với bài toán sinh slide và giáo án, mô hình supervisor phù hợp vì các bước xử lý có thứ tự tương đối rõ: lập dàn ý, phát triển nội dung, bổ sung media, tạo hoạt động đánh giá, ghép kết quả và kiểm tra chất lượng.
 
-\subsubsection*{Mô hình Supervisor (Điều phối tác tử) và lựa chọn kiến trúc}
+\subsection{Phạm vi áp dụng trong hệ thống}
 
-Trong đồ án này, kiến trúc \textbf{Supervisor} được chọn làm thiết kế lõi cho hệ thống trợ lý học tập. Một Supervisor Agent sẽ tiếp nhận câu hỏi, phân tích ý định thay vì xử lý trực tiếp, sau đó định tuyến đến các Agent chuyên sâu tương ứng (VD: Tìm lý thuyết, Sinh bài tập...). 
+Trong đồ án này, multi-agent được áp dụng rõ nhất cho pipeline sinh slide và giáo án. Toàn bộ hệ thống không phải là một hệ LangGraph multi-agent end-to-end. Ở cấp cao, request vẫn được điều phối bởi Orchestrator, ActionPlanner và ExecutionDispatcher. LangGraph chỉ điều phối content pipeline, nơi tác vụ đủ dài và có nhiều artifact trung gian cần phối hợp.
 
-Việc lựa chọn này mang lại 3 lợi thế cốt lõi: 
-(1) \textbf{Kiểm soát luồng chặt chẽ}, giúp hệ thống suy luận minh bạch, tránh LLM lạc đề hoặc vòng lặp vô hạn;
-(2) \textbf{Tính đóng gói \& phân quyền}, giới hạn quyền truy cập tài nguyên CSDL rõ ràng cho từng Agent; 
-(3) \textbf{Dễ dàng mở rộng (Scalability)}, cho phép nhanh chóng cắm thêm các Agent chức năng mới sau này mà không làm xáo trộn kiến trúc tổng thể.
+Ranh giới này quan trọng vì các chức năng như quiz standalone có trạng thái tương tác riêng, bao gồm lượt làm bài, câu trả lời của học sinh, điểm số, câu sai và thống kê tiến độ. Nếu đưa toàn bộ quiz standalone vào content multi-agent pipeline, state học tập sẽ bị trộn với state sinh artifact và khó kiểm soát hơn.
 
+\subsection{A2A-lite và Human-in-the-loop}
 
-\subsection{Cơ chế thực thi song song (Fan-out / Fan-in)}
-Cách chia song song. (Phơi cử sub-agent tìm Mở Đầu độc lập với sub-agent tìm Bài Tập) và sau đó tổng kết dồn thông tin (Fan-in) quy tụ làm tiết kiệm mạnh chi phí chờ.
+Để các tác tử trao đổi có cấu trúc, hệ thống sử dụng một contract nội bộ dạng A2A-lite. Contract này không phải là một runtime phân tán đầy đủ, mà là cách chuẩn hóa thông điệp trong cùng process. Một task gửi đến tác tử gồm mục tiêu, đầu vào, ràng buộc và artifact mong đợi; kết quả trả về gồm trạng thái, artifact, cảnh báo và metadata thực thi.
 
-\section{Framework Đánh giá hệ thống RAG (RAG Evaluation)}
-Cách đo lường và định lượng bằng số (Metrics) độ chính xác của hệ thống AI bằng các framework chuẩn (ví dụ RAGAS).
+Human-in-the-loop được dùng trong bước duyệt dàn ý slide hoặc giáo án. Sau khi dàn ý được tạo, pipeline có thể tạm dừng để người dùng duyệt hoặc yêu cầu chỉnh sửa. Cơ chế này giúp kiểm soát cấu trúc nội dung trước khi hệ thống sinh phần chi tiết.
 
-\subsection{Mô hình LLM-as-a-Judge}
-Sử dụng LLM đóng vai giám khảo cho việc tính hệ số chính xác không can thiệp sức người.
+\section{Tool layer và MCP-like protocol}
 
-\subsection{Bộ khung đo lường RAG (RAG Metrics)}
+Tool layer cho phép hệ thống chuẩn hóa cách các thành phần gọi công cụ bên ngoài hoặc công cụ nội bộ. Một công cụ cần có tên, mô tả, schema đầu vào và đầu ra. Khi tác tử hoặc service cần sử dụng công cụ, yêu cầu được đóng gói thành request có cấu trúc rồi dispatch đến implementation tương ứng.
 
-Để định lượng hiệu năng của hệ thống RAG, các framework hiện đại (như RAGAS) chia việc đánh giá thành 4 thang đo độc lập, giúp kiểm tra cả chất lượng truy xuất tài liệu lẫn năng lực sinh văn bản của LLM:
+Trong dự án, MCP-like protocol hiện đóng vai trò chuẩn hóa tool call nội bộ và làm điểm mở rộng. Các tool như truy xuất tri thức hoặc định dạng context có thể được bọc dưới cùng một interface. Tuy nhiên, đây chưa phải là triển khai MCP phân tán ở môi trường vận hành thực tế. Những năng lực như tìm kiếm media, kiểm tra URL hoặc gắn nguồn tham khảo là hướng phù hợp để mở rộng tool layer trong tương lai.
 
-\begin{itemize}
-    \item \textbf{Độ trung thực (Faithfulness):} Đảm bảo mọi luận điểm (claims) có trong câu trả lời sinh ra đều có thể được chứng minh bởi tài liệu ngữ cảnh (context) truy xuất được, chống lại hiện tượng ảo giác (hallucination).
-    \begin{equation}
-    \label{eq:faithfulness}
-    Faithfulness = \frac{|V \cap C|}{|V|}
-    \end{equation}
-    Trong đó, $V$ là tập các luận điểm rút ra từ câu trả lời của LLM, và $C$ là tập các luận điểm có thể suy diễn trực tiếp từ ngữ cảnh.
-    
-    \item \textbf{Mức độ bám sát câu hỏi (Answer Relevance):} Đo lường mức độ câu trả lời giải quyết trực tiếp vấn đề được đặt ra trong câu hỏi của người dùng, không thừa thãi hay đi lệch trọng tâm.
-    \begin{equation}
-    \label{eq:answer_relevance}
-    Answer\ Relevance = \frac{1}{N} \sum_{i=1}^{N} \cos(E_{q}, E_{g_i})
-    \end{equation}
-    Trong đó, từ câu trả lời, tiến hành sinh ngược ra $N$ câu hỏi giả định $g_i$. Sau đó tính trung bình độ tương đồng Cosine giữa vector nhúng của câu hỏi gốc $E_{q}$ và các câu hỏi giả định $E_{g_i}$.
-    
-    \item \textbf{Độ bao phủ câu trả lời (Context Recall):} Đo lường việc hệ thống tìm kiếm có lấy về đủ mọi thông tin cần thiết để giải quyết câu hỏi mẫu (Ground Truth) hay không.
-    \begin{equation}
-    \label{eq:context_recall}
-    Context\ Recall = \frac{|GT \cap R|}{|GT|}
-    \end{equation}
-    Trong đó, $GT$ là tập thông tin thiết yếu có trong đáp án mẫu (Ground Truth), và $R$ là tập thông tin được tìm thấy trong ngữ cảnh được truy xuất (Retrieved Context).
-    
-    \item \textbf{Độ chính xác truy xuất (Context Precision):} Đánh giá khả năng xếp hạng (ranking) của hệ thống tìm kiếm, xem những tài liệu chứa thông tin hữu ích nhất có được xếp ở các vị trí đầu tiên hay không.
-    \begin{equation}
-    \label{eq:context_precision}
-    Context\ Precision = \frac{\sum_{k=1}^{K} \left( Precision@k \times v_k \right)}{\text{Tổng số tài liệu liên quan trong } K}
-    \end{equation}
-    Trong đó, $K$ là tổng số tài liệu được truy xuất, $v_k = 1$ nếu tài liệu ở vị trí $k$ có chứa đáp án và $v_k = 0$ nếu ngược lại. Precision@k là độ chính xác tính đến vị trí thứ $k$.
-\end{itemize}
+\section{Đánh giá chất lượng hệ thống RAG}
+
+Đánh giá hệ thống RAG cần xem xét cả chất lượng truy xuất và chất lượng sinh câu trả lời. Nếu tài liệu truy xuất không đúng, câu trả lời có thể sai hoặc thiếu. Nếu tài liệu đúng nhưng mô hình sinh không bám sát tài liệu, hệ thống vẫn có thể tạo ra hallucination.
+
+\subsection{LLM-as-a-Judge}
+
+LLM-as-a-Judge là cách dùng một mô hình ngôn ngữ làm bộ đánh giá tự động. Mô hình đánh giá có thể so sánh câu trả lời với ngữ cảnh, câu hỏi và đáp án tham chiếu để cho điểm theo một tiêu chí cụ thể. Cách tiếp cận này giúp kiểm thử trên nhiều mẫu nhanh hơn so với đánh giá thủ công hoàn toàn.
+
+\subsection{Các thước đo RAG}
+
+Faithfulness đo mức độ các luận điểm trong câu trả lời có được hỗ trợ bởi ngữ cảnh truy xuất hay không:
+\begin{equation}
+\label{eq:faithfulness}
+Faithfulness = \frac{|V \cap C|}{|V|}
+\end{equation}
+Trong đó, $V$ là tập luận điểm rút ra từ câu trả lời, còn $C$ là tập luận điểm có thể suy ra từ ngữ cảnh.
+
+Answer Relevance đo mức độ câu trả lời bám sát câu hỏi. Một cách tính phổ biến là sinh ngược các câu hỏi giả định từ câu trả lời, sau đó so sánh embedding của chúng với câu hỏi gốc:
+\begin{equation}
+\label{eq:answer_relevance}
+Answer\ Relevance = \frac{1}{N} \sum_{i=1}^{N} \cos(E_{q}, E_{g_i})
+\end{equation}
+Trong đó, $E_q$ là embedding của câu hỏi gốc, còn $E_{g_i}$ là embedding của câu hỏi giả định thứ $i$.
+
+Context Recall đo mức độ ngữ cảnh truy xuất bao phủ các thông tin cần thiết trong đáp án tham chiếu:
+\begin{equation}
+\label{eq:context_recall}
+Context\ Recall = \frac{|GT \cap R|}{|GT|}
+\end{equation}
+Trong đó, $GT$ là tập thông tin thiết yếu từ đáp án tham chiếu, còn $R$ là tập thông tin có trong ngữ cảnh truy xuất.
+
+Context Precision đánh giá khả năng xếp hạng các tài liệu hữu ích lên vị trí cao:
+\begin{equation}
+\label{eq:context_precision}
+Context\ Precision = \frac{\sum_{k=1}^{K} \left( Precision@k \times v_k \right)}{\text{Tổng số tài liệu liên quan trong } K}
+\end{equation}
+Trong đó, $K$ là số tài liệu được xét, $v_k = 1$ nếu tài liệu tại vị trí $k$ có chứa thông tin liên quan và $v_k = 0$ nếu ngược lại.
+
+Bên cạnh các thước đo RAG, hệ thống còn cần các bước kiểm tra chất lượng ở mức ứng dụng. Với quiz standalone, câu hỏi được kiểm tra ở cấp bộ câu hỏi và từng câu hỏi trước khi lưu vào session. Với slide và giáo án, kết quả sau khi ghép artifact được đưa qua bước quality review để quyết định chấp nhận, yêu cầu sửa hoặc dừng pipeline. Các cơ chế này bổ sung cho đánh giá định lượng và giúp giảm lỗi trong luồng sử dụng thực tế.
+
+\section{Kết chương}
+
+Chương này đã trình bày các nền tảng lý thuyết và công nghệ chính được sử dụng trong hệ thống, bao gồm biểu diễn ngôn ngữ, mô hình ngôn ngữ lớn, RAG, truy xuất lai, adaptive retrieval, điều phối intent, quản lý session, multi-agent, A2A-lite, HITL, tool layer và đánh giá RAG. Các nội dung này tạo cơ sở để hiểu vì sao hệ thống không chỉ gọi trực tiếp LLM, mà cần nhiều lớp kiểm soát để bảo đảm câu trả lời bám sát sách giáo khoa và phù hợp với từng tác vụ học tập.
+
+Chương tiếp theo sẽ trình bày cách các nền tảng trên được hiện thực hóa trong kiến trúc hệ thống, bao gồm luồng xử lý request, các service chính, pipeline RAG, pipeline quiz, pipeline sinh slide/giáo án và kết quả đánh giá thực nghiệm.
 
 \end{document}
