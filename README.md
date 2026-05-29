@@ -2,6 +2,8 @@
 
 Graduation Thesis project to design and build an Intelligent Virtual Assistant supporting teaching and learning of Computer Science at the High School level (Grades 10-12). The system is developed based on the RAG (Retrieval-Augmented Generation) architecture combined with a Multi-Agent LLM approach to overcome information hallucination and enhance accuracy by closely following textbooks.
 
+> Tài liệu kỹ thuật chi tiết phục vụ viết báo cáo/LaTeX: [`docs/project_technical_reference_vi.md`](docs/project_technical_reference_vi.md). Quy tắc hành văn và bố cục ĐATN: [`docs/latex_writing_guidelines_vi.md`](docs/latex_writing_guidelines_vi.md).
+
 ## 1. General Introduction
 
 The system aims to provide a tool that automates complex academic tasks, serving both students and teachers.

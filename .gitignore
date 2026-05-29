@@ -74,3 +74,5 @@ slide_generate_instructions.md
 .commandcode/
 docs/*
 !docs/multi_agent_slide_lesson_plan_refactor.md
+!docs/project_technical_reference_vi.md
+!docs/latex_writing_guidelines_vi.md
