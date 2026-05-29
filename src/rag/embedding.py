@@ -109,7 +109,7 @@ def prepare_texts(chunks: list, use_context: bool = True) -> List[str]:
     for chunk in chunks:
         content = chunk.get("content", "")
         if use_context:
-            context = chunk.get("context", "")
+            context = chunk.get("breadcrumb") or chunk.get("context", "")
             # Ghép context vào đầu content nếu có
             text = f"{context}\n{content}" if context else content
         else:

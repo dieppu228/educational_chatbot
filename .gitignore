@@ -1,9 +1,15 @@
 # === PDF sách gốc (quá nặng) ===
 CanhDieu/
-KNTT/
+*.pdf
+*.PDF
+KNTT/*
+!KNTT/*/
+!KNTT/*/*/
+!KNTT/**/*.md
 
 # === Temp ===
 temp_images/
+data/chunk_type_cache.json
 __pycache__/
 *.pyc
 

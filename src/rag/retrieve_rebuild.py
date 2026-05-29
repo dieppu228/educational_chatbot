@@ -87,6 +87,22 @@ class CustomSearch:
             return tokenized.split()
         return text.lower().split()
 
+    @staticmethod
+    def _metadata_for_chunk(chunk: Dict) -> Dict:
+        if isinstance(chunk.get("metadata"), dict) and chunk["metadata"]:
+            return chunk["metadata"]
+        return {
+            "book": chunk.get("book", ""),
+            "grade": chunk.get("grade", ""),
+            "topic": chunk.get("topic", ""),
+            "topic_name": chunk.get("topic_name", ""),
+            "lesson": chunk.get("lesson", ""),
+            "lesson_name": chunk.get("lesson_name", ""),
+            "title": chunk.get("section_title", ""),
+            "type": chunk.get("type", ""),
+            "chunk_id": chunk.get("chunk_id", ""),
+        }
+
     # ============================================================
     # BM25 INTERNALS
     # ============================================================
@@ -213,11 +229,11 @@ class CustomSearch:
         
         return [
             {
-                "doc_id": doc_id,
+                "doc_id": self.chunks[doc_id].get("chunk_id", doc_id),
                 "score": score,
                 "content": self.chunks[doc_id]["content"],
-                "context": self.chunks[doc_id].get("context", ""),
-                "metadata": self.chunks[doc_id].get("metadata", {}),
+                "context": self.chunks[doc_id].get("breadcrumb") or self.chunks[doc_id].get("context", ""),
+                "metadata": self._metadata_for_chunk(self.chunks[doc_id]),
             }
             for doc_id, score in combined
         ]
@@ -232,9 +248,9 @@ class CustomSearch:
     ) -> List[Dict]:
         results = []
         lesson_count = {}  # track số chunk per lesson
-
+        
         for doc_id, chunk in enumerate(self.chunks):
-            m = chunk.get("metadata", {})
+            m = self._metadata_for_chunk(chunk)
 
             # Filter logic
             if grade and m.get("grade") != grade:
@@ -253,10 +269,10 @@ class CustomSearch:
                 continue
 
             results.append({
-                "doc_id": doc_id,
+                "doc_id": chunk.get("chunk_id", doc_id),
                 "score": 1.0,  # metadata match = score cố định
                 "content": chunk["content"],
-                "context": chunk.get("context", ""),
+                "context": chunk.get("breadcrumb") or chunk.get("context", ""),
                 "metadata": m,
             })
 
@@ -354,11 +370,11 @@ class CustomSearch:
 
         return [
             {
-                "doc_id": doc_id,
+                "doc_id": self.chunks[doc_id].get("chunk_id", doc_id),
                 "score": score,
                 "content": self.chunks[doc_id]["content"],
-                "context": self.chunks[doc_id].get("context", ""),
-                "metadata": self.chunks[doc_id].get("metadata", {}),
+                "context": self.chunks[doc_id].get("breadcrumb") or self.chunks[doc_id].get("context", ""),
+                "metadata": self._metadata_for_chunk(self.chunks[doc_id]),
             }
             for doc_id, score in combined
         ]
