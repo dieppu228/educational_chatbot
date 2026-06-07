@@ -179,23 +179,31 @@ class RAGService:
             filter={"grade": grade_hint, "topic": topic_hint, "book": book},
             reason=f"Multi-query search ({len(queries)} queries)",
         )
-        return self._rerank_and_filter(queries[0], all_chunks, task_type)
+        return self._rerank_and_filter(queries, all_chunks, task_type)
 
     def _rerank_and_filter(
         self,
-        query: str,
+        queries,
         chunks: List[Dict],
         task_type: Optional[str],
     ) -> List[Dict]:
+        if not chunks:
+            return []
+        if isinstance(queries, str):
+            queries = [queries]
+        # Single rerank pass with task-aware top_n.
+        # Strategies return raw candidates (up to RETRIEVER_TOP_K); reranking
+        # happens only here so task_type (slide/lesson_plan) gets the full pool.
+        # Multi-query: score each chunk against every sub-query, keep the max.
         rerank_top_n = self._get_rerank_top_n(task_type)
-        if len(chunks) > rerank_top_n:
-            result_chunks = self.reranker.rerank(
-                query,
-                chunks,
-                top_n=rerank_top_n,
+        if len(queries) > 1:
+            result_chunks = self.reranker.rerank_multi_query(
+                queries, chunks, top_n=rerank_top_n,
             )
         else:
-            result_chunks = chunks
+            result_chunks = self.reranker.rerank(
+                queries[0], chunks, top_n=rerank_top_n,
+            )
 
         min_score = getattr(settings, 'RERANKER_MIN_SCORE', 0.15)
         filtered = self.reranker.filter_context(

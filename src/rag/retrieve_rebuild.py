@@ -214,7 +214,9 @@ class CustomSearch:
         if isinstance(chunk.get("metadata"), dict) and chunk["metadata"]:
             metadata = dict(chunk["metadata"])
             if "level" not in metadata:
-                metadata["level"] = CustomSearch._infer_level_from_breadcrumb(chunk)
+                metadata["level"] = chunk.get(
+                    "level", CustomSearch._infer_level_from_breadcrumb(chunk)
+                )
             return metadata
         return {
             "book": chunk.get("book", ""),
@@ -226,7 +228,7 @@ class CustomSearch:
             "title": chunk.get("section_title", ""),
             "type": chunk.get("type", ""),
             "chunk_id": chunk.get("chunk_id", ""),
-            "level": CustomSearch._infer_level_from_breadcrumb(chunk),
+            "level": chunk.get("level", CustomSearch._infer_level_from_breadcrumb(chunk)),
         }
 
     @staticmethod

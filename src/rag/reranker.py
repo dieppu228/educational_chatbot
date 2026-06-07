@@ -27,6 +27,14 @@ class Reranker:
                 self._load_failed = True
                 raise
     
+    @staticmethod
+    def _rerank_text(r: Dict) -> str:
+        # Match embedding granularity: breadcrumb (context) + content,
+        # so short chunks ("Cú pháp: ...") keep their lesson context.
+        content = r.get("content", "")
+        context = r.get("context", "")
+        return f"{context}\n{content}" if context else content
+
     @trace_node("Reranker.rerank")
     def rerank(self, query: str, results: List[Dict], top_n: int = 10) -> List[Dict]:
         if not results:
@@ -35,8 +43,8 @@ class Reranker:
         try:
             self._load_model()
 
-            # Tạo (query, doc) pairs
-            pairs = [[query, r["content"]] for r in results]
+            # Tạo (query, doc) pairs — doc gồm breadcrumb + content
+            pairs = [[query, self._rerank_text(r)] for r in results]
 
             # Cross-encoder scoring
             scores = self._model.predict(pairs)
@@ -48,6 +56,33 @@ class Reranker:
             # Sort giảm dần theo rerank_score
             results_sorted = sorted(results, key=lambda x: x["rerank_score"], reverse=True)
 
+            return results_sorted[:top_n]
+        except Exception:
+            return results[:top_n]
+
+    @trace_node("Reranker.rerank_multi_query")
+    def rerank_multi_query(
+        self, queries: List[str], results: List[Dict], top_n: int = 10
+    ) -> List[Dict]:
+        # Score each chunk against every sub-query, keep the max — so a chunk
+        # retrieved for query #2 is judged against query #2, not just query #1.
+        if not results:
+            return []
+        if len(queries) <= 1:
+            return self.rerank(queries[0] if queries else "", results, top_n=top_n)
+
+        try:
+            self._load_model()
+            docs = [self._rerank_text(r) for r in results]
+            pairs = [[q, doc] for q in queries for doc in docs]
+            scores = np.asarray(self._model.predict(pairs), dtype=np.float32)
+            scores = scores.reshape(len(queries), len(results))
+            max_scores = scores.max(axis=0)
+
+            for i, score in enumerate(max_scores):
+                results[i]["rerank_score"] = float(score)
+
+            results_sorted = sorted(results, key=lambda x: x["rerank_score"], reverse=True)
             return results_sorted[:top_n]
         except Exception:
             return results[:top_n]

@@ -199,6 +199,7 @@ def build_point(models, idx: int, chunk: dict, vector: np.ndarray):
         "lesson_name": chunk.get("lesson_name", ""),
         "section_title": chunk.get("section_title", ""),
         "type": chunk.get("type", ""),
+        "level": chunk.get("level", ""),
     }
     point_id = chunk.get("chunk_id") or idx
     return models.PointStruct(id=point_id, vector=vector.tolist(), payload=payload)

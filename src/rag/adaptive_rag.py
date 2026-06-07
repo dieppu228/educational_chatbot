@@ -231,17 +231,16 @@ class AdaptiveRAGAgent:
             results = self.retriever.search(query, top_k=self.settings.RETRIEVER_TOP_K)
         if not results:
             return []
-        reranked = self.reranker.rerank(query, results, top_n=self.settings.RERANKER_TOP_N)
+        # Rerank deferred to RAGService._rerank_and_filter (task-aware top_n)
         stats = getattr(self.retriever, "last_search_stats", {})
         logger.info(
-            "RAG retrieve | strategy=standard bm25_chunks=%s vector_chunks=%s combined_chunks=%s reranked_chunks=%s final_chunks=%s",
+            "RAG retrieve | strategy=standard bm25_chunks=%s vector_chunks=%s combined_chunks=%s candidates=%s",
             stats.get("bm25_chunks", 0),
             stats.get("vector_chunks", 0),
             stats.get("combined_chunks", len(results)),
-            len(reranked) if reranked else 0,
-            len(reranked) if reranked else len(results),
+            len(results),
         )
-        return reranked
+        return results
 
     def _broad_retrieval(self, query: str, profile: QueryProfile, book: str = None) -> List[Dict]:
         raw = self.retriever.search_by_metadata(
@@ -426,19 +425,15 @@ class AdaptiveRAGAgent:
             )
             return parent_results
 
-        # Rerank kết quả
-        reranked = self.reranker.rerank(
-            query, child_results, top_n=self.settings.RERANKER_TOP_N
-        )
-        final = reranked if reranked else child_results
+        # Rerank deferred to RAGService._rerank_and_filter (task-aware top_n)
+        final = child_results
         stats = getattr(self.retriever, "last_search_stats", {})
         logger.info(
-            "HRAG phase2 | child_candidates=%s child_results=%s bm25_chunks=%s vector_chunks=%s reranked=%s final_chunks=%s",
+            "HRAG phase2 | child_candidates=%s child_results=%s bm25_chunks=%s vector_chunks=%s candidates=%s",
             len(child_indices),
             len(child_results),
             stats.get("bm25_chunks", 0),
             stats.get("vector_chunks", 0),
-            len(reranked) if reranked else 0,
             len(final),
         )
         return final
