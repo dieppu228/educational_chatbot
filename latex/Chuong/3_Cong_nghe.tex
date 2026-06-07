@@ -1,241 +1,240 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Sau khi Chương 2 đã khảo sát nhu cầu và xác định các yêu cầu chính của hệ thống, chương này trình bày các nền tảng lý thuyết và công nghệ được sử dụng để xây dựng trợ lý ảo giáo dục. Trọng tâm của chương không phải là mô tả chi tiết mã nguồn, mà là làm rõ các khái niệm cần thiết để hiểu các quyết định thiết kế ở các chương sau. Nội dung được tổ chức từ nền tảng xử lý ngôn ngữ tự nhiên, mô hình ngôn ngữ lớn, truy xuất tăng cường sinh, đến các cơ chế điều phối, đa tác tử và đánh giá chất lượng hệ thống.
+Chương 2 đã trình bày cơ sở lý thuyết, khảo sát các hướng tiếp cận và xác định RAG là hướng phù hợp cho bài toán hỏi đáp trên SGK. Trên cơ sở đó, chương này trình bày thiết kế chi tiết của giải pháp được đề xuất. Trọng tâm của chương là mô tả pipeline xử lý dữ liệu, pipeline xử lý câu hỏi, vai trò của từng node và phương pháp đánh giá các node quan trọng.
 
-\section{Kiến thức nền tảng về Trí tuệ Nhân tạo và Xử lý ngôn ngữ tự nhiên}
+Khác với tài liệu thiết kế phần mềm thuần túy, chương này không đi sâu vào mô tả toàn bộ package hoặc giao diện web. Các thành phần phần mềm chỉ được trình bày ở mức cần thiết để làm rõ cách hệ thống hiện thực hóa giải pháp nghiên cứu. Hai node được đánh giá sâu trong đồ án là retrieval và generation. Các node còn lại như intent routing, context building, validation, session và trace được mô tả để làm rõ luồng xử lý và kiểm thử chức năng.
 
-Hệ thống trợ lý ảo giáo dục xử lý đầu vào chủ yếu ở dạng ngôn ngữ tự nhiên. Vì vậy, các thành phần như tách đơn vị văn bản, biểu diễn ngữ nghĩa và mô hình hóa quan hệ giữa các từ đóng vai trò nền tảng cho cả pha truy xuất tri thức và pha sinh câu trả lời.
+\section{Mục tiêu thiết kế}
 
-\subsection{Tokenization}
+Mục tiêu của giải pháp là xây dựng một trợ lý giáo dục có khả năng trả lời câu hỏi và hỗ trợ một số tác vụ học tập dựa trên nội dung SGK Tin học THPT. Câu trả lời của hệ thống cần bám sát tài liệu, phù hợp với phạm vi sách/lớp/chủ đề, và có thể phân tích được nguyên nhân lỗi khi kết quả chưa đạt.
 
-Tokenization là quá trình chuyển văn bản thô thành các đơn vị nhỏ hơn gọi là token. Token có thể là ký tự, âm tiết, từ hoặc một phần của từ tùy theo bộ mã hóa được sử dụng. Với các mô hình ngôn ngữ hiện đại, tokenization thường không chỉ dựa trên khoảng trắng, vì cách làm này khó xử lý từ mới, tên riêng hoặc các biến thể chính tả. Một kỹ thuật phổ biến là Byte-Pair Encoding (BPE), trong đó hệ thống bắt đầu từ các đơn vị ký tự rồi lặp lại quá trình ghép các cặp xuất hiện thường xuyên để tạo token mới.
+Từ mục tiêu đó, thiết kế hệ thống cần thỏa mãn các yêu cầu sau. Thứ nhất, dữ liệu SGK phải được xử lý thành các đơn vị truy xuất có metadata rõ ràng. Thứ hai, hệ thống phải truy xuất được context liên quan trước khi gọi LLM. Thứ ba, pipeline cần hỗ trợ thử nghiệm nhiều chiến lược search để so sánh chất lượng retrieval. Thứ tư, câu trả lời sinh ra cần được đánh giá bằng con người theo rubric, thay vì chỉ dựa vào một node validate tự động.
 
-Đối với tiếng Việt, tokenization cần được xem xét cẩn thận vì một từ có thể gồm nhiều âm tiết tách nhau bằng khoảng trắng. Ví dụ, cụm ``học sinh'' và ``sinh học'' đều gồm hai âm tiết nhưng mang nghĩa khác nhau. Nếu chỉ tách theo khoảng trắng, hệ thống có thể làm mất ranh giới từ ghép và ảnh hưởng đến biểu diễn ngữ nghĩa, đặc biệt khi xây dựng kho tri thức hoặc tối ưu truy xuất.
+\section{Kiến trúc tổng thể của giải pháp}
 
-\subsection{Biểu diễn vector}
-
-Mô hình máy học không xử lý trực tiếp văn bản như con người đọc câu chữ, mà cần biểu diễn văn bản thành vector số. Embedding là kỹ thuật ánh xạ token, câu hoặc đoạn văn thành vector dày đặc trong không gian nhiều chiều. Hai đoạn văn có ý nghĩa gần nhau thường có vector nằm gần nhau hơn so với các đoạn văn không liên quan.
-
-Độ tương đồng giữa hai vector thường được tính bằng Cosine Similarity:
-\begin{equation}
-\label{eq:cosine_sim}
-\cos(\theta) = \frac{\mathbf{A} \cdot \mathbf{B}}{\|\mathbf{A}\| \|\mathbf{B}\|} = \frac{ \sum_{i=1}^{n} A_i B_i }{ \sqrt{\sum_{i=1}^{n} A_i^2} \sqrt{\sum_{i=1}^{n} B_i^2} }
-\end{equation}
-
-Trong đó, $\mathbf{A}$ và $\mathbf{B}$ là hai vector biểu diễn văn bản. Giá trị cosine càng gần $1$ thì hai vector càng cùng hướng, tức hai văn bản càng gần nhau về mặt ngữ nghĩa. Đây là cơ sở cho tìm kiếm ngữ nghĩa trong hệ thống RAG.
-
-\subsection{Kiến trúc Transformer và cơ chế Attention}
-
-Transformer là kiến trúc nền tảng của nhiều mô hình ngôn ngữ hiện đại. Điểm khác biệt chính của Transformer so với các mô hình tuần tự trước đây là cơ chế tự chú ý, cho phép mô hình đánh giá mức độ liên quan giữa các token trong cùng một ngữ cảnh.
-
-Cơ chế Scaled Dot-Product Attention được mô tả bởi công thức:
-\begin{equation}
-\label{eq:attention}
-Attention(Q, K, V) = \text{softmax} \left( \frac{Q K^T}{\sqrt{d_k}} \right) V
-\end{equation}
-
-Trong đó, $Q$ là truy vấn, $K$ là khóa, $V$ là giá trị, và $d_k$ là số chiều của vector khóa. Thành phần $\frac{QK^T}{\sqrt{d_k}}$ tính mức độ tương hợp giữa truy vấn và khóa, sau đó hàm softmax chuyển kết quả thành trọng số chú ý. Nhờ vậy, mô hình có thể ưu tiên các phần thông tin quan trọng trong câu hoặc đoạn văn.
-
-\section{Mô hình ngôn ngữ lớn}
-
-Mô hình ngôn ngữ lớn là thành phần sinh và suy luận ngôn ngữ trong hệ thống. Tuy nhiên, trong một trợ lý giáo dục, mô hình ngôn ngữ không nên được sử dụng như nguồn tri thức duy nhất. Các câu trả lời cần được neo vào dữ liệu sách giáo khoa và được kiểm soát bởi các lớp truy xuất, điều phối và đánh giá chất lượng.
-
-\subsection{Bản chất dự đoán token tiếp theo}
-
-LLM được huấn luyện để dự đoán token tiếp theo dựa trên chuỗi token đã có. Với một chuỗi có độ dài $T$, xác suất sinh chuỗi có thể được biểu diễn như sau:
-\begin{equation}
-\label{eq:llm_pred}
-P(w_1, w_2, ..., w_T) = \prod_{t=1}^{T} P(w_t \mid w_1, ..., w_{t-1})
-\end{equation}
-
-Trong đó, $w_t$ là token tại vị trí $t$, còn $w_1, ..., w_{t-1}$ là ngữ cảnh trước đó. Khi sinh văn bản, mô hình chọn token tiếp theo dựa trên phân phối xác suất này. Cơ chế đó giúp LLM tạo được câu trả lời tự nhiên, nhưng cũng khiến mô hình có thể sinh thông tin hợp lý về mặt ngôn ngữ mà không đúng với tài liệu nguồn.
-
-\subsection{Prompt và khả năng gọi công cụ}
-
-Prompt là chỉ thị đầu vào dùng để định hướng hành vi của mô hình. Trong hệ thống trợ lý giáo dục, prompt không chỉ chứa câu hỏi của người dùng mà còn có thể chứa ngữ cảnh truy xuất từ sách giáo khoa, yêu cầu định dạng câu trả lời, hoặc ràng buộc về phạm vi lớp và bộ sách.
-
-Khả năng gọi công cụ cho phép LLM không chỉ sinh văn bản tự do mà còn phát ra yêu cầu có cấu trúc để hệ thống thực hiện một thao tác cụ thể. Trong triển khai thực tế, việc gọi công cụ cần một lớp điều phối bên ngoài để kiểm soát quyền truy cập, kiểu dữ liệu vào ra và xử lý lỗi.
-
-\subsection{Hiện tượng hallucination}
-
-Hallucination là hiện tượng mô hình sinh ra thông tin không có cơ sở trong dữ liệu nguồn hoặc trái với thực tế. Nguyên nhân đến từ bản chất dự đoán xác suất của LLM, giới hạn của dữ liệu huấn luyện và việc mô hình không tự kiểm chứng được tri thức tại thời điểm trả lời. Với bài toán giáo dục, hiện tượng này có rủi ro cao vì câu trả lời sai có thể ảnh hưởng trực tiếp đến quá trình học tập.
-
-Vì vậy, hệ thống sử dụng kiến trúc RAG để truy xuất ngữ cảnh từ sách giáo khoa trước khi sinh câu trả lời. Cách tiếp cận này giúp câu trả lời có cơ sở dữ liệu rõ ràng hơn so với việc chỉ dựa vào tri thức tham số của mô hình ngôn ngữ lớn.
-
-\section{Retrieval-Augmented Generation}
-
-Retrieval-Augmented Generation (RAG) là kiến trúc kết hợp truy xuất thông tin và sinh văn bản. Thay vì để LLM trả lời trực tiếp từ tri thức đã học, hệ thống trước hết tìm các đoạn tài liệu liên quan, sau đó đưa các đoạn này vào prompt để mô hình sinh câu trả lời dựa trên ngữ cảnh.
-
-\subsection{Kiến trúc RAG cơ bản}
-
-Một hệ thống RAG thường gồm hai pha. Ở pha chuẩn bị dữ liệu, tài liệu được làm sạch, chia thành các đoạn nhỏ, chuyển thành embedding và lưu cùng metadata. Ở pha truy vấn, câu hỏi của người dùng được phân tích, chuyển thành vector hoặc từ khóa tìm kiếm, sau đó hệ thống lấy các đoạn tài liệu phù hợp nhất để đưa vào LLM.
-
-Trong đề tài này, dữ liệu truy xuất chính là nội dung sách giáo khoa Tin học THPT thuộc các bộ sách được hỗ trợ. Do dữ liệu nguồn có cấu trúc theo lớp, bộ sách, chủ đề, bài học và mục nhỏ, metadata của từng đoạn văn có ý nghĩa quan trọng. Metadata giúp hệ thống giới hạn phạm vi truy xuất và tránh trộn lẫn nội dung giữa các lớp hoặc bộ sách khi người dùng đã nêu rõ yêu cầu.
-
-\subsection{Phân mảnh dữ liệu}
-
-Chunking là quá trình chia tài liệu dài thành các đoạn nhỏ hơn để phù hợp với giới hạn ngữ cảnh của mô hình và để tăng độ chính xác truy xuất. Nếu đoạn quá dài, kết quả truy xuất có thể chứa nhiều thông tin thừa; nếu đoạn quá ngắn, ngữ cảnh có thể bị đứt đoạn.
-
-Các chiến lược chunking thường gặp gồm cắt theo kích thước cố định, cắt theo ranh giới đoạn hoặc câu, và cắt theo cấu trúc phân cấp của tài liệu. Với dữ liệu sách giáo khoa, hướng phân cấp có lợi thế vì giữ lại quan hệ giữa lớp, chương, bài và mục nội dung.
-
-Trong phạm vi đồ án, mỗi bài học trong một cuốn sách được xem như một tài liệu nguồn tương đối độc lập. Vì vậy, việc chia nhỏ theo các heading trong bài học là lựa chọn phù hợp với bản chất dữ liệu. Cách chia này giúp mỗi chunk tương ứng với một đơn vị kiến thức có ranh giới sư phạm rõ ràng, chẳng hạn mục lý thuyết, ví dụ, hoạt động hoặc bài tập. Nếu chỉ chia theo độ dài cố định, hệ thống dễ cắt ngang một định nghĩa, một ví dụ hoặc một chuỗi hướng dẫn, làm giảm chất lượng ngữ cảnh khi truy xuất. Với dạng dữ liệu hiện có, chunking theo heading gần như là yêu cầu bắt buộc để hệ thống vừa truy xuất chính xác ở mức mục nhỏ, vừa mở rộng được phạm vi lên toàn bài khi cần sinh slide hoặc giáo án.
-
-\subsection{Tìm kiếm vector}
-
-Tìm kiếm vector sử dụng embedding để tìm các đoạn văn gần câu hỏi về mặt ngữ nghĩa. Cả câu hỏi và tài liệu đều được ánh xạ vào cùng một không gian vector. Sau đó, hệ thống dùng một độ đo tương đồng, chẳng hạn Cosine Similarity, để xếp hạng các đoạn tài liệu.
-
-Cách tiếp cận này phù hợp với các câu hỏi diễn đạt khác với tài liệu gốc nhưng có cùng ý nghĩa. Tuy nhiên, tìm kiếm vector có thể kém hiệu quả với các từ khóa hiếm, tên lệnh, thuật ngữ kỹ thuật hoặc ký hiệu cụ thể. Vì vậy, hệ thống cần kết hợp thêm tìm kiếm từ khóa.
-
-\section{Truy xuất thông tin nâng cao}
-
-Trong một trợ lý giáo dục, chất lượng câu trả lời phụ thuộc mạnh vào chất lượng ngữ cảnh được truy xuất. Nếu hệ thống lấy sai hoặc thiếu tài liệu, LLM khó sinh câu trả lời đúng dù prompt được thiết kế tốt. Vì vậy, dự án sử dụng kết hợp tìm kiếm từ khóa, tìm kiếm ngữ nghĩa, hợp nhất xếp hạng và xếp hạng lại.
-
-\subsection{Tìm kiếm từ khóa}
-
-Tìm kiếm từ khóa dựa trên sự trùng khớp bề mặt giữa truy vấn và tài liệu. Một phương pháp nền tảng là TF-IDF, trong đó điểm của một từ tăng khi từ đó xuất hiện nhiều trong tài liệu hiện tại và giảm khi từ đó xuất hiện quá phổ biến trong toàn bộ tập tài liệu:
-\begin{equation}
-\label{eq:tfidf}
-TF\_IDF(t, d, D) = TF(t,d) \times IDF(t, D)
-\end{equation}
-
-BM25 là một biến thể được sử dụng rộng rãi hơn trong truy xuất thông tin vì có cơ chế điều chỉnh ảnh hưởng của tần suất từ và độ dài tài liệu:
-\begin{equation}
-\label{eq:bm25}
-Score_{BM25}(Q, d) = \sum_{q_i \in Q} IDF(q_i) \cdot \frac{f(q_i, d) \cdot (k_1 + 1)}{f(q_i, d) + k_1 \cdot \left(1 - b + b \cdot \frac{|d|}{avgdl}\right)}
-\end{equation}
-
-Trong đó, $Q$ là truy vấn, $f(q_i,d)$ là số lần từ khóa xuất hiện trong tài liệu $d$, $|d|$ là độ dài tài liệu và $avgdl$ là độ dài trung bình của các tài liệu. Các tham số $k_1$ và $b$ điều chỉnh mức bão hòa tần suất và mức phạt theo độ dài tài liệu.
-
-\subsection{Tìm kiếm lai và hợp nhất xếp hạng}
-
-Tìm kiếm lai kết hợp ưu điểm của tìm kiếm từ khóa và tìm kiếm ngữ nghĩa. Tìm kiếm từ khóa phù hợp với thuật ngữ chính xác, còn tìm kiếm ngữ nghĩa phù hợp với cách diễn đạt linh hoạt. Khi hai cơ chế trả về hai danh sách kết quả khác nhau, hệ thống cần một phương pháp hợp nhất xếp hạng.
-
-Reciprocal Rank Fusion (RRF) là một cách hợp nhất đơn giản và ổn định. Điểm RRF của một tài liệu $d$ có thể được tính như sau:
-\begin{equation}
-\label{eq:rrf}
-Score_{RRF}(d) = \frac{1}{k + rank_{BM25}(d)} + \frac{1}{k + rank_{Vector}(d)}
-\end{equation}
-
-Trong đó, $rank_{BM25}(d)$ và $rank_{Vector}(d)$ là vị trí của tài liệu trong từng danh sách kết quả, còn $k$ là hằng số giảm ảnh hưởng của thứ hạng. RRF phù hợp khi kết hợp BM25 và tìm kiếm vector vì không yêu cầu hai loại điểm phải cùng thang đo.
-
-\subsection{Xếp hạng lại}
-
-Sau bước truy xuất ban đầu, hệ thống thường có một tập kết quả ứng viên. Reranking là bước đánh giá lại các ứng viên này với mô hình chính xác hơn. Trong khi bi-encoder mã hóa truy vấn và tài liệu riêng biệt để tìm kiếm nhanh, cross-encoder đưa cả cặp truy vấn và tài liệu vào cùng mô hình để đánh giá mức liên quan trực tiếp.
-
-Cách làm này tốn chi phí tính toán hơn, nhưng chỉ áp dụng trên số lượng ứng viên nhỏ nên vẫn phù hợp trong pipeline RAG. Trong dự án, reranker được dùng để lọc nhiễu và chọn các đoạn ngữ cảnh cuối cùng trước khi đưa vào prompt.
-
-\subsection{Tối ưu hóa truy vấn}
-
-Truy vấn của người dùng thường ngắn, phụ thuộc ngữ cảnh hội thoại hoặc dùng cách diễn đạt khác với sách giáo khoa. Vì vậy, hệ thống có thể viết lại truy vấn hoặc sinh thêm truy vấn phụ để tăng độ phủ truy xuất. Query rewriting trong bối cảnh này không nhằm trả lời người dùng trực tiếp, mà nhằm tạo các biểu thức tìm kiếm rõ hơn cho RAG.
-
-Khi câu hỏi phụ thuộc vào lịch sử hội thoại, hệ thống cần kết hợp chủ đề trước đó, lớp học hoặc bộ sách đã chọn vào truy vấn truy xuất. Điều này giúp các câu hỏi nối tiếp vẫn có đủ ngữ cảnh để tìm đúng tài liệu.
-
-\section{Adaptive Retrieval}
-
-Một chiến lược truy xuất cố định không phù hợp với mọi loại câu hỏi. Câu hỏi yêu cầu giải thích một khái niệm cụ thể cần các đoạn nội dung chi tiết, trong khi câu hỏi về chương trình học hoặc danh sách bài học lại cần tổng hợp metadata. Vì vậy, hệ thống sử dụng cơ chế adaptive retrieval để chọn cách truy xuất theo loại truy vấn.
-
-Trong dự án, bộ phân loại truy vấn được cài đặt bằng luật heuristic. Thành phần này không dùng LLM, mà dựa trên tín hiệu từ câu hỏi, lớp, chủ đề, bộ sách và kết quả phân tích intent. Cách tiếp cận này giúp chiến lược truy xuất dễ kiểm soát.
-
-Chiến lược STANDARD được dùng cho truy vấn cụ thể nhưng thiếu phạm vi lớp hoặc chủ đề rõ ràng. Chiến lược BROAD phù hợp với câu hỏi tổng quan, khi hệ thống cần lấy các đoạn đại diện cho nhiều bài học. Chiến lược CURRICULUM ưu tiên cấu trúc chương trình, danh sách bài hoặc chủ đề, nên sử dụng metadata nhiều hơn là tìm kiếm vector chi tiết. Chiến lược HIERARCHICAL được dùng khi truy vấn có đủ thông tin về lớp hoặc chủ đề; hệ thống trước hết chọn bài học liên quan, sau đó tìm các đoạn con chi tiết trong phạm vi đã chọn.
-
-Cơ chế này giúp hệ thống cân bằng giữa độ chính xác và độ bao phủ của truy xuất. Với các tác vụ dài như tạo slide hoặc giáo án, hệ thống có thể lấy nhiều chunk hơn so với hỏi đáp thông thường.
-
-\section{Điều phối yêu cầu và quản lý ngữ cảnh}
-
-Một trợ lý giáo dục không chỉ thực hiện một thao tác hỏi đáp đơn lẻ. Người dùng có thể yêu cầu tạo câu hỏi, chấm đáp án, giải thích câu sai, tạo slide hoặc tiếp tục một nội dung đã trao đổi trước đó. Vì vậy, hệ thống cần một lớp điều phối để phân tích ý định, lập kế hoạch hành động và duy trì trạng thái.
-
-\subsection{Phân tích ý định và lập kế hoạch hành động}
-
-Intent detection là quá trình xác định mục đích của người dùng từ câu nhập tự nhiên. Với hệ thống này, một câu có thể chứa nhiều ý định. Ví dụ, người dùng có thể yêu cầu vừa tạo slide vừa thêm câu hỏi luyện tập. Khi đó, hệ thống cần phân tích thành nhiều intent và lập nhiều hành động tương ứng.
-
-Sau khi phát hiện intent, action planning ánh xạ ý định sang thao tác cụ thể của hệ thống. Cách tách intent routing và action planning giúp phần suy luận ngôn ngữ được tách khỏi phần quyết định nghiệp vụ. LLM có thể hỗ trợ nhận diện ý định, nhưng việc chọn service xử lý cuối cùng cần được kiểm soát bằng logic rõ ràng để tránh gọi sai chức năng.
-
-\subsection{Quản lý session và state}
-
-Session memory lưu lịch sử hội thoại và trạng thái học tập của người dùng. Trạng thái này cần thiết cho các yêu cầu nối tiếp như chấm câu trả lời, ôn lại câu sai hoặc duyệt dàn ý slide.
-
-Trong kiến trúc hiện tại, request được biểu diễn bằng một đối tượng ngữ cảnh đi qua các bước xử lý. Đối tượng này lưu câu hỏi gốc, truy vấn đã làm giàu, intent, action plan, phạm vi sách/lớp, thông tin session và các bước debug. Cách tổ chức này giúp tránh truyền nhiều biến rời rạc giữa các module và hỗ trợ trace khi cần kiểm tra hệ thống.
-
-\section{Hệ thống đa tác tử và LangGraph}
-
-Multi-agent system là cách tổ chức trong đó nhiều tác tử chuyên biệt cùng tham gia giải quyết một tác vụ phức tạp. Mỗi tác tử đảm nhận một vai trò hẹp hơn, chẳng hạn lập dàn ý, viết nội dung, gợi ý media, tạo đánh giá hoặc kiểm tra chất lượng. Cách chia này phù hợp với các tác vụ dài vì đầu ra trung gian có thể được kiểm soát và kết hợp lại.
-
-\subsection{Tác tử AI và mô hình supervisor}
-
-Một tác tử AI thường gồm mô hình ngôn ngữ, chỉ thị nhiệm vụ và khả năng gọi công cụ. Trong kiến trúc supervisor, một tác tử điều phối quyết định tác tử chuyên môn nào cần được gọi ở từng bước. Mô hình này giúp kiểm soát luồng xử lý tốt hơn so với việc để các tác tử giao tiếp tự do.
+Giải pháp được tổ chức thành hai pipeline chính: pipeline chuẩn bị dữ liệu và pipeline xử lý truy vấn. Pipeline chuẩn bị dữ liệu chạy trước, có nhiệm vụ làm sạch tài liệu, chia chunk, tạo embedding và lưu metadata. Pipeline xử lý truy vấn chạy khi người dùng gửi câu hỏi, có nhiệm vụ phân tích ngữ cảnh, truy xuất context, rerank nếu cần và sinh câu trả lời.
 
 \begin{figure}[H]
-    \centering
-    \includegraphics[width=0.85\textwidth]{Hinhve/multi_agent_architechture.jpg}
-    \caption{Tổng quan các mô hình tổ chức trong hệ thống đa tác tử}
-    \label{fig:multi_agent}
+\centering
+\resizebox{0.95\textwidth}{!}{
+\begin{tikzpicture}[
+    node distance=0.9cm,
+    font=\small,
+    base/.style={draw=black!80, thick, align=center, rounded corners=4pt},
+    data/.style={base, fill=orange!12, minimum width=7.8cm, minimum height=0.9cm},
+    process/.style={base, fill=blue!8, minimum width=7.8cm, minimum height=0.9cm},
+    retrieval/.style={base, fill=green!10, minimum width=7.8cm, minimum height=0.9cm},
+    eval/.style={base, fill=red!8, minimum width=7.8cm, minimum height=0.9cm},
+    arrow/.style={thick, -{Stealth[scale=1.05]}}
+]
+
+\node (docs) [data] {SGK Tin học THPT};
+\node (clean) [process, below=of docs] {Làm sạch và chuẩn hóa tài liệu};
+\node (chunk) [process, below=of clean] {Chunking theo cấu trúc bài học và gắn metadata};
+\node (embed) [process, below=of chunk] {Tạo embedding và chỉ mục truy xuất};
+
+\node (query) [data, right=3.8cm of docs] {Câu hỏi người dùng};
+\node (context) [process, below=of query] {Phân tích ngữ cảnh, intent và phạm vi};
+\node (retrieve) [retrieval, below=of context] {Retrieve: search, filter, query rewriting, rerank};
+\node (generate) [process, below=of retrieve] {Generate: sinh câu trả lời từ context};
+\node (validate) [process, below=of generate] {Validate, session và trace};
+
+\node (bench) [eval, below=1.2cm of embed] {Benchmark retrieval sinh bằng LLM và rà soát thủ công};
+\node (human) [eval, below=1.2cm of validate] {Rubric đánh giá generation bởi con người};
+
+\draw [arrow] (docs) -- (clean);
+\draw [arrow] (clean) -- (chunk);
+\draw [arrow] (chunk) -- (embed);
+\draw [arrow] (query) -- (context);
+\draw [arrow] (context) -- (retrieve);
+\draw [arrow] (retrieve) -- (generate);
+\draw [arrow] (generate) -- (validate);
+\draw [arrow] (embed.east) -- ++(1.1,0) |- (retrieve.west);
+\draw [arrow, dashed] (chunk) -- (bench);
+\draw [arrow, dashed] (retrieve) -- (bench);
+\draw [arrow, dashed] (generate) -- (human);
+
+\end{tikzpicture}
+}
+\caption{Tổng quan pipeline dữ liệu, pipeline truy vấn và hai luồng đánh giá}
+\label{fig:research-pipeline-overview}
 \end{figure}
 
-Như minh họa ở Hình \ref{fig:multi_agent}, hệ thống đa tác tử có thể được tổ chức theo dạng mạng lưới, hội đồng, chuỗi tuần tự hoặc supervisor. Đối với bài toán sinh slide và giáo án, mô hình supervisor phù hợp vì các bước xử lý có thứ tự tương đối rõ: lập dàn ý, phát triển nội dung, bổ sung media, tạo hoạt động đánh giá, ghép kết quả và kiểm tra chất lượng.
+Hình \ref{fig:research-pipeline-overview} cho thấy thiết kế không đặt trọng tâm vào giao diện ứng dụng, mà đặt trọng tâm vào mối quan hệ giữa dữ liệu, retrieval, generation và evaluation. Đây là cơ sở để Chương 4 triển khai kiểm thử và trình bày kết quả thực nghiệm.
 
-\subsection{Phạm vi áp dụng trong hệ thống}
+\section{Thiết kế dữ liệu đầu vào}
 
-Trong đồ án này, multi-agent được áp dụng rõ nhất cho pipeline sinh slide và giáo án. Toàn bộ hệ thống không phải là một hệ LangGraph multi-agent end-to-end. Ở cấp cao, request vẫn được điều phối bởi Orchestrator, ActionPlanner và ExecutionDispatcher. LangGraph chỉ điều phối content pipeline, nơi tác vụ đủ dài và có nhiều artifact trung gian cần phối hợp.
+Dữ liệu đầu vào của hệ thống là nội dung SGK Tin học THPT thuộc các lớp 10, 11 và 12 của hai bộ Cánh Diều và Kết Nối Tri Thức. Mỗi tài liệu có cấu trúc phân cấp gồm bộ sách, lớp, chủ đề, bài học và các mục con. Vì vậy, metadata không chỉ là thông tin phụ trợ mà là thành phần quan trọng để giới hạn phạm vi retrieval.
 
-Ranh giới này quan trọng vì các chức năng như quiz standalone có trạng thái tương tác riêng, bao gồm lượt làm bài, câu trả lời của học sinh, điểm số, câu sai và thống kê tiến độ. Nếu đưa toàn bộ quiz standalone vào content multi-agent pipeline, state học tập sẽ bị trộn với state sinh artifact và khó kiểm soát hơn.
+Mỗi chunk sau khi xử lý cần có các nhóm thông tin sau:
 
-\subsection{A2A-lite và Human-in-the-loop}
+\begin{table}[H]
+\centering
+\caption{Các trường metadata chính của chunk}
+\label{tab:chunk-metadata}
+\begin{tabular}{|p{0.24\textwidth}|p{0.68\textwidth}|}
+\hline
+\textbf{Trường} & \textbf{Ý nghĩa} \\ \hline
+\texttt{chunk\_id} & Định danh duy nhất của chunk, dùng để trace và đánh giá retrieval. \\ \hline
+\texttt{book} & Bộ sách, ví dụ Cánh Diều hoặc Kết Nối Tri Thức. \\ \hline
+\texttt{grade} & Lớp học tương ứng, gồm 10, 11 hoặc 12. \\ \hline
+\texttt{topic} & Chủ đề hoặc mạch nội dung trong chương trình. \\ \hline
+\texttt{lesson} & Tên bài học chứa chunk. \\ \hline
+\texttt{section} & Mục nhỏ hoặc heading trong bài học nếu có. \\ \hline
+\texttt{text} & Nội dung văn bản được dùng cho retrieval và generation. \\ \hline
+\texttt{source} & Nguồn dữ liệu hoặc file gốc để kiểm tra lại khi cần. \\ \hline
+\end{tabular}
+\end{table}
 
-Để các tác tử trao đổi có cấu trúc, hệ thống sử dụng một contract nội bộ dạng A2A-lite. Contract này không phải là một runtime phân tán đầy đủ, mà là cách chuẩn hóa thông điệp trong cùng process. Một task gửi đến tác tử gồm mục tiêu, đầu vào, ràng buộc và artifact mong đợi; kết quả trả về gồm trạng thái, artifact, cảnh báo và metadata thực thi.
+Việc lưu metadata cho phép hệ thống thực hiện filter theo phạm vi. Ví dụ, khi người dùng hỏi về bài học lớp 11 Cánh Diều, retriever có thể ưu tiên hoặc giới hạn kết quả trong đúng lớp và bộ sách này. Điều này đặc biệt quan trọng vì nhiều thuật ngữ Tin học xuất hiện ở nhiều lớp khác nhau.
 
-Human-in-the-loop được dùng trong bước duyệt dàn ý slide hoặc giáo án. Sau khi dàn ý được tạo, pipeline có thể tạm dừng để người dùng duyệt hoặc yêu cầu chỉnh sửa. Cơ chế này giúp kiểm soát cấu trúc nội dung trước khi hệ thống sinh phần chi tiết.
+\section{Thiết kế tiền xử lý và chunking}
 
-\section{Tool layer và MCP-like protocol}
+Tiền xử lý tài liệu gồm các bước đọc dữ liệu nguồn, chuẩn hóa ký tự, loại bỏ đoạn rỗng hoặc nhiễu, nhận diện heading và gắn metadata. Mục tiêu của bước này là đưa tài liệu về dạng ổn định để chunking và retrieval có thể hoạt động nhất quán.
 
-Tool layer cho phép hệ thống chuẩn hóa cách các thành phần gọi công cụ bên ngoài hoặc công cụ nội bộ. Một công cụ cần có tên, mô tả, schema đầu vào và đầu ra. Khi tác tử hoặc service cần sử dụng công cụ, yêu cầu được đóng gói thành request có cấu trúc rồi dispatch đến implementation tương ứng.
+Chunking được thiết kế theo hướng ưu tiên cấu trúc bài học thay vì chỉ cắt theo độ dài cố định. Với dữ liệu SGK, mỗi heading hoặc tiểu mục thường tương ứng với một đơn vị kiến thức có ý nghĩa sư phạm. Nếu cắt ngang một định nghĩa hoặc ví dụ, context truy xuất có thể thiếu thông tin cần thiết để LLM trả lời đúng.
 
-Trong dự án, MCP-like protocol hiện đóng vai trò chuẩn hóa tool call nội bộ và làm điểm mở rộng. Các tool như truy xuất tri thức hoặc định dạng context có thể được bọc dưới cùng một interface. Tuy nhiên, đây chưa phải là triển khai MCP phân tán ở môi trường vận hành thực tế. Những năng lực như tìm kiếm media, kiểm tra URL hoặc gắn nguồn tham khảo là hướng phù hợp để mở rộng tool layer trong tương lai.
+Tuy nhiên, chunk quá dài cũng làm retrieval kém chính xác vì chứa nhiều nội dung phụ. Vì vậy, sau khi chia theo cấu trúc, hệ thống vẫn cần kiểm soát độ dài chunk và có thể áp dụng overlap khi cần. Các tham số cần báo cáo trong thực nghiệm gồm kích thước chunk, overlap, số lượng chunk, độ dài trung bình và phân phối độ dài.
 
-\section{Đánh giá chất lượng hệ thống RAG}
+\section{Thiết kế embedding và indexing}
 
-Đánh giá hệ thống RAG cần xem xét cả chất lượng truy xuất và chất lượng sinh câu trả lời. Nếu tài liệu truy xuất không đúng, câu trả lời có thể sai hoặc thiếu. Nếu tài liệu đúng nhưng mô hình sinh không bám sát tài liệu, hệ thống vẫn có thể tạo ra hallucination.
+Sau khi có danh sách chunk, hệ thống tạo embedding cho từng chunk và lưu cùng metadata. Embedding giúp hệ thống thực hiện tìm kiếm ngữ nghĩa, trong khi metadata giúp lọc phạm vi. Hai nhóm thông tin này bổ sung cho nhau: embedding giúp tìm đoạn gần nghĩa với câu hỏi, còn metadata giúp tránh lấy nhầm đoạn thuộc phạm vi khác.
 
-\subsection{LLM-as-a-Judge}
+Input của node embedding là nội dung chunk. Output là vector biểu diễn và payload metadata. Trong triển khai, mô hình embedding tiếng Việt được ưu tiên vì dữ liệu SGK và câu hỏi của người dùng đều ở tiếng Việt. Việc chọn embedding tiếng Việt giúp giảm rủi ro biểu diễn sai các thuật ngữ hoặc cấu trúc ngôn ngữ đặc thù.
 
-LLM-as-a-Judge là cách dùng một mô hình ngôn ngữ làm bộ đánh giá tự động. Mô hình đánh giá có thể so sánh câu trả lời với ngữ cảnh, câu hỏi và đáp án tham chiếu để cho điểm theo một tiêu chí cụ thể. Cách tiếp cận này giúp kiểm thử trên nhiều mẫu nhanh hơn so với đánh giá thủ công hoàn toàn.
+Index cần hỗ trợ truy xuất top-k theo độ tương đồng vector và trả về metadata đi kèm. Khi dữ liệu thay đổi, hệ thống cần tái tạo hoặc cập nhật index để bảo đảm chunk, embedding và metadata đồng bộ. Đây là điều kiện cần để benchmark retrieval có thể tính metric chính xác.
 
-\subsection{Các thước đo RAG}
+\section{Thiết kế phân tích ngữ cảnh, intent và phạm vi}
 
-Faithfulness đo mức độ các luận điểm trong câu trả lời có được hỗ trợ bởi ngữ cảnh truy xuất hay không:
-\begin{equation}
-\label{eq:faithfulness}
-Faithfulness = \frac{|V \cap C|}{|V|}
-\end{equation}
-Trong đó, $V$ là tập luận điểm rút ra từ câu trả lời, còn $C$ là tập luận điểm có thể suy ra từ ngữ cảnh.
+Trước khi truy xuất, hệ thống cần làm rõ câu hỏi người dùng. Một câu hỏi có thể thiếu chủ đề, phụ thuộc vào lịch sử hội thoại hoặc chứa nhiều ý định trong cùng một lượt nhập. Nếu đưa trực tiếp câu hỏi như vậy vào retriever, kết quả có thể thiếu hoặc sai phạm vi.
 
-Answer Relevance đo mức độ câu trả lời bám sát câu hỏi. Một cách tính phổ biến là sinh ngược các câu hỏi giả định từ câu trả lời, sau đó so sánh embedding của chúng với câu hỏi gốc:
-\begin{equation}
-\label{eq:answer_relevance}
-Answer\ Relevance = \frac{1}{N} \sum_{i=1}^{N} \cos(E_{q}, E_{g_i})
-\end{equation}
-Trong đó, $E_q$ là embedding của câu hỏi gốc, còn $E_{g_i}$ là embedding của câu hỏi giả định thứ $i$.
+Node phân tích ngữ cảnh nhận câu hỏi hiện tại, thông tin người dùng, phạm vi chọn từ giao diện và session trước đó. Output của node này gồm câu hỏi đã được làm giàu, danh sách truy vấn phục vụ RAG nếu có, thông tin intent, phạm vi sách/lớp/chủ đề và các debug step. Khi câu hỏi phụ thuộc vào lịch sử, hệ thống có thể dùng thông tin phiên trước để bổ sung ngữ cảnh.
 
-Context Recall đo mức độ ngữ cảnh truy xuất bao phủ các thông tin cần thiết trong đáp án tham chiếu:
-\begin{equation}
-\label{eq:context_recall}
-Context\ Recall = \frac{|GT \cap R|}{|GT|}
-\end{equation}
-Trong đó, $GT$ là tập thông tin thiết yếu từ đáp án tham chiếu, còn $R$ là tập thông tin có trong ngữ cảnh truy xuất.
+Intent routing xác định yêu cầu thuộc nhóm hỏi đáp, giải thích, sinh quiz, chấm đáp án, sinh slide, sinh giáo án hoặc fallback. Action planning ánh xạ intent thành hành động cụ thể. Trong thiết kế này, intent routing và action planning giúp đưa request vào đúng service, nhưng không phải node đánh giá định lượng chính của đồ án.
 
-Context Precision đánh giá khả năng xếp hạng các tài liệu hữu ích lên vị trí cao:
-\begin{equation}
-\label{eq:context_precision}
-Context\ Precision = \frac{\sum_{k=1}^{K} \left( Precision@k \times v_k \right)}{\text{Tổng số tài liệu liên quan trong } K}
-\end{equation}
-Trong đó, $K$ là số tài liệu được xét, $v_k = 1$ nếu tài liệu tại vị trí $k$ có chứa thông tin liên quan và $v_k = 0$ nếu ngược lại.
+\section{Thiết kế retrieval service}
 
-Bên cạnh các thước đo RAG, hệ thống còn cần các bước kiểm tra chất lượng ở mức ứng dụng. Với quiz standalone, câu hỏi được kiểm tra ở cấp bộ câu hỏi và từng câu hỏi trước khi lưu vào session. Với slide và giáo án, kết quả sau khi ghép artifact được đưa qua bước quality review để quyết định chấp nhận, yêu cầu sửa hoặc dừng pipeline. Các cơ chế này bổ sung cho đánh giá định lượng và giúp giảm lỗi trong luồng sử dụng thực tế.
+Retrieval service là thành phần trọng tâm của đồ án. Node này nhận câu hỏi hoặc danh sách truy vấn, áp dụng các cấu hình search khác nhau và trả về danh sách context candidate. Chất lượng của node retrieval ảnh hưởng trực tiếp đến chất lượng generation phía sau.
+
+\subsection{Vector search cơ bản}
+
+Vector search cơ bản chuyển câu hỏi thành embedding, sau đó tìm các chunk có vector gần nhất. Đây là baseline quan trọng vì hầu hết các cấu hình nâng cao đều được so sánh với nó. Output của vector search gồm danh sách chunk, điểm tương đồng và metadata.
+
+\subsection{Vector search có filter phạm vi}
+
+Khi người dùng cung cấp sách, lớp hoặc chủ đề, hệ thống có thể áp dụng filter metadata trước hoặc trong quá trình search. Cấu hình này giúp giảm nhiễu do các chunk thuộc lớp hoặc bộ sách khác. Tuy nhiên, nếu filter quá chặt, hệ thống có thể bỏ sót kết quả liên quan. Vì vậy, cần đánh giá riêng hiệu quả của filter scope.
+
+\subsection{Search với query rewriting}
+
+Query rewriting dùng LLM để viết lại câu hỏi hoặc sinh truy vấn phụ giàu ngữ nghĩa hơn. Ví dụ, câu hỏi ngắn có thể được mở rộng bằng chủ đề, lớp hoặc thuật ngữ liên quan. Các truy vấn này được dùng cho retrieval, không dùng để trả lời trực tiếp.
+
+Đánh giá node này cần so sánh retrieval trước và sau query rewriting. Nếu rewritten query làm tăng Hit@k hoặc MRR, bước này có giá trị thực nghiệm. Nếu kết quả không cải thiện, hệ thống cần cân nhắc chi phí gọi LLM so với lợi ích đạt được.
+
+\subsection{Multi-query retrieval và merge kết quả}
+
+Multi-query retrieval chạy nhiều truy vấn trên cùng một câu hỏi, sau đó hợp nhất kết quả. Cách làm này tăng độ phủ nhưng có thể đưa thêm nhiễu vào danh sách candidate. Vì vậy, bước merge cần loại trùng chunk, giữ metadata và có cách xếp hạng lại kết quả hợp nhất.
+
+\subsection{Reranking}
+
+Reranking nhận query và danh sách candidate chunks, sau đó sắp xếp lại theo mức độ liên quan. Trong pipeline RAG, reranking thường chỉ áp dụng trên số lượng candidate nhỏ để cân bằng chất lượng và độ trễ.
+
+Trong thiết kế đánh giá, reranking được kiểm tra bằng cách so sánh các metric retrieval trước và sau khi rerank. Nếu chunk đúng được đưa lên vị trí cao hơn, MRR và nDCG sẽ cải thiện. Đây là cơ sở để quyết định có nên giữ reranking trong pipeline mặc định hay không.
+
+\subsection{Adaptive retrieval}
+
+Adaptive retrieval chọn chiến lược truy xuất theo loại câu hỏi và phạm vi. Ví dụ, câu hỏi về danh sách bài học có thể ưu tiên metadata, trong khi câu hỏi định nghĩa cần chunk nội dung chi tiết. Thành phần này giúp hệ thống không dùng một cấu hình search cố định cho mọi trường hợp.
+
+Trong thực nghiệm, adaptive retrieval chỉ nên được xem là một cấu hình riêng nếu nó có chiến lược khác rõ ràng so với vector search thường. Nếu adaptive retrieval chỉ bao bọc lại vector search mà không thay đổi logic, không nên trình bày như một đóng góp độc lập.
+
+\section{Thiết kế context building và generation}
+
+Sau retrieval, hệ thống cần biến danh sách chunk thành context đưa vào prompt. Context building có nhiệm vụ loại trùng, sắp xếp thứ tự, giới hạn độ dài và giữ lại thông tin nguồn. Nếu context quá dài, prompt có thể chứa nhiều nhiễu. Nếu context quá ngắn, LLM có thể thiếu thông tin để trả lời.
+
+Node generation nhận câu hỏi, context, prompt template và metadata. Output là câu trả lời cuối cùng. Prompt cần yêu cầu mô hình trả lời dựa trên context, không bịa khi context không đủ, diễn giải phù hợp với học sinh THPT và giữ đúng thuật ngữ Tin học.
+
+Node validate nếu có được xem là bước kiểm soát nội bộ của pipeline. Node này có thể phát hiện một số lỗi format hoặc cảnh báo câu trả lời thiếu căn cứ, nhưng không thay thế đánh giá thủ công của con người đối với chất lượng generation. Đây là ranh giới quan trọng để tránh đánh đồng kiểm tra runtime với kết quả nghiên cứu.
+
+\section{Thiết kế benchmark retrieval}
+
+Để đánh giá retrieval, đồ án cần một file benchmark gồm các câu hỏi và thông tin kỳ vọng. Benchmark được sinh bằng LLM từ nội dung SGK hoặc các chunk đã xử lý, sau đó được rà soát thủ công để bảo đảm câu hỏi có đáp án trong tài liệu và metadata không bị lệch.
+
+Quy trình sinh benchmark gồm năm bước. Đầu tiên, chọn phạm vi dữ liệu theo sách, lớp, chủ đề hoặc bài học. Tiếp theo, đưa nội dung chunk hoặc bài học vào prompt để LLM sinh câu hỏi. Sau đó, yêu cầu LLM trả về câu hỏi, đáp án kỳ vọng, từ khóa kỳ vọng, metadata nguồn và loại câu hỏi. Bước thứ tư là lọc bỏ câu hỏi trùng, quá mơ hồ hoặc không trả lời được từ tài liệu. Cuối cùng, người thực hiện rà soát benchmark trước khi dùng để tính metric.
+
+Mỗi mẫu benchmark nên có các trường sau:
+
+\begin{table}[H]
+\centering
+\caption{Cấu trúc đề xuất cho một mẫu retrieval benchmark}
+\label{tab:retrieval-benchmark-schema}
+\begin{tabular}{|p{0.28\textwidth}|p{0.64\textwidth}|}
+\hline
+\textbf{Trường} & \textbf{Ý nghĩa} \\ \hline
+\texttt{id} & Mã câu hỏi benchmark. \\ \hline
+\texttt{question} & Câu hỏi dùng để chạy retrieval. \\ \hline
+\texttt{expected\_answer} & Đáp án tham chiếu ngắn để kiểm tra nội dung. \\ \hline
+\texttt{expected\_book} & Bộ sách kỳ vọng. \\ \hline
+\texttt{expected\_grade} & Lớp kỳ vọng. \\ \hline
+\texttt{expected\_topic} & Chủ đề kỳ vọng. \\ \hline
+\texttt{expected\_lesson} & Bài học hoặc mục chứa đáp án. \\ \hline
+\texttt{chunk ids} & Danh sách chunk kỳ vọng nếu đã có nhãn ổn định. \\ \hline
+\texttt{keywords} & Từ khóa cần xuất hiện trong context đúng. \\ \hline
+\texttt{question\_type} & Loại câu hỏi: định nghĩa, liệt kê, so sánh, quy trình, vận dụng hoặc ngoài phạm vi. \\ \hline
+\texttt{difficulty} & Mức độ khó của câu hỏi. \\ \hline
+\end{tabular}
+\end{table}
+
+Khi chưa có expected chunk ổn định, benchmark có thể dùng kết hợp expected metadata và expected keywords. Tuy nhiên, để tính metric chính xác hơn, đồ án nên dần gắn expected chunk hoặc expected source cho các câu hỏi quan trọng.
+
+\section{Thiết kế đánh giá retrieval}
+
+Retrieval được xem là đúng khi danh sách context trả về chứa thông tin cần thiết để trả lời câu hỏi. Tùy mức độ gắn nhãn của benchmark, một context có thể được xem là liên quan nếu nó có chunk id nằm trong expected chunk, hoặc có metadata đúng và chứa các expected keywords.
+
+Các metric chính gồm:
+
+\begin{itemize}
+    \item \textbf{Hit@k}: bằng 1 nếu trong top-k có ít nhất một context liên quan.
+    \item \textbf{Recall@k}: tỷ lệ context liên quan được tìm thấy trong top-k so với tập context kỳ vọng.
+    \item \textbf{Precision@k}: tỷ lệ context trong top-k là context liên quan.
+    \item \textbf{MRR}: nghịch đảo vị trí của context liên quan đầu tiên.
+    \item \textbf{nDCG}: đánh giá chất lượng thứ hạng khi có nhãn relevance nhiều mức.
+\end{itemize}
+
+Các cấu hình search cần so sánh gồm vector search cơ bản, vector search có filter scope, vector search với rewritten query, multi-query retrieval, vector search kết hợp rerank và adaptive retrieval. Kết quả cần được phân tích theo loại câu hỏi, lớp, bộ sách, chủ đề và nhóm lỗi thường gặp.
+
+\section{Thiết kế đánh giá generation}
+
+Generation được đánh giá dựa trên câu trả lời cuối cùng mà LLM sinh ra từ context. Khác với retrieval, đánh giá generation không nên chỉ dựa vào metric tự động vì một câu trả lời đúng có thể có nhiều cách diễn đạt. Trong phạm vi đồ án, generation được chấm bởi con người theo rubric.
+
+Rubric đề xuất gồm năm tiêu chí: correctness, faithfulness, completeness, clarity và hallucination. Correctness đánh giá câu trả lời có đúng nội dung SGK không. Faithfulness đánh giá câu trả lời có bám context truy xuất không. Completeness đánh giá mức độ đầy đủ so với expected answer. Clarity đánh giá độ rõ ràng và phù hợp với học sinh THPT. Hallucination ghi nhận việc câu trả lời có thêm thông tin không có trong context hay không.
+
+\begin{table}[H]
+\centering
+\caption{Rubric chấm generation theo thang 1-5}
+\label{tab:generation-rubric}
+\begin{tabular}{|p{0.12\textwidth}|p{0.78\textwidth}|}
+\hline
+\textbf{Điểm} & \textbf{Mô tả} \\ \hline
+5 & Câu trả lời đúng, đủ, bám context rõ ràng và diễn đạt phù hợp. \\ \hline
+4 & Câu trả lời đúng ý chính, bám context, nhưng thiếu một vài chi tiết nhỏ. \\ \hline
+3 & Câu trả lời đúng một phần hoặc thiếu căn cứ ở một số ý. \\ \hline
+2 & Câu trả lời thiếu nhiều thông tin, lệch context hoặc có suy diễn đáng kể. \\ \hline
+1 & Câu trả lời sai, bịa thông tin hoặc không trả lời đúng câu hỏi. \\ \hline
+\end{tabular}
+\end{table}
+
+Khi chấm, người đánh giá cần xem câu hỏi, expected answer, retrieved context và generated answer. Nếu điểm thấp, cần ghi lại lỗi chính để phân biệt lỗi do retrieval hay do generation. Node validate bằng LLM nếu có trong pipeline chỉ được dùng như thông tin tham khảo, không dùng làm ground truth chấm generation.
+
+\section{Thiết kế logging, session và trace}
+
+Logging và trace giúp hệ thống tái lập lỗi và phân tích kết quả thực nghiệm. Mỗi request cần lưu câu hỏi gốc, câu hỏi đã làm giàu, intent, action plan, phạm vi truy xuất, danh sách chunk lấy được, điểm retrieval hoặc rerank, prompt metadata, câu trả lời sinh ra và thông tin đánh giá nếu có.
+
+Session lưu trạng thái hội thoại và các tác vụ tương tác như quiz hoặc duyệt dàn ý slide. Trong nghiên cứu retrieval/generation, session không phải node đánh giá chính, nhưng nó giúp kiểm tra các câu hỏi phụ thuộc ngữ cảnh và hỗ trợ phân tích các request nối tiếp.
 
 \section{Kết chương}
 
-Chương này đã trình bày các nền tảng lý thuyết và công nghệ chính được sử dụng trong hệ thống, bao gồm biểu diễn ngôn ngữ, mô hình ngôn ngữ lớn, RAG, truy xuất lai, adaptive retrieval, điều phối intent, quản lý session, multi-agent, A2A-lite, HITL, tool layer và đánh giá RAG. Các nội dung này tạo cơ sở để hiểu vì sao hệ thống không chỉ gọi trực tiếp LLM, mà cần nhiều lớp kiểm soát để bảo đảm câu trả lời bám sát sách giáo khoa và phù hợp với từng tác vụ học tập.
+Chương này đã trình bày thiết kế giải pháp theo hướng nghiên cứu. Hệ thống được chia thành pipeline chuẩn bị dữ liệu và pipeline xử lý truy vấn. Các node như chunking, embedding, context analysis, retrieval, reranking, generation, validation và trace được mô tả theo vai trò trong pipeline.
 
-Chương tiếp theo sẽ trình bày cách các nền tảng trên được hiện thực hóa trong kiến trúc hệ thống, bao gồm luồng xử lý request, các service chính, pipeline RAG, pipeline quiz, pipeline sinh slide/giáo án và kết quả đánh giá thực nghiệm.
+Trọng tâm đánh giá của đồ án là node retrieval và node generation. Retrieval được đánh giá định lượng bằng benchmark sinh từ SGK với sự hỗ trợ của LLM và được rà soát thủ công. Generation được đánh giá bằng con người theo rubric để tránh phụ thuộc vào LLM-as-judge và tránh tăng chi phí. Chương tiếp theo sẽ trình bày cài đặt hệ thống, kiểm thử và kết quả thực nghiệm tương ứng với thiết kế này.
 
 \end{document}

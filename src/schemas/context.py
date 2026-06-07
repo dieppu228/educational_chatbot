@@ -22,6 +22,9 @@ class RequestContext:
     ui_book: Optional[str] = None               # Book từ UI dropdown
     ui_grade: Optional[str] = None              # Grade từ UI dropdown
     user_id: str = "anonymous"                 # User identity from client/UI
+    hitl_type: Optional[str] = None             # Structured HITL action type from UI
+    hitl_approved: Optional[bool] = None        # True approve, False submit edited payload
+    edited_outline: Optional[Dict[str, Any]] = None
 
     # ── Enrichment (ContextAnalyzer) ───────────────────────
     enriched_query: str = ""                    # Query đã bổ sung context

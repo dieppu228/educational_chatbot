@@ -337,7 +337,7 @@ class AdaptiveRAGAgent:
         for i, chunk in enumerate(all_chunks):
             if scope_set is not None and i not in scope_set:
                 continue
-            m = chunk.get("metadata", {})
+            m = self._metadata_for_chunk(chunk)
             level = m.get("level", 99)
             if level > 2:
                 continue
@@ -391,7 +391,7 @@ class AdaptiveRAGAgent:
         for i, chunk in enumerate(all_chunks):
             if scope_set is not None and i not in scope_set:
                 continue
-            m = chunk.get("metadata", {})
+            m = self._metadata_for_chunk(chunk)
             level = m.get("level", 0)
             if level < 3:
                 continue
@@ -455,31 +455,36 @@ class AdaptiveRAGAgent:
     def _get_book_indices(self, book: str) -> List[int]:
         indices = []
         for i, chunk in enumerate(self.retriever.chunks):
-            if chunk.get("metadata", {}).get("book") == book:
+            if self._metadata_for_chunk(chunk).get("book") == book:
                 indices.append(i)
         return indices
+
+    def _metadata_for_chunk(self, chunk: Dict) -> Dict:
+        metadata_getter = getattr(self.retriever, "_metadata_for_chunk", None)
+        if callable(metadata_getter):
+            return metadata_getter(chunk)
+        return chunk.get("metadata", {})
 
     @staticmethod
     def _is_scoped_topic_search(profile: QueryProfile, book_indices: List[int] = None) -> bool:
         return bool(profile.topic_hint and (profile.grade or book_indices is not None))
 
-    @classmethod
-    def _matches_topic_hint(cls, chunk: Dict, topic_hint: str) -> bool:
-        metadata = chunk.get("metadata", {})
+    def _matches_topic_hint(self, chunk: Dict, topic_hint: str) -> bool:
+        metadata = self._metadata_for_chunk(chunk)
         haystack = " ".join(
             str(metadata.get(key, ""))
             for key in ("topic_name", "lesson_name", "title")
         )
         haystack = f"{haystack} {chunk.get('context', '')}"
-        normalized_hint = cls._normalize_text(topic_hint)
-        normalized_haystack = cls._normalize_text(haystack)
+        normalized_hint = self._normalize_text(topic_hint)
+        normalized_haystack = self._normalize_text(haystack)
         if normalized_hint and normalized_hint in normalized_haystack:
             return True
 
-        hint_tokens = cls._meaningful_tokens(topic_hint)
+        hint_tokens = self._meaningful_tokens(topic_hint)
         if not hint_tokens or len(hint_tokens) > 2:
             return False
-        haystack_tokens = set(cls._meaningful_tokens(haystack))
+        haystack_tokens = set(self._meaningful_tokens(haystack))
         return all(token in haystack_tokens for token in hint_tokens)
 
     @staticmethod

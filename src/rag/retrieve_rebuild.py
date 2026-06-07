@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from collections import Counter
 
+from src.config.config import settings
 from src.rag.embedding import EmbeddingModel
 
 try:
@@ -16,6 +17,69 @@ except ImportError:
 
 logger = logging.getLogger("chatbot")
 SCOPED_SEARCH_GUARD_VERSION = "scoped-search-guard-v2"
+
+
+def _vector_to_array(vector) -> np.ndarray:
+    if isinstance(vector, dict):
+        if len(vector) != 1:
+            raise ValueError(f"Expected one vector per point, got keys={list(vector.keys())}")
+        vector = next(iter(vector.values()))
+
+    array = np.asarray(vector, dtype=np.float32)
+    if array.ndim != 1:
+        raise ValueError(f"Qdrant vector must be 1D, got shape={array.shape}")
+    return array
+
+
+def load_chunks_and_embeddings_from_qdrant(
+    qdrant_url: str = None,
+    collection_name: str = None,
+    batch_size: int = None,
+    timeout: int = 60,
+) -> Tuple[List[Dict], np.ndarray]:
+    try:
+        from qdrant_client import QdrantClient
+    except ImportError as exc:
+        raise RuntimeError("qdrant-client is required to load chunks from Qdrant") from exc
+
+    qdrant_url = qdrant_url or settings.QDRANT_URL
+    collection_name = collection_name or settings.QDRANT_COLLECTION
+    batch_size = batch_size or settings.QDRANT_SCROLL_BATCH_SIZE
+
+    client = QdrantClient(url=qdrant_url, timeout=timeout)
+    points = []
+    next_offset = None
+
+    while True:
+        batch, next_offset = client.scroll(
+            collection_name=collection_name,
+            offset=next_offset,
+            limit=batch_size,
+            with_payload=True,
+            with_vectors=True,
+        )
+        points.extend(batch)
+        if next_offset is None:
+            break
+
+    if not points:
+        raise RuntimeError(f"Qdrant collection '{collection_name}' is empty")
+
+    rows = []
+    for point in points:
+        payload = dict(point.payload or {})
+        chunk_id = payload.get("chunk_id") or str(point.id)
+        payload["chunk_id"] = chunk_id
+        if not payload.get("full_content"):
+            content = payload.get("content", "")
+            breadcrumb = payload.get("breadcrumb") or payload.get("context", "")
+            payload["full_content"] = f"{breadcrumb} : {content}" if breadcrumb else content
+        rows.append((chunk_id, payload, _vector_to_array(point.vector)))
+
+    rows.sort(key=lambda item: item[0])
+    chunks = [payload for _, payload, _ in rows]
+    embeddings = np.vstack([vector for _, _, vector in rows]).astype(np.float32)
+    return chunks, embeddings
 
 
 class CustomSearch:
@@ -32,9 +96,58 @@ class CustomSearch:
     ):
         # === Load data ===
         with open(chunks_path, 'r', encoding='utf-8') as f:
-            self.chunks = json.load(f)
-        self.embeddings = np.load(embeddings_path)
-        
+            chunks = json.load(f)
+        embeddings = np.load(embeddings_path)
+
+        self._initialize(
+            chunks=chunks,
+            embeddings=embeddings,
+            k1=k1,
+            b=b,
+            rrf_k=rrf_k,
+            bm25_sigmoid_threshold=bm25_sigmoid_threshold,
+            bm25_sigmoid_iqr_scale=bm25_sigmoid_iqr_scale,
+            source=f"files:{chunks_path}",
+        )
+
+    @classmethod
+    def from_qdrant(
+        cls,
+        qdrant_url: str = None,
+        collection_name: str = None,
+        batch_size: int = None,
+        timeout: int = 60,
+        **kwargs,
+    ) -> "CustomSearch":
+        chunks, embeddings = load_chunks_and_embeddings_from_qdrant(
+            qdrant_url=qdrant_url or settings.QDRANT_URL,
+            collection_name=collection_name or settings.QDRANT_COLLECTION,
+            batch_size=batch_size or settings.QDRANT_SCROLL_BATCH_SIZE,
+            timeout=timeout,
+        )
+        instance = cls.__new__(cls)
+        instance._initialize(
+            chunks=chunks,
+            embeddings=embeddings,
+            source=f"qdrant:{collection_name or settings.QDRANT_COLLECTION}",
+            **kwargs,
+        )
+        return instance
+
+    def _initialize(
+        self,
+        chunks: List[Dict],
+        embeddings: np.ndarray,
+        k1: float = 1.2,
+        b: float = 0.75,
+        rrf_k: int = 60,
+        bm25_sigmoid_threshold: float = 0.35,
+        bm25_sigmoid_iqr_scale: float = 0.5,
+        source: str = "memory",
+    ) -> None:
+        self.chunks = chunks
+        self.embeddings = np.asarray(embeddings, dtype=np.float32)
+
         self.corpus_size = len(self.chunks)
         assert self.corpus_size == self.embeddings.shape[0], \
             f"Chunks ({self.corpus_size}) và embeddings ({self.embeddings.shape[0]}) không khớp!"
@@ -49,7 +162,7 @@ class CustomSearch:
         
         # === Tokenize corpus + tính BM25 stats ===
         logger.info(f"Tokenizing {self.corpus_size} docs with {'underthesea' if _HAS_UNDERTHESEA else 'split()'}...")
-        self.tokenized_corpus = [self._tokenize(chunk["content"]) for chunk in self.chunks]
+        self.tokenized_corpus = [self._tokenize(self._search_text_for_chunk(chunk)) for chunk in self.chunks]
         self.doc_lens = np.array([len(doc) for doc in self.tokenized_corpus], dtype=np.float64)
         self.avgdl = np.mean(self.doc_lens)
         
@@ -64,7 +177,7 @@ class CustomSearch:
               f"vocab={len(self.df)}, avgdl={self.avgdl:.1f}")
         logger.info(
             "CustomSearch ready | source=%s guard=%s chunks=%s embeddings=%s",
-            __file__,
+            source,
             SCOPED_SEARCH_GUARD_VERSION,
             self.corpus_size,
             self.embeddings.shape,
@@ -88,9 +201,21 @@ class CustomSearch:
         return text.lower().split()
 
     @staticmethod
+    def _search_text_for_chunk(chunk: Dict) -> str:
+        full_content = chunk.get("full_content", "")
+        if full_content:
+            return full_content
+        content = chunk.get("content", "")
+        breadcrumb = chunk.get("breadcrumb") or chunk.get("context", "")
+        return f"{breadcrumb} : {content}" if breadcrumb else content
+
+    @staticmethod
     def _metadata_for_chunk(chunk: Dict) -> Dict:
         if isinstance(chunk.get("metadata"), dict) and chunk["metadata"]:
-            return chunk["metadata"]
+            metadata = dict(chunk["metadata"])
+            if "level" not in metadata:
+                metadata["level"] = CustomSearch._infer_level_from_breadcrumb(chunk)
+            return metadata
         return {
             "book": chunk.get("book", ""),
             "grade": chunk.get("grade", ""),
@@ -101,7 +226,14 @@ class CustomSearch:
             "title": chunk.get("section_title", ""),
             "type": chunk.get("type", ""),
             "chunk_id": chunk.get("chunk_id", ""),
+            "level": CustomSearch._infer_level_from_breadcrumb(chunk),
         }
+
+    @staticmethod
+    def _infer_level_from_breadcrumb(chunk: Dict) -> int:
+        breadcrumb = chunk.get("breadcrumb") or chunk.get("context", "")
+        parts = [part.strip() for part in breadcrumb.split(" > ") if part.strip()]
+        return len(parts)
 
     # ============================================================
     # BM25 INTERNALS

@@ -75,19 +75,95 @@ class EmbeddingModel:
             self.model_name,
             max_positions,
         )
+
+    def _record_bad_text(self, idx: int, text: str) -> None:
+        try:
+            log_path = Path(__file__).resolve().parents[2] / "logs" / "embedding_failures.txt"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8") as f:
+                f.write(f"index={idx}\n")
+                f.write(text)
+                f.write("\n" + "-" * 40 + "\n")
+        except Exception:
+            logger.exception("Failed to record bad embedding text")
     
     def encode(self, texts: List[str], show_progress: bool = True) -> np.ndarray:
         self._load_model()
-        
+
         embeddings = self.model.encode(
             texts,
             batch_size=self.batch_size,
             convert_to_numpy=True,
-            normalize_embeddings=True,  # Cần thiết cho cosine similarity
+            normalize_embeddings=False,  # Normalize safely below for cosine similarity
             show_progress_bar=show_progress
         )
-        
-        return np.array(embeddings, dtype=np.float32)
+
+        embeddings = np.array(embeddings, dtype=np.float32)
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        small_norms = norms < 1e-12
+        if np.any(small_norms):
+            logger.warning(
+                "Embedding batch returned near-zero vectors; skipping normalization for %s rows",
+                int(np.sum(small_norms)),
+            )
+            norms[small_norms] = 1.0
+        embeddings = embeddings / norms
+        if np.isfinite(embeddings).all():
+            return embeddings
+
+        logger.warning(
+            "Embedding batch returned non-finite vectors; retrying one text at a time"
+        )
+        rows = []
+        for idx, text in enumerate(texts):
+            row = None
+            for attempt in range(2):
+                if attempt > 0:
+                    self.model = None
+                    self.load_failed = False
+                    self._load_model()
+
+                candidate = self.model.encode(
+                    [text],
+                    batch_size=1,
+                    convert_to_numpy=True,
+                    normalize_embeddings=False,
+                    show_progress_bar=False,
+                )
+                candidate = np.array(candidate, dtype=np.float32)
+                norm = np.linalg.norm(candidate, axis=1, keepdims=True)
+                norm_value = float(norm[0, 0])
+                if norm_value < 1e-12:
+                    logger.warning(
+                        "Embedding produced near-zero norm at text index %s; skipping normalization",
+                        idx,
+                    )
+                    norm_value = 1.0
+                candidate = candidate / norm_value
+                if np.isfinite(candidate).all():
+                    row = candidate[0]
+                    break
+
+            if row is None:
+                self._record_bad_text(idx, text)
+                dim = None
+                if hasattr(self.model, "get_sentence_embedding_dimension"):
+                    try:
+                        dim = int(self.model.get_sentence_embedding_dimension())
+                    except Exception:
+                        dim = None
+                if dim is None:
+                    raise RuntimeError(
+                        f"Embedding produced non-finite vector at text index {idx}"
+                    )
+                logger.error(
+                    "Embedding produced non-finite vector at text index %s; using zero vector",
+                    idx,
+                )
+                row = np.zeros(dim, dtype=np.float32)
+            rows.append(row)
+
+        return np.vstack(rows).astype(np.float32)
     
     def encode_query(self, query: str) -> np.ndarray:
         return self.encode([query], show_progress=False)[0]
@@ -109,9 +185,13 @@ def prepare_texts(chunks: list, use_context: bool = True) -> List[str]:
     for chunk in chunks:
         content = chunk.get("content", "")
         if use_context:
+            full_content = chunk.get("full_content", "")
+            if full_content:
+                texts.append(full_content)
+                continue
             context = chunk.get("breadcrumb") or chunk.get("context", "")
             # Ghép context vào đầu content nếu có
-            text = f"{context}\n{content}" if context else content
+            text = f"{context} : {content}" if context else content
         else:
             text = content
         texts.append(text)

@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 from pathlib import Path
 
 # ── Path setup ──
@@ -11,11 +12,11 @@ for p in [str(PROJECT_ROOT), str(PROJECT_ROOT / "src")]:
 from dotenv import load_dotenv
 load_dotenv(PROJECT_ROOT / ".env")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any, Literal
 
 from src.config.config import settings
 from src.rag.retrieve_rebuild import CustomSearch
@@ -55,11 +56,16 @@ class ChatRequest(BaseModel):
     book: Optional[str] = None
     grade: Optional[str] = None
     user_id: str = "anonymous"
+    hitl_type: Optional[Literal["outline_review"]] = None
+    hitl_approved: Optional[bool] = None
+    edited_outline: Optional[Dict[str, Any]] = None
 
 
 class ChatResponse(BaseModel):
     content: str
     debug: Optional[dict] = None
+    hitl: Optional[dict] = None
+    export: Optional[dict] = None
 
 
 # ── API Routes ──
@@ -70,8 +76,18 @@ async def chat(req: ChatRequest):
 
     full_response = ""
     debug_info = None
+    previous_export = orchestrator.get_last_export(req.user_id)
+    previous_export_id = previous_export.get("file_id") if previous_export else None
     try:
-        async for chunk in orchestrator.ask_async(req.message, ui_book=ui_book, ui_grade=ui_grade, user_id=req.user_id):
+        async for chunk in orchestrator.ask_async(
+            req.message,
+            ui_book=ui_book,
+            ui_grade=ui_grade,
+            user_id=req.user_id,
+            hitl_type=req.hitl_type,
+            hitl_approved=req.hitl_approved,
+            edited_outline=req.edited_outline,
+        ):
             full_response += chunk
     except Exception as e:
         full_response = f"Lỗi: {str(e)[:300]}"
@@ -84,7 +100,19 @@ async def chat(req: ChatRequest):
     if debug_info is None:
         debug_info = orchestrator.get_debug_info(req.user_id)
 
-    return ChatResponse(content=full_response, debug=debug_info)
+    current_export = orchestrator.get_last_export(req.user_id)
+    response_export = (
+        current_export
+        if current_export and current_export.get("file_id") != previous_export_id
+        else None
+    )
+
+    return ChatResponse(
+        content=full_response,
+        debug=debug_info,
+        hitl=orchestrator.get_pending_hitl(req.user_id),
+        export=response_export,
+    )
 
 
 @app.get("/api/frontend-info")
@@ -95,10 +123,27 @@ async def frontend_info():
         "frontend_dir": str(FRONTEND_DIR),
         "index_path": str(index_path),
         "index_mtime": index_path.stat().st_mtime,
-        "ui_version": "scope-ui-2",
+        "ui_version": "export-pptx-1",
         "has_book_select": 'id="bookSelect"' in index_html,
         "has_grade_select": 'id="gradeSelect"' in index_html,
     }
+
+
+EXPORT_DIR = PROJECT_ROOT / "app" / "data" / "exports"
+
+
+@app.get("/api/exports/{file_id}")
+async def download_export(file_id: str):
+    if not re.fullmatch(r"[a-f0-9]{32}\.pptx", file_id):
+        raise HTTPException(status_code=400, detail="Invalid export file id")
+    path = (EXPORT_DIR / file_id).resolve()
+    if path.parent != EXPORT_DIR.resolve() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Export file not found")
+    return FileResponse(
+        str(path),
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        filename=file_id,
+    )
 
 
 # ── Serve Frontend ──

@@ -282,6 +282,7 @@ body {
   cursor: pointer;
   display: flex; align-items: center; gap: 4px;
   transition: all var(--transition);
+  text-decoration: none;
 }
 .file-download:hover { background: var(--primary-light); border-color: var(--primary); }
 
@@ -300,6 +301,79 @@ body {
 
 .msg-time { font-size: 11px; color: var(--text-muted); margin-top: 4px; padding: 0 4px; }
 .message.user .msg-time { text-align: right; }
+
+/* HITL outline review */
+.hitl-content { max-width: 680px; width: 100%; }
+.hitl-card {
+  background: var(--bg-white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.hitl-header { margin-bottom: 12px; }
+.hitl-title-label { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.hitl-lesson,
+.hitl-title,
+.hitl-objective,
+.hitl-sources,
+.hitl-keypoints,
+.hitl-type {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-white);
+}
+.hitl-keypoints { min-height: 78px; resize: vertical; line-height: 1.5; }
+.hitl-lesson:disabled,
+.hitl-title:disabled,
+.hitl-objective:disabled,
+.hitl-sources:disabled,
+.hitl-keypoints:disabled,
+.hitl-type:disabled {
+  background: var(--bg-input);
+  color: var(--text-secondary);
+}
+.hitl-slides { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; }
+.hitl-slide {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfbfc;
+}
+.hitl-slide-head { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: center; }
+.hitl-slide-head span {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+.hitl-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.hitl-btn {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-white);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 14px;
+}
+.hitl-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.hitl-btn:disabled { opacity: 0.5; cursor: default; }
+.hidden { display: none !important; }
 
 /* Typing */
 .typing-dots { display: flex; gap: 5px; padding: 6px 0; }

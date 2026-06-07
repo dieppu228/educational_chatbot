@@ -1,0 +1,9 @@
+{
+  "text_field": "full_content",
+  "chunk_count": 2348,
+  "embedding_shape": [
+    2348,
+    768
+  ],
+  "source_fingerprint": "f32827c3c343abe7fa5fbe48511b6f56ef9418f46da73150eb8d3653ee7ce693"
+}

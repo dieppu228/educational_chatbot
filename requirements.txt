@@ -29,6 +29,7 @@ uvicorn>=0.30
 openai>=2.3.0
 google-genai>=1.10.0
 langgraph>=0.4.0
+python-pptx>=1.0.2
 
 # Evaluation (RAGAS)
 ragas>=0.2

@@ -36,12 +36,14 @@ class Settings(BaseSettings):
     DATA_DIR: str = "data"
     CHUNKS_FILE: str = "rag_chunks_v2.json"
     EMBEDDINGS_FILE: str = "embeddings.npy"
+    EMBEDDINGS_META_FILE: str = "embeddings.meta.json"
 
     # ===== Qdrant Storage =====
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION: str = "educational_chatbot"
     QDRANT_VECTOR_SIZE: int = 768
     QDRANT_UPLOAD_BATCH_SIZE: int = 128
+    QDRANT_SCROLL_BATCH_SIZE: int = 512
     CHUNK_TYPE_MODEL: str = "gemini-2.5-flash-lite"
     CHUNK_TYPE_CACHE_FILE: str = "chunk_type_cache.json"
     CHUNK_TYPE_BATCH_SIZE: int = 20

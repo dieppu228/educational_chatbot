@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -46,6 +47,45 @@ def iter_batches(items: list, batch_size: int) -> Iterable[list]:
         yield items[start : start + batch_size]
 
 
+def chunk_full_content(chunk: dict) -> str:
+    content = chunk.get("content", "")
+    breadcrumb = chunk.get("breadcrumb", "")
+    return chunk.get("full_content") or (f"{breadcrumb} : {content}" if breadcrumb else content)
+
+
+def embedding_source_fingerprint(chunks: list[dict]) -> str:
+    digest = hashlib.sha256()
+    for chunk in chunks:
+        digest.update(str(chunk.get("chunk_id", "")).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(chunk_full_content(chunk).encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def load_embeddings_meta(meta_path: Path) -> dict:
+    if not meta_path.exists():
+        return {}
+    try:
+        with meta_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_embeddings_meta(meta_path: Path, chunks: list[dict], embeddings: np.ndarray) -> None:
+    meta = {
+        "text_field": "full_content",
+        "chunk_count": len(chunks),
+        "embedding_shape": list(embeddings.shape),
+        "source_fingerprint": embedding_source_fingerprint(chunks),
+    }
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    with meta_path.open("w", encoding="utf-8") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
 def rebuild_chunks(chunks_path: Path, classify_with_llm: bool = True) -> list[dict]:
     print("Splitting clean book files into structured Markdown...")
     split_clean_books()
@@ -69,29 +109,41 @@ def rebuild_chunks(chunks_path: Path, classify_with_llm: bool = True) -> list[di
 
 
 def ensure_embeddings(
+    chunks: list[dict],
     chunks_path: Path,
     embeddings_path: Path,
+    meta_path: Path,
     expected_count: int,
     force: bool,
+    device: str,
+    batch_size: int,
 ) -> np.ndarray:
     if embeddings_path.exists() and not force:
         embeddings = np.load(embeddings_path)
-        if embeddings.shape[0] == expected_count:
+        meta = load_embeddings_meta(meta_path)
+        expected_fingerprint = embedding_source_fingerprint(chunks)
+        meta_matches = (
+            meta.get("text_field") == "full_content"
+            and meta.get("chunk_count") == expected_count
+            and meta.get("source_fingerprint") == expected_fingerprint
+        )
+        finite_vectors = np.isfinite(embeddings).all()
+        if embeddings.shape[0] == expected_count and meta_matches and finite_vectors:
             print(f"Using existing embeddings: {embeddings_path} shape={embeddings.shape}")
             return np.asarray(embeddings, dtype=np.float32)
         print(
-            f"Embedding count mismatch: chunks={expected_count}, "
-            f"embeddings={embeddings.shape[0]}. Rebuilding embeddings..."
+            "Embedding source mismatch. Rebuilding embeddings from full_content..."
         )
 
     embeddings = embed_and_save(
         chunks_path=str(chunks_path),
         embeddings_path=str(embeddings_path),
         model_name=settings.EMBEDDING_MODEL,
-        device="cpu",
-        batch_size=64,
+        device=device,
+        batch_size=batch_size,
         use_context=True,
     )
+    save_embeddings_meta(meta_path, chunks, embeddings)
     return np.asarray(embeddings, dtype=np.float32)
 
 
@@ -131,10 +183,14 @@ def create_or_recreate_collection(
 
 
 def build_point(models, idx: int, chunk: dict, vector: np.ndarray):
+    content = chunk.get("content", "")
+    breadcrumb = chunk.get("breadcrumb", "")
+    full_content = chunk_full_content(chunk)
     payload = {
         "chunk_id": chunk.get("chunk_id", ""),
-        "content": chunk.get("content", ""),
-        "breadcrumb": chunk.get("breadcrumb", ""),
+        "content": content,
+        "full_content": full_content,
+        "breadcrumb": breadcrumb,
         "book": chunk.get("book", ""),
         "grade": chunk.get("grade", ""),
         "topic": chunk.get("topic", ""),
@@ -204,6 +260,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-chunking", action="store_true")
     parser.add_argument("--skip-llm-classification", action="store_true")
     parser.add_argument("--force-embeddings", action="store_true")
+    parser.add_argument("--embedding-device", default="cpu")
+    parser.add_argument("--embedding-batch-size", type=int, default=64)
     parser.add_argument("--no-recreate", action="store_true")
     return parser.parse_args()
 
@@ -213,6 +271,7 @@ def main() -> None:
     data_dir = PROJECT_DIR / settings.DATA_DIR
     chunks_path = data_dir / settings.CHUNKS_FILE
     embeddings_path = data_dir / settings.EMBEDDINGS_FILE
+    embeddings_meta_path = data_dir / settings.EMBEDDINGS_META_FILE
 
     if args.skip_chunking:
         chunks = load_chunks(chunks_path)
@@ -224,10 +283,14 @@ def main() -> None:
         )
 
     embeddings = ensure_embeddings(
+        chunks=chunks,
         chunks_path=chunks_path,
         embeddings_path=embeddings_path,
+        meta_path=embeddings_meta_path,
         expected_count=len(chunks),
         force=args.force_embeddings,
+        device=args.embedding_device,
+        batch_size=args.embedding_batch_size,
     )
 
     upload_to_qdrant(
@@ -239,10 +302,10 @@ def main() -> None:
         recreate=not args.no_recreate,
     )
 
-    print("\nCustomSearch remains file-backed:")
+    print("\nCustomSearch can load from local files or Qdrant storage:")
     print(f"  chunks={chunks_path}")
     print(f"  embeddings={embeddings_path}")
-    print("Qdrant is used only as a storage mirror by this script.")
+    print("  qdrant_loader=CustomSearch.from_qdrant()")
 
 
 if __name__ == "__main__":

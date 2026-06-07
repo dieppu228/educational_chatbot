@@ -13,6 +13,7 @@ from src.llm.handlers.question.scorer import QuestionScorer
 from src.rag.rag_service import RAGService
 from src.llm.graphs.content_supervisor import build_content_supervisor, RECURSION_LIMIT
 from src.llm.graphs.stream_wrapper import invoke_graph_sync, resume_graph
+from src.llm.services.slide_export_service import SlideExportService
 from langgraph.types import Command
 from src.utils.error_handling import safe_execute
 
@@ -25,6 +26,7 @@ class SlideService:
         self.rag_service = rag_service
         self.graph = build_content_supervisor()
         self.scorer = QuestionScorer()
+        self.exporter = SlideExportService()
 
     @staticmethod
     def should_block_by_quality(quality_review: Optional[dict]) -> bool:
@@ -32,6 +34,27 @@ class SlideService:
             return False
         action = quality_review.get("reflection_action")
         return action in ("block", "ask_human")
+
+    def _attach_export_if_needed(
+        self,
+        slide_state,
+        task_type: str,
+        lesson_title: str,
+        slides_data: Any,
+        ctx: RequestContext,
+    ) -> Optional[Dict[str, Any]]:
+        if task_type != "slide" or not isinstance(slides_data, list):
+            return None
+        try:
+            export_meta = self.exporter.export_pptx(lesson_title, slides_data)
+            slide_state.slide_output["export"] = export_meta
+            ctx.add_debug_step("SlideExport", status="success", **export_meta)
+            return export_meta
+        except Exception as e:
+            slide_state.slide_output["export_error"] = str(e)[:300]
+            ctx.add_debug_step("SlideExport", status="failed", error_message=str(e)[:300])
+            logger.warning("Slide export failed: %s", e)
+            return None
 
     def _run_graph_for_ctx(self, graph_input, config: dict, ctx: RequestContext, phase: str) -> dict:
         if not getattr(ctx, "graph_debug_stream", False):
@@ -168,6 +191,12 @@ class SlideService:
             if isinstance(interrupt_value, dict):
                 outline = interrupt_value.get("outline", {})
                 msg = interrupt_value.get("message", "Review outline")
+                slide_state.slide_output["_hitl"] = {
+                    "type": interrupt_value.get("type", "outline_review"),
+                    "task_type": task_type,
+                    "outline": outline,
+                    "message": msg,
+                }
 
                 # Hiển thị outline cho user
                 yield f"\n\n📋 **Dàn ý {task_label} đã tạo xong** (⏱️ {pipeline_time:.1f}s)"
@@ -181,7 +210,7 @@ class SlideService:
                                 "summary": "📋"}.get(s.get("slide_type", ""), "📄")
                         yield f"\n  {i}. [{icon} {s.get('slide_type', '')}] {s.get('title', '')}"
 
-                yield f"\n\n💡 Gửi 'ok' để duyệt, hoặc mô tả chỉnh sửa bạn muốn."
+                yield f"\n\n💡 Dùng nút Duyệt hoặc Cần chỉnh sửa bên dưới để tiếp tục."
             else:
                 yield f"\n⏸️ Pipeline đang chờ input: {interrupt_value}"
 
@@ -201,7 +230,12 @@ class SlideService:
 
     @safe_execute(fallback_message="Lỗi resume pipeline", log_prefix="SlideService.resume")
     def resume_outline(
-        self, ctx: RequestContext, user_feedback: str
+        self,
+        ctx: RequestContext,
+        user_feedback: str,
+        hitl_type: Optional[str] = None,
+        hitl_approved: Optional[bool] = None,
+        edited_outline: Optional[Dict[str, Any]] = None,
     ) -> Generator[str, None, None]:
         session = ctx.session
         slide_state = session.slide_state
@@ -219,14 +253,28 @@ class SlideService:
         config = stored["_graph_config"]
         task_type = stored.get("_task_type", "slide")
 
-        # Parse user feedback
-        feedback_lower = user_feedback.strip().lower()
-        if feedback_lower in ("ok", "yes", "duyệt", "đồng ý", "approve", "oke"):
-            resume_value = True  # Approve as-is
-            yield "Đã duyệt dàn ý. Đang tiếp tục sinh nội dung..."
+        if hitl_type:
+            if hitl_type != "outline_review":
+                yield "Yêu cầu HITL không hợp lệ."
+                return
+            if hitl_approved is True:
+                resume_value = True
+                yield "Đã duyệt dàn ý. Đang tiếp tục sinh nội dung..."
+            elif hitl_approved is False and isinstance(edited_outline, dict):
+                resume_value = {"edited_outline": edited_outline}
+                yield "Đã nhận dàn ý đã chỉnh sửa. Đang tiếp tục sinh nội dung..."
+            else:
+                yield "Thiếu dàn ý đã chỉnh sửa để tiếp tục."
+                return
         else:
-            resume_value = {"feedback": user_feedback}
-            yield f"Đã nhận phản hồi. Đang chỉnh sửa và tiếp tục..."
+            # Backward compatibility for older clients/notebooks.
+            feedback_lower = user_feedback.strip().lower()
+            if feedback_lower in ("ok", "yes", "duyệt", "đồng ý", "approve", "oke"):
+                resume_value = True  # Approve as-is
+                yield "Đã duyệt dàn ý. Đang tiếp tục sinh nội dung..."
+            else:
+                resume_value = {"feedback": user_feedback}
+                yield f"Đã nhận phản hồi. Đang chỉnh sửa và tiếp tục..."
 
         t0 = time.time()
         result = resume_graph(self.graph, resume_value, config)
@@ -337,6 +385,8 @@ class SlideService:
                             )
                             exercise_count += 1
 
+        export_metadata = self._attach_export_if_needed(slide_state, task_type, lesson_title, slides_data, ctx)
+
         # Display
         if task_type == "lesson_plan":
             display = self._format_lesson_plan_display(lesson_title, slides_data)
@@ -349,6 +399,8 @@ class SlideService:
         if reflection_attempts > 0 and isinstance(quality_review, dict) and quality_review.get("passed"):
             yield "\n\nQuality reviewer đã yêu cầu chỉnh sửa và hệ thống đã regenerate output đạt yêu cầu."
         yield "\n\n" + display
+        if export_metadata:
+            yield "\n\n📎 File PPTX đã sẵn sàng để tải xuống."
 
         if task_type == "slide" and slide_state.has_exercises:
             yield f"\n📝 Slide có {slide_state.total_exercises} câu hỏi bài tập. Bạn có thể trả lời ngay!"
@@ -496,6 +548,12 @@ class SlideService:
             return False
         return slide_state.slide_output.get("_interrupt", False)
 
+    def get_pending_hitl(self, session) -> Optional[Dict[str, Any]]:
+        if not self.is_waiting_hitl(session):
+            return None
+        hitl = session.slide_state.slide_output.get("_hitl")
+        return hitl if isinstance(hitl, dict) else None
+
     # ────────────────────────────────────────────────────────
     # ASYNC VERSIONS (run blocking graph ops in thread pool)
     # ────────────────────────────────────────────────────────
@@ -596,6 +654,12 @@ class SlideService:
             if isinstance(interrupt_value, dict):
                 outline = interrupt_value.get("outline", {})
                 msg = interrupt_value.get("message", "Review outline")
+                slide_state.slide_output["_hitl"] = {
+                    "type": interrupt_value.get("type", "outline_review"),
+                    "task_type": task_type,
+                    "outline": outline,
+                    "message": msg,
+                }
 
                 yield f"\n\n📋 **Dàn ý {task_label} đã tạo xong** (⏱️ {pipeline_time:.1f}s)"
                 yield f"\n{msg}"
@@ -608,7 +672,7 @@ class SlideService:
                                 "summary": "📋"}.get(s.get("slide_type", ""), "📄")
                         yield f"\n  {i}. [{icon} {s.get('slide_type', '')}] {s.get('title', '')}"
 
-                yield f"\n\n💡 Gửi 'ok' để duyệt, hoặc mô tả chỉnh sửa bạn muốn."
+                yield f"\n\n💡 Dùng nút Duyệt hoặc Cần chỉnh sửa bên dưới để tiếp tục."
             else:
                 yield f"\n⏸️ Pipeline đang chờ input: {interrupt_value}"
 
@@ -714,6 +778,8 @@ class SlideService:
                             )
                             exercise_count += 1
 
+        export_metadata = self._attach_export_if_needed(slide_state, task_type, lesson_title, slides_data, ctx)
+
         # Display
         if task_type == "lesson_plan":
             display = self._format_lesson_plan_display(lesson_title, slides_data)
@@ -726,6 +792,8 @@ class SlideService:
         if reflection_attempts > 0 and isinstance(quality_review, dict) and quality_review.get("passed"):
             yield "\n\nQuality reviewer đã yêu cầu chỉnh sửa và hệ thống đã regenerate output đạt yêu cầu."
         yield "\n\n" + display
+        if export_metadata:
+            yield "\n\n📎 File PPTX đã sẵn sàng để tải xuống."
 
         if task_type == "slide" and slide_state.has_exercises:
             yield f"\n📝 Slide có {slide_state.total_exercises} câu hỏi bài tập. Bạn có thể trả lời ngay!"

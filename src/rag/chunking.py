@@ -798,9 +798,11 @@ def chunks_to_json(chunks: List[Chunk]) -> List[Dict]:
     result = []
     for chunk in chunks:
         meta = chunk.metadata
+        full_content = f"{chunk.breadcrumb} : {chunk.content}" if chunk.breadcrumb else chunk.content
         result.append({
             "chunk_id": chunk.chunk_id,
             "content": chunk.content,
+            "full_content": full_content,
             "breadcrumb": chunk.breadcrumb,
             "book": meta.book,
             "grade": meta.grade,
@@ -809,6 +811,7 @@ def chunks_to_json(chunks: List[Chunk]) -> List[Dict]:
             "lesson": meta.lesson,
             "lesson_name": meta.lesson_name,
             "section_title": meta.title,
+            "level": meta.level,
             "type": meta.type,
             "source_path": meta.source_path,
             "chunk_index": meta.chunk_index,

@@ -52,6 +52,7 @@ pyrightconfig.json
 claude.md
 
 data/sessions/
+app/data/exports/
 # LaTeX auxiliary files
 *.aux
 *.bbl

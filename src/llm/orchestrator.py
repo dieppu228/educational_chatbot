@@ -89,6 +89,19 @@ class Orchestrator:
         with self._debug_lock:
             return dict(self._debug_info_by_user.get(uid) or self.last_debug_info)
 
+    def get_pending_hitl(self, user_id: Optional[str] = None) -> Optional[Dict]:
+        session = self.memory.get_current_session(user_id or "anonymous")
+        if not session:
+            return None
+        return self.slide_service.get_pending_hitl(session)
+
+    def get_last_export(self, user_id: Optional[str] = None) -> Optional[Dict]:
+        session = self.memory.get_current_session(user_id or "anonymous")
+        if not session or not session.slide_state or not session.slide_state.slide_output:
+            return None
+        export = session.slide_state.slide_output.get("export")
+        return export if isinstance(export, dict) else None
+
     def _set_debug_info(self, ctx: RequestContext, full_response: str):
         debug_info = ctx.to_debug_dict()
         debug_info["total_time_s"] = ctx.elapsed_time
@@ -139,7 +152,15 @@ class Orchestrator:
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         # ① Tạo RequestContext — thay thế toàn bộ global state
-        ctx = RequestContext(query=query, ui_book=ui_book, ui_grade=ui_grade, user_id=user_id or "anonymous")
+        ctx = RequestContext(
+            query=query,
+            ui_book=ui_book,
+            ui_grade=ui_grade,
+            user_id=user_id or "anonymous",
+            hitl_type=kwargs.get("hitl_type"),
+            hitl_approved=kwargs.get("hitl_approved"),
+            edited_outline=kwargs.get("edited_outline"),
+        )
         ctx.auto_approve_outline = bool(kwargs.get("auto_approve_outline", False))
         ctx.graph_debug_stream = bool(kwargs.get("graph_debug_stream", True))
 
@@ -154,6 +175,12 @@ class Orchestrator:
         if hitl_response_chunks is not None:
             for chunk in hitl_response_chunks:
                 yield chunk
+            return
+        if ctx.hitl_type:
+            msg = "Không có pipeline nào đang chờ duyệt dàn ý."
+            ctx.add_debug_step("HITLResume", status="not_waiting", hitl_type=ctx.hitl_type)
+            self._set_debug_info(ctx, msg)
+            yield msg
             return
 
         # ② Context enrichment + Query Rewriting (async)
@@ -273,10 +300,18 @@ class Orchestrator:
             status="resuming",
             session_id=current_session.session_id,
             feedback=ctx.query,
+            hitl_type=ctx.hitl_type,
+            hitl_approved=ctx.hitl_approved,
         )
 
         response_chunks = await asyncio.to_thread(
-            lambda: list(self.slide_service.resume_outline(ctx, ctx.query))
+            lambda: list(self.slide_service.resume_outline(
+                ctx,
+                ctx.query,
+                hitl_type=ctx.hitl_type,
+                hitl_approved=ctx.hitl_approved,
+                edited_outline=ctx.edited_outline,
+            ))
         )
         full_response = "".join(response_chunks)
         await self.session_store.auto_save_async(ctx.session)

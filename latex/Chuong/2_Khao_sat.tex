@@ -1,280 +1,140 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
-Chương này sẽ trình bày các nội dung liên quan đến việc khảo sát, phân tích hiện trạng để từ đó làm rõ các yêu cầu bài toán đối với hệ thống giáo dục AI. Các phân tích được dựa trên bối cảnh thực tế trong giảng dạy và học tập môn Tin học, qua đó đề xuất các chức năng chính của ứng dụng và mô hình hóa chúng thông qua các biểu đồ Use Case nhằm đưa ra một cái nhìn tổng quan và hệ thống.
 
-\section{Khảo sát hiện trạng}
-\label{section:2.1}
-Trong bối cảnh chuyển đổi số giáo dục, việc ứng dụng trí tuệ nhân tạo (AI) mang lại nhiều tiềm năng to lớn, nhưng quá trình dạy và học môn Tin học THPT (các lớp 10, 11, 12 theo chương trình bộ Kết nối tri thức và Cánh diều) vẫn gặp nhiều thách thức.
+Chương 1 đã trình bày bối cảnh, mục tiêu và phạm vi tổng quát của đề tài. Từ cơ sở đó, chương này tập trung phân tích rõ ngữ cảnh nghiên cứu, các hướng tiếp cận liên quan và những kiến thức nền cần thiết cho đồ án. Mục tiêu của chương là làm rõ bài toán đang được giải quyết, chỉ ra khoảng trống của các nghiên cứu hoặc hệ thống gần với đề tài, đồng thời cung cấp nền tảng lý thuyết vừa đủ để hiểu các quyết định thiết kế ở các chương sau.
 
-Về phía học sinh, các em vẫn thiếu một công cụ hỗ trợ tự học bám sát nội dung chương trình trên lớp. Các chatbot AI phổ quát hiện nay (như ChatGPT, Claude) thường cung cấp câu trả lời phân tán, đôi khi sử dụng kiến thức nằm ngoài phạm vi sách giáo khoa Việt Nam, gây khó khăn cho việc ôn tập chuẩn xác. Bên cạnh đó, học sinh cũng thiếu các nguồn bài tập trắc nghiệm đa dạng được thiết kế chuyên biệt và phản hồi tức thời cho từng bài giảng để củng cố kiến thức một cách nhanh chóng.
+Nội dung chương được tổ chức thành bốn phần. Phần đầu trình bày phạm vi nghiên cứu và ngữ cảnh bài toán. Phần thứ hai khảo sát các hướng tiếp cận liên quan dưới góc nhìn ưu điểm, hạn chế và mức độ phù hợp với dữ liệu SGK. Hai phần tiếp theo tập trung vào các kiến thức nền có liên hệ trực tiếp đến đồ án, gồm RAG cho hỏi đáp dựa trên tài liệu và các kỹ thuật retrieval, reranking cùng phương pháp đánh giá.
 
-Về phía giáo viên, công tác chuẩn bị bài giảng (soạn giáo án, thiết kế slide) và biên soạn đề kiểm tra đang tiêu tốn rất nhiều thời gian, công sức. Các thao tác tìm kiếm, chắt lọc tư liệu từ các nguồn rời rạc trên mạng hiện nay vẫn chủ yếu được thực hiện thủ công, lặp đi lặp lại do thiếu vắng các công cụ hỗ trợ tự động hóa chuyên biệt ở mức độ sâu.
+\section{Phạm vi nghiên cứu}
 
-Khảo sát các giải pháp e-learning hiện có, phần lớn hệ thống mới chỉ đóng vai trò là kho lưu trữ và phân phối bài giảng số chứ chưa thể chủ động khởi tạo nội dung thông minh. Việc dùng trực tiếp các mô hình ngôn ngữ lớn khổng lồ mà không qua tinh chỉnh lại không đảm bảo được tính chính xác theo khuôn khổ tài liệu chuyên biệt quy định. Vì vậy, nhu cầu cấp thiết hiện nay là xây dựng một hệ thống trợ lý ảo giáo dục ứng dụng công nghệ tăng cường truy xuất dữ liệu (RAG) sử dụng dữ liệu nền tảng là sách giáo khoa. Hệ thống này sẽ đáp ứng trọn vẹn mục tiêu tự động trả lời câu hỏi, sinh bài tập, phát thảo giáo án và cấu trúc slide bài giảng, qua đó tối ưu hóa công việc của cả người dạy lẫn người học.
+Chatbot giáo dục trong phạm vi đồ án này được hiểu là một hệ thống hỗ trợ người học và giáo viên tương tác với tri thức môn Tin học THPT bằng ngôn ngữ tự nhiên. Khác với chatbot hội thoại thông thường, hệ thống cần trả lời dựa trên nội dung sách giáo khoa, đồng thời cần tôn trọng phạm vi lớp học, bộ sách và chủ đề mà người dùng đang quan tâm.
 
-\section{Tổng quan chức năng}
-\label{section:2.2}
-Dựa trên các phân tích và các kết quả thu được từ tiến trình khảo sát hiện trạng, phần này sẽ mô tả tổng hợp lại các chức năng chính của phần mềm tương ứng với các phân quyền truy cập của người dùng. Hệ thống được thiết kế xoay quanh việc phục vụ nhóm người dùng cốt lõi nhằm giải quyết ba vấn đề lớn đã được nêu rõ thông qua các chức năng liên quan đến mục hỏi đáp kiến thức bài học, sinh biểu mẫu câu hỏi bài tập, tạo khung giáo án giáo khoa và thiết kế bài giảng trình chiếu tự động. Các chức năng chi tiết này sẽ được thiết kế tập trung để quy trình hóa và thiết lập toàn bộ các kết nối một cách hiệu quả nhất có thể. Dưới đây là các biểu đồ thiết kế để diễn giải một cách chi tiết về chức năng cũng như quy trình.
+Dữ liệu của đề tài gồm SGK Tin học THPT lớp 10, 11 và 12 thuộc hai bộ Cánh Diều và Kết Nối Tri Thức. Các tài liệu này có cấu trúc phân cấp theo bộ sách, lớp, chủ đề, bài học và mục nội dung. Đặc điểm phân cấp này tạo ra lợi thế khi truy xuất theo phạm vi, nhưng cũng đặt ra yêu cầu hệ thống phải quản lý metadata chính xác. Nếu metadata bị bỏ qua, câu trả lời có thể trộn nội dung giữa hai bộ sách hoặc giữa các lớp khác nhau.
 
-\subsection{Biểu đồ use case tổng quát}
-\label{subsection:2.2.1}
-Biểu đồ use case tổng quát mô tả các tác nhân và các chức năng chính của hệ thống.
+Với người học, nhu cầu chính là đặt câu hỏi tự nhiên, yêu cầu giải thích khái niệm, ôn lại nội dung bài học hoặc luyện tập theo chủ đề. Với giáo viên, hệ thống có thể hỗ trợ chuẩn bị câu hỏi, dàn ý slide hoặc giáo án. Tuy nhiên, các tác vụ này đều phụ thuộc vào một nền tảng chung: hệ thống phải truy xuất đúng ngữ cảnh từ SGK trước khi sinh nội dung.
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.9\textwidth]{Hinhve/uc_tongquan.png}
-    \caption{Biểu đồ use case tổng quát}
-    \label{fig:uc_tongquan}
-\end{figure}
+Hệ thống hỏi đáp có thể được chia thành hai nhóm chính: closed-book question answering và open-book question answering. Trong closed-book question answering, mô hình trả lời chủ yếu dựa trên tri thức đã học trong quá trình huấn luyện. Trong open-book hoặc document-grounded question answering, hệ thống được cung cấp thêm tài liệu nguồn và phải dựa vào tài liệu đó để trả lời.
 
-\subsection{Biểu đồ use case phân rã}
-\label{subsection:2.2.2}
-Dưới đây là các biểu đồ phân rã cho các chức năng chi tiết trong hệ thống giáo dục AI.
+Đề tài này thuộc nhóm document-grounded question answering. Câu trả lời không nên chỉ dựa vào tri thức tham số của mô hình ngôn ngữ, vì tri thức đó có thể không khớp với chương trình SGK Việt Nam hoặc không phản ánh đúng phạm vi sách người dùng đang học. Thay vào đó, hệ thống cần tìm các đoạn tài liệu liên quan trong SGK, sau đó dùng chúng làm ngữ cảnh để sinh câu trả lời.
 
-\subsubsection{Phân rã UC02 - Hỏi đáp kiến thức SGK}
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.8\textwidth]{Hinhve/uc2.png}
-    \caption{Biểu đồ phân rã Use Case Hỏi đáp kiến thức SGK}
-    \label{fig:uc2}
-\end{figure}
+Một pipeline hỏi đáp dựa trên tài liệu thường gồm các bước chính: tiếp nhận câu hỏi, xác định phạm vi hoặc ý định, truy xuất tài liệu liên quan, xây dựng ngữ cảnh, sinh câu trả lời và kiểm tra kết quả. Trong pipeline này, bước truy xuất đóng vai trò đặc biệt quan trọng. Nếu hệ thống truy xuất sai hoặc thiếu ngữ cảnh, mô hình sinh câu trả lời khó có thể tạo ra kết quả đúng, dù prompt được thiết kế tốt.
 
-\subsubsection{Phân rã UC03 - Khởi tạo bộ câu hỏi/bài tập}
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.8\textwidth]{Hinhve/uc3.png}
-    \caption{Biểu đồ phân rã Use Case Khởi tạo bộ câu hỏi/bài tập}
-    \label{fig:uc3}
-\end{figure}
+\section{Các nghiên cứu liên quan}
 
-\subsubsection{Phân rã UC04}
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.8\textwidth]{Hinhve/uc4.png}
-    \caption{Biểu đồ phân rã Use Case UC04}
-    \label{fig:uc4}
-\end{figure}
+Các nghiên cứu và giải pháp gần với đề tài hiện nay có thể được nhìn theo cả góc độ học thuật lẫn góc độ sản phẩm. Trong phạm vi bài toán hỗ trợ học tập môn Tin học THPT theo chương trình GDPT 2018, ba nhóm đối tượng đáng chú ý nhất gồm các mô hình ngôn ngữ lớn đa mục đích, các chatbot dịch vụ trong nước và các hệ thống học tập hoặc đồ án nghiên cứu đi trước.
 
-\subsubsection{Phân rã UC05 - Sinh slide bài giảng}
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.8\textwidth]{Hinhve/uc5.png}
-    \caption{Biểu đồ phân rã Use Case Sinh slide bài giảng}
-    \label{fig:uc5}
-\end{figure}
+\subsection{Nhóm mô hình ngôn ngữ lớn đa mục đích}
 
-\subsubsection{Phân rã UC06 - Sinh giáo án}
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.8\textwidth]{Hinhve/uc6.png}
-    \caption{Biểu đồ phân rã Use Case Sinh giáo án}
-    \label{fig:uc6}
-\end{figure}
+Nhóm này bao gồm các nền tảng như ChatGPT, Gemini và Claude. Ưu điểm lớn nhất của chúng là khả năng hội thoại tự nhiên, suy luận linh hoạt và hỗ trợ tốt các câu hỏi liên quan đến mã nguồn. Với các bài toán như giải thích một đoạn chương trình hoặc gợi ý thuật toán tổng quát, các mô hình này thường cho chất lượng phản hồi cao.
 
-\section{Đặc tả chức năng}
-\label{section:2.3}
-Dưới đây là đặc tả chi tiết cho các use case quan trọng của hệ thống:
+Tuy nhiên, hạn chế quan trọng khi áp dụng trực tiếp vào giáo dục phổ thông Việt Nam là thiếu ngữ cảnh cục bộ. Do được huấn luyện trên dữ liệu toàn cầu, các mô hình này không tự nhận biết được ranh giới kiến thức theo lớp học, bộ sách và định hướng môn học trong chương trình GDPT 2018. Khi học sinh hỏi một khái niệm cơ bản, hệ thống có thể trả lời bằng nội dung vượt cấp hoặc theo quy chuẩn ngoài phạm vi SGK. Ngoài ra, các nội dung mang tính đặc thù của chương trình Tin học Việt Nam, như cách diễn giải lý thuyết, định nghĩa trong SGK hoặc các chủ đề về đạo đức số và pháp luật trong môi trường số, có nguy cơ bị trả lời lệch khỏi yêu cầu sư phạm.
 
-\subsection{Đặc tả UC02 - Hỏi đáp kiến thức SGK}
-\renewcommand{\arraystretch}{1.3}
-\begin{longtable}{|p{0.25\textwidth}|p{0.7\textwidth}|}
-    \caption{Đặc tả UC02 - Hỏi đáp kiến thức SGK}
-    \label{tab:uc02} \\
-    \hline
-    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
-    \endfirsthead
-    
-    \hline
-    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
-    \endhead
-    
-    \hline
-    \endfoot
-    
-    \hline
-    \endlastfoot
+\subsection{Nhóm chatbot dịch vụ và quản trị trong nước}
 
-    \textbf{Tên use case} & UC02 - Hỏi đáp kiến thức SGK \\ \hline
-    \textbf{Tác nhân} & User \\ \hline
-    \textbf{Tiền điều kiện} & (1) Hệ thống hoạt động bình thường; (2) Kho tri thức SGK đã được nạp; (3) User đang ở giao diện chat \\ \hline
-    \textbf{Luồng sự kiện chính} & 
-    1) User nhập câu hỏi kiến thức.\newline
-    2) Hệ thống phân tích ngữ cảnh hội thoại và nhận diện intent.\newline
-    3) Hệ thống truy xuất tri thức (RAG) theo chủ đề/lớp/bộ sách.\newline
-    4) Hệ thống sinh câu trả lời dựa trên ngữ cảnh truy xuất.\newline
-    5) Hiển thị câu trả lời cho User. \\ \hline
-    \textbf{Luồng sự kiện phát sinh} & 
-    \textbf{A1:} Câu hỏi mơ hồ/phụ thuộc ngữ cảnh $\rightarrow$ hệ thống sinh đa truy vấn để tăng chất lượng truy xuất.\newline
-    \textbf{A2:} User chưa chọn bộ sách $\rightarrow$ hệ thống yêu cầu bổ sung thông tin bộ sách trước khi trả lời.\newline
-    \textbf{A3:} Không tìm thấy ngữ cảnh phù hợp $\rightarrow$ hệ thống trả thông báo và gợi ý cách hỏi lại. \\ \hline
-    \textbf{Hậu điều kiện} & (1) Câu trả lời được trả về cho User; (2) Lịch sử hội thoại được cập nhật vào session; (3) Thông tin debug/trace được lưu \\
-\end{longtable}
+Nhóm này có thể đại diện bởi các nền tảng chatbot do doanh nghiệp trong nước phát triển, chẳng hạn các giải pháp của FPT hoặc VNPT. Điểm mạnh của nhóm này là tính ổn định, khả năng tích hợp vào hệ thống tổ chức và mức độ tối ưu hóa cho tiếng Việt. Các hệ thống như vậy thường phù hợp với những bài toán tư vấn dịch vụ, tự động hóa quy trình hành chính hoặc hỗ trợ tra cứu thông tin có cấu trúc.
 
-\subsection{Đặc tả UC03 - Khởi tạo bộ câu hỏi/bài tập}
-\renewcommand{\arraystretch}{1.3}
-\begin{longtable}{|p{0.25\textwidth}|p{0.7\textwidth}|}
-    \caption{Đặc tả UC03 - Khởi tạo bộ câu hỏi/bài tập}
-    \label{tab:uc03} \\
-    \hline
-    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
-    \endfirsthead
-    
-    \hline
-    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
-    \endhead
-    
-    \hline
-    \endfoot
-    
-    \hline
-    \endlastfoot
+Tuy nhiên, khi xét dưới góc độ hỗ trợ học tập học thuật, các chatbot dịch vụ này chưa phải là lời giải phù hợp. Chúng thường không có module phân tích mã nguồn, không có cơ chế truy xuất tri thức học liệu theo bài học, và cũng không được thiết kế để hướng dẫn người học theo từng bước tư duy. Do đó, dù có lợi thế về hạ tầng và tiếng Việt, nhóm giải pháp này chưa đáp ứng trực tiếp yêu cầu của một trợ lý học tập cho môn Tin học THPT.
 
-    \textbf{Tên use case} & UC03 - Khởi tạo bộ câu hỏi/bài tập \\ \hline
-    \textbf{Tác nhân} & User \\ \hline
-    \textbf{Tiền điều kiện} & (1) Hệ thống sẵn sàng; (2) Kho SGK khả dụng; (3) User cung cấp yêu cầu sinh câu hỏi \\ \hline
-    \textbf{Luồng sự kiện chính} & 
-    1) User nhập yêu cầu tạo câu hỏi (chủ đề, dạng câu hỏi, số lượng).\newline
-    2) Hệ thống nhận diện intent sinh câu hỏi.\newline
-    3) Hệ thống truy xuất tri thức liên quan từ SGK.\newline
-    4) Hệ thống sinh bộ câu hỏi theo định dạng yêu cầu.\newline
-    5) Hiển thị danh sách câu hỏi cho User. \\ \hline
-    \textbf{Luồng sự kiện phát sinh} & 
-    \textbf{A1:} User không nêu rõ loại câu hỏi $\rightarrow$ hệ thống dùng mặc định (ví dụ MCQ).\newline
-    \textbf{A2:} User yêu cầu mức độ khó (planned) $\rightarrow$ hệ thống điều chỉnh prompt sinh câu hỏi theo mức độ.\newline
-    \textbf{A3:} User muốn chỉnh sửa/xuất file $\rightarrow$ hệ thống mở rộng thao tác sau khi sinh. \\ \hline
-    \textbf{Hậu điều kiện} & (1) Bộ câu hỏi được tạo thành công hoặc trả lỗi có hướng dẫn; (2) Trạng thái quiz được lưu vào session để phục vụ chấm điểm/ôn tập tiếp theo \\
-\end{longtable}
+\subsection{Nhóm các hệ thống nghiên cứu và đồ án đi trước}
 
-\subsection{Đặc tả UC05 - Sinh slide bài giảng}
-\renewcommand{\arraystretch}{1.3}
-\begin{longtable}{|p{0.25\textwidth}|p{0.7\textwidth}|}
-    \caption{Đặc tả UC05 - Sinh slide bài giảng}
-    \label{tab:uc05} \\
-    \hline
-    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
-    \endfirsthead
-    
-    \hline
-    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
-    \endhead
-    
-    \hline
-    \endfoot
-    
-    \hline
-    \endlastfoot
+Trong môi trường học thuật, đã có những hệ thống thử nghiệm hỗ trợ học tập bằng chatbot hoặc hỏi đáp tự động. Ưu điểm của nhóm này là tiếp cận gần hơn với đối tượng người dùng cuối và thường bám vào giáo trình hoặc dữ liệu nội địa. Một số hệ thống cũng đã bắt đầu khai thác mô hình ngôn ngữ lớn để sinh dữ liệu hoặc sinh phản hồi.
 
-    \textbf{Tên use case} & UC05 - Sinh slide bài giảng \\ \hline
-    \textbf{Tác nhân} & User \\ \hline
-    \textbf{Tiền điều kiện} & (1) Hệ thống AI và RAG hoạt động; (2) User cung cấp chủ đề bài giảng; (3) Có thông tin lớp/bộ sách (hoặc xác định được tự động) \\ \hline
-    \textbf{Luồng sự kiện chính} & 
-    1) User nhập yêu cầu sinh slide.\newline
-    2) Hệ thống nhận diện intent tạo slide.\newline
-    3) Hệ thống truy xuất tri thức SGK liên quan.\newline
-    4) Supervisor gọi agent tạo outline.\newline
-    5) Hệ thống sinh nội dung chi tiết từng slide.\newline
-    6) (Tùy chọn) sinh media và câu hỏi luyện tập.\newline
-    7) Hệ thống merge kết quả và kiểm tra chất lượng.\newline
-    8) Trả bộ slide hoàn chỉnh cho User. \\ \hline
-    \textbf{Luồng sự kiện phát sinh} & 
-    \textbf{A1:} User duyệt/chỉnh sửa outline (HITL) trước khi tiếp tục sinh nội dung.\newline
-    \textbf{A2:} Một agent phụ (media/quiz) lỗi $\rightarrow$ hệ thống tiếp tục với output một phần (partial) nếu lõi vẫn đạt.\newline
-    \textbf{A3:} Chưa có bộ sách $\rightarrow$ hệ thống yêu cầu User bổ sung. \\ \hline
-    \textbf{Hậu điều kiện} & (1) Slide được tạo và hiển thị; (2) Dữ liệu slide lưu vào session; (3) Có thể tiếp tục chỉnh sửa/resume trong phiên hiện tại \\
-\end{longtable}
+Dù vậy, nhiều hệ thống đi trước vẫn dựa mạnh vào kiến trúc rule-based hoặc intent classification kết hợp với cơ sở dữ liệu quan hệ truyền thống. Cách làm này dễ kiểm soát nhưng kém linh hoạt khi học sinh dùng từ đồng nghĩa, thay đổi cấu trúc câu hoặc hỏi lệch khỏi bộ kịch bản đã xây dựng. Với các hệ thống có dùng LLM, không ít trường hợp chỉ dừng ở mức gọi API trực tiếp và thiết kế prompt thủ công, nhưng chưa có cơ chế retrieval chuẩn hóa từ học liệu nguồn. Hạn chế của hướng này là chi phí API cao, phản hồi thiếu ổn định và nguy cơ câu trả lời trôi khỏi mạch kiến thức SGK.
 
-\subsection{Đặc tả UC06 - Sinh giáo án}
-\renewcommand{\arraystretch}{1.3}
-\begin{longtable}{|p{0.25\textwidth}|p{0.7\textwidth}|}
-    \caption{Đặc tả UC06 - Sinh giáo án}
-    \label{tab:uc06} \\
-    \hline
-    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
-    \endfirsthead
-    
-    \hline
-    \textbf{Mục} & \textbf{Đặc tả} \\ \hline
-    \endhead
-    
-    \hline
-    \endfoot
-    
-    \hline
-    \endlastfoot
+\begin{table}[H]
+\centering
+\caption{So sánh các nhóm giải pháp cho bài toán chatbot giáo dục}
+\label{tab:solution-comparison}
+\begin{tabular}{|p{0.22\textwidth}|p{0.18\textwidth}|p{0.2\textwidth}|p{0.22\textwidth}|}
+\hline
+\textbf{Nhóm giải pháp} & \textbf{Hiểu câu hỏi tự nhiên} & \textbf{Dùng dữ liệu SGK riêng} & \textbf{Khả năng giảm hallucination} \\ \hline
+Rule-based & Thấp & Có, nhưng khó mở rộng & Cao nếu luật đầy đủ \\ \hline
+FAQ/keyword search & Thấp-Trung bình & Có & Trung bình \\ \hline
+Semantic search & Trung bình & Có & Phụ thuộc tài liệu trả về \\ \hline
+LLM trực tiếp & Cao & Thấp nếu không nạp context & Thấp-Trung bình \\ \hline
+RAG & Cao & Cao & Cao hơn nếu retrieval tốt \\ \hline
+Adaptive RAG & Cao & Cao & Cao hơn nhờ chọn chiến lược theo câu hỏi \\ \hline
+\end{tabular}
+\end{table}
 
-    \textbf{Tên use case} & UC06 - Sinh giáo án \\ \hline
-    \textbf{Tác nhân} & User \\ \hline
-    \textbf{Tiền điều kiện} & (1) Hệ thống hoạt động ổn định; (2) User cung cấp yêu cầu giáo án (chủ đề/lớp/mục tiêu) \\ \hline
-    \textbf{Luồng sự kiện chính} & 
-    1) User nhập yêu cầu sinh giáo án.\newline
-    2) Hệ thống nhận diện intent sinh giáo án.\newline
-    3) Hệ thống truy xuất tri thức từ SGK.\newline
-    4) Hệ thống tạo cấu trúc giáo án.\newline
-    5) Hệ thống sinh nội dung chi tiết theo cấu trúc.\newline
-    6) Trả giáo án cho User. \\ \hline
-    \textbf{Luồng sự kiện phát sinh} & 
-    \textbf{A1:} User yêu cầu tùy chỉnh độ dài/mức chi tiết $\rightarrow$ hệ thống tái sinh nội dung theo tham số mới.\newline
-    \textbf{A2:} User yêu cầu xuất định dạng Markdown/Text $\rightarrow$ hệ thống thực hiện xuất file.\newline
-    \textbf{A3:} Ngữ cảnh truy xuất chưa đủ $\rightarrow$ hệ thống yêu cầu làm rõ chủ đề. \\ \hline
-    \textbf{Hậu điều kiện} & (1) Giáo án được sinh và trả về; (2) Nội dung được lưu vào session; (3) Sẵn sàng cho chỉnh sửa/xuất bản \\
-\end{longtable}
+Nhìn từ bảng so sánh, các mô hình LLM đa mục đích có ưu thế rõ rệt về năng lực diễn giải và xử lý mã nguồn, nhưng thiếu kiểm soát theo phạm vi SGK. Các chatbot doanh nghiệp trong nước mạnh về hạ tầng và xử lý tiếng Việt, nhưng không được thiết kế cho bài toán gia sư học thuật. Các hệ thống nghiên cứu đi trước tiếp cận gần hơn với bối cảnh giáo dục, song nhiều hệ thống vẫn còn cứng nhắc hoặc chưa có cơ chế retrieval đủ chặt để neo câu trả lời vào học liệu chuẩn.
 
-\subsection{Quy trình nghiệp vụ}
-\label{subsection:2.3.5}
-Phần này mô tả các luồng hoạt động (Activity) cốt lõi của hệ thống thông qua các bước tương tác giữa Người dùng (User), Hệ thống điều phối (System) và các Mô hình ngôn ngữ lớn (LLM). Các quy trình được thiết kế nhằm tối ưu hóa khả năng phản hồi tự nhiên của AI dựa trên kiến thức sách giáo khoa có sẵn.
+Từ đó có thể thấy khoảng trống nghiên cứu của đề tài nằm ở ba điểm. Thứ nhất, cần một hệ thống vừa tận dụng được khả năng diễn giải của LLM, vừa kiểm soát được tri thức theo phạm vi SGK. Thứ hai, hệ thống cần hỗ trợ truy xuất theo lớp, bộ sách và chủ đề thay vì trả lời theo tri thức toàn cục. Thứ ba, chất lượng của hệ thống cần được đánh giá theo từng node, đặc biệt là retrieval và generation, thay vì chỉ nhìn vào câu trả lời cuối cùng. Đây chính là động lực để đồ án lựa chọn hướng RAG có xét phạm vi dữ liệu, có khả năng thử nhiều cấu hình search và có benchmark đánh giá riêng cho retrieval.
 
-\subsubsection{Quy trình Hỏi đáp kiến thức SGK}
-Quy trình này diễn tả cách hệ thống xử lý khi học sinh hoặc giáo viên đặt các câu hỏi truy vấn về kiến thức môn học. Đây là quy trình áp dụng trực tiếp kiến trúc RAG (Retrieval-Augmented Generation).
+\section{Kiến thức nền tảng về RAG cho hỏi đáp dựa trên tài liệu}
 
-\textbf{Diễn giải quy trình:}
-\begin{itemize}
-    \item \textbf{Bước 1 (Tiếp nhận):} Người dùng nhập truy vấn vào giao diện chat.
-    \item \textbf{Bước 2 (Đánh giá ngữ cảnh):} Hệ thống lấy câu hỏi hiện tại kết hợp cùng lịch sử hội thoại gần nhất đưa vào module Router (LLM) để nhận diện ý định. Nếu ý định được xác định là hỏi đáp, luồng RAG sẽ được kích hoạt.
-    \item \textbf{Bước 3 (Viết lại truy vấn):} LLM thực hiện thiết kế lại câu hỏi ban đầu (Query Rewriting) hoặc sinh đa truy vấn (Multi-Query) nhằm làm rõ ngữ nghĩa và loại bỏ sự mơ hồ.
-    \item \textbf{Bước 4 (Truy xuất tri thức):} Các câu hỏi sau khi viết lại được chuyển thành các vector đặc trưng (Embedding) và đối chiếu với Vector Database. Hệ thống áp dụng Hybrid Search (Semantic + BM25) để lấy ra các đoạn tài liệu (chunks) SGK liên quan nhất.
-    \item \textbf{Bước 5 (Tổng hợp và xếp hạng):} Tài liệu thô được đưa qua mô hình Reranker để đánh giá chéo độ tương đồng và chọn ra Top K đoạn văn bản chính xác nhất làm ngữ cảnh (Context).
-    \item \textbf{Bước 6 (Sinh văn bản):} Hệ thống xây dựng một prompt chứa câu hỏi gốc và ngữ cảnh Top K, sau đó gửi cho LLM để tạo ra câu trả lời cuối cùng. Câu trả lời gửi về cho người dùng và vòng hội thoại mới bắt đầu.
-\end{itemize}
+Mô hình ngôn ngữ lớn là thành phần có khả năng sinh văn bản tự nhiên, giải thích khái niệm và chuyển đổi yêu cầu của người dùng thành đầu ra có cấu trúc. Cơ chế sinh của LLM dựa trên việc dự đoán token tiếp theo theo ngữ cảnh đã có:
 
-\subsubsection{Quy trình Khởi tạo bộ câu hỏi/bài tập}
-Giáo viên hoặc học sinh có thể yêu cầu hệ thống tạo ra một bài kiểm tra hoặc danh sách câu hỏi ôn tập dựa trên một chủ đề cụ thể.
+\begin{equation}
+\label{eq:llm-token-prediction}
+P(w_1, w_2, ..., w_T) = \prod_{t=1}^{T} P(w_t \mid w_1, ..., w_{t-1})
+\end{equation}
 
-\textbf{Diễn giải quy trình:}
-\begin{itemize}
-    \item \textbf{Bước 1 (Tiếp nhận yêu cầu):} Người dùng cung cấp tham số tạo bài tập (ví dụ: "Tạo 5 câu hỏi trắc nghiệm bài Mạng máy tính lớp 10").
-    \item \textbf{Bước 2 (Trích xuất tri thức):} Tương tự quy trình Hỏi đáp, hệ thống dùng RAG để lấy chính xác phần nội dung lý thuyết liên quan đến bài "Mạng máy tính" từ SGK để làm cơ sở.
-    \item \textbf{Bước 3 (Xây dựng Prompt sinh bài tập):} Hệ thống nạp nội dung tài liệu vào cấu trúc prompt đặc thù (nghiêm ngặt về định dạng trả về - Structured Output), yêu cầu LLM đóng vai trò giáo viên để sinh câu hỏi theo độ khó (Bloom's Taxonomy).
-    \item \textbf{Bước 4 (Sinh và kiểm chứng):} LLM sinh bộ câu hỏi định dạng JSON/Markdown. Hệ thống sẽ có bước kiểm tra tự động xem dữ liệu trả về có bị lỗi format hay không, nếu lỗi sẽ yêu cầu LLM tự sửa.
-    \item \textbf{Bước 5 (Trình bày \& Xuất file):} Hệ thống hiển thị danh sách câu hỏi ra giao diện. Người dùng có thể làm trực tiếp hoặc thao tác tải tệp tin về máy.
-\end{itemize}
+Trong đó, $w_t$ là token tại vị trí $t$. Cơ chế này giúp LLM tạo câu trả lời mạch lạc về mặt ngôn ngữ, nhưng không bảo đảm rằng mọi thông tin được sinh ra đều có căn cứ trong tài liệu đang xét.
 
-\subsubsection{Quy trình Sinh slide bài giảng và Giáo án (Kiến trúc Multi-Agent)}
-Đây là quy trình phức tạp nhất nhằm hỗ trợ giáo viên tự động hóa việc chuẩn bị tài liệu giảng dạy. Hệ thống sử dụng cơ chế chia để trị (Fan-out) với mô hình đa tác tử (Multi-Agent).
+Khi dùng trực tiếp LLM cho bài toán giáo dục, có một số hạn chế chính. Thứ nhất, mô hình có thể không biết hoặc không ưu tiên đúng nội dung trong SGK Tin học Việt Nam. Thứ hai, mô hình có thể trả lời bằng tri thức ngoài phạm vi bài học, dẫn đến câu trả lời không phù hợp với chương trình. Thứ ba, hiện tượng hallucination có thể làm hệ thống sinh thông tin nghe hợp lý nhưng không tồn tại trong tài liệu. Thứ tư, context window của mô hình có giới hạn, nên không thể đưa toàn bộ SGK vào prompt cho mọi câu hỏi.
 
-\textbf{Diễn giải quy trình:}
-\begin{itemize}
-    \item \textbf{Bước 1 (Nhập chủ đề):} Giáo viên nhập tên bài học hoặc một chủ đề mong muốn để tạo slide/giáo án.
-    \item \textbf{Bước 2 (Lập dàn ý - Outline Generation):} Hệ thống dùng RAG lấy mục lục và nội dung cốt lõi của bài học đó, LLM trung tâm (Supervisor) sẽ tiến hành tạo Dàn ý khái quát (Outline) cho giáo án.
-    \item \textbf{Bước 3 (Thực thi song song - Fan-out):} Sơ đồ được chia thành 3 nhánh xử lý độc lập do 3 Sub-Agent đảm nhiệm:
-    \begin{itemize}
-        \item \textit{Agent 1 (Mục tiêu \& Khởi động):} Sinh phần kiến thức trọng tâm, yêu cầu cần đạt.
-        \item \textit{Agent 2 (Lý thuyết chính):} Chia nhỏ dàn ý thành các slide/tiểu mục lý thuyết chuyên sâu, có ví dụ minh họa từ SGK.
-        \item \textit{Agent 3 (Luyện tập \& Vận dụng):} Đảm nhận việc sinh bài tập trắc nghiệm, tình huống thảo luận cuối bài.
-    \end{itemize}
-    \item \textbf{Bước 4 (Tổng hợp - Fan-in):} Ngay khi 3 Agent hoàn thành, module Supervisor sẽ gom tất cả kết quả lại thành một bản nháp hoàn chỉnh duy nhất.
-    \item \textbf{Bước 5 (Trình bày \& Chỉnh sửa):} Trả kết quả hiển thị cho giáo viên dưới dạng Markdown. Giáo viên có thể yêu cầu hiệu chỉnh độ dài hoặc bổ sung chi tiết trước khi xuất thành file hoàn chỉnh.
-\end{itemize}
+Vì các lý do trên, LLM trong đồ án không được sử dụng như nguồn tri thức duy nhất. Mô hình được đặt sau lớp truy xuất, nhận ngữ cảnh từ SGK và sinh câu trả lời dựa trên ngữ cảnh đó. Cách tổ chức này giúp giảm phụ thuộc vào tri thức tham số của mô hình và tạo điều kiện để đánh giá lỗi theo từng thành phần.
 
-\section{Yêu cầu phi chức năng}
-\label{section:2.4}
-Hệ thống Trợ lý ảo Giáo dục cần tuân thủ các yêu cầu phi chức năng sau để đảm bảo chất lượng và trải nghiệm người dùng:
-\begin{itemize}
-    \item \textbf{Hiệu năng (Performance):} Hệ thống phản hồi các truy vấn RAG của người dùng trong khoảng thời gian lý tưởng dưới 5 giây. Đối với các tác vụ phức tạp như sinh slide, thời gian chờ tối đa không vượt quá 30 giây.
-    \item \textbf{Độ tin cậy (Reliability):} Các kiến thức và nội dung được tạo ra phải bám sát 100\% nội dung sách giáo khoa (Grounded), giảm thiểu tối đa hiện tượng "ảo giác" (Hallucination) từ LLM.
-    \item \textbf{Tính dễ dùng (Usability):} Giao diện người dùng (UI) cần hiển thị trực quan, thân thiện (dựa trên Gradio), giúp giáo viên và học sinh dễ dàng tương tác mà không cần qua đào tạo về công nghệ phức tạp.
-    \item \textbf{Tính mở rộng và bảo trì (Scalability \& Maintainability):} Hệ thống được thiết kế theo kiến trúc module rời rạc thuần mã nguồn (Code-level Orchestrator), cho phép dễ dàng tích hợp thêm các Agent mới hoặc nâng cấp thư viện mà không làm gián đoạn hệ thống hiện tại.
-\end{itemize}
+Embedding là kỹ thuật biểu diễn văn bản thành vector số trong không gian nhiều chiều. Khi hai đoạn văn có ý nghĩa gần nhau, vector của chúng thường có độ tương đồng cao. Trong hệ thống hỏi đáp dựa trên tài liệu, embedding cho phép ánh xạ câu hỏi của người dùng và các đoạn SGK vào cùng một không gian, từ đó tìm các đoạn tài liệu gần nhất về mặt ngữ nghĩa.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Một độ đo phổ biến cho tìm kiếm ngữ nghĩa là cosine similarity:
+
+\begin{equation}
+\label{eq:cosine-similarity-ch2}
+\cos(\theta) = \frac{\mathbf{A} \cdot \mathbf{B}}{\|\mathbf{A}\| \|\mathbf{B}\|}
+\end{equation}
+
+Trong đó, $\mathbf{A}$ và $\mathbf{B}$ là hai vector biểu diễn văn bản. Giá trị càng gần $1$ thì hai vector càng cùng hướng, tức nội dung văn bản càng gần nhau về mặt ngữ nghĩa.
+
+Tìm kiếm ngữ nghĩa phù hợp với các câu hỏi được diễn đạt khác với tài liệu gốc nhưng vẫn có cùng ý nghĩa. Tuy nhiên, nó không phải lúc nào cũng xử lý tốt các thuật ngữ chính xác, tên lệnh, ký hiệu hoặc cụm từ hiếm. Vì vậy, trong các hệ thống RAG thực tế, tìm kiếm vector thường được kết hợp với các chiến lược khác như lọc metadata, tìm kiếm từ khóa hoặc reranking.
+
+\section{Sinh tăng cường truy xuất}
+
+Retrieval-Augmented Generation là kiến trúc kết hợp truy xuất thông tin và sinh văn bản. Thay vì để LLM trả lời trực tiếp, hệ thống trước hết truy xuất các đoạn tài liệu liên quan, sau đó đưa các đoạn này vào prompt để LLM sinh câu trả lời dựa trên tài liệu.
+
+Một hệ thống RAG thường gồm hai pha. Pha chuẩn bị dữ liệu thực hiện làm sạch tài liệu, chia tài liệu thành chunk, tạo embedding và lưu chỉ mục cùng metadata. Pha truy vấn nhận câu hỏi người dùng, truy xuất các chunk liên quan, có thể rerank kết quả, xây dựng context và gọi LLM để sinh câu trả lời.
+
+Trong bài toán giáo dục, RAG có ba lợi ích chính. Thứ nhất, hệ thống có thể cập nhật tri thức bằng cách cập nhật kho tài liệu thay vì huấn luyện lại mô hình. Thứ hai, câu trả lời có căn cứ hơn vì được sinh từ context cụ thể. Thứ ba, hệ thống có thể ghi lại context đã dùng để phục vụ kiểm tra, phân tích lỗi và đánh giá thực nghiệm.
+
+Tuy nhiên, RAG không tự động bảo đảm câu trả lời đúng. Nếu chunking làm mất ngữ cảnh, retriever lấy sai đoạn, hoặc context đưa vào prompt chứa nhiều nhiễu, chất lượng câu trả lời vẫn có thể thấp. Vì vậy, đánh giá một hệ thống RAG cần tách riêng chất lượng truy xuất và chất lượng sinh câu trả lời.
+
+\section{Kiến thức nền tảng về truy xuất, xếp hạng lại và đánh giá}
+
+\subsection{Lọc metadata theo phạm vi}
+
+Dữ liệu SGK có metadata tự nhiên như bộ sách, lớp, chủ đề và bài học. Khi người dùng đã nêu rõ phạm vi, ví dụ ``lớp 11 Cánh Diều'', hệ thống nên giới hạn truy xuất trong phạm vi đó. Cách làm này giúp giảm nguy cơ lấy nhầm nội dung cùng thuật ngữ nhưng thuộc lớp hoặc bộ sách khác.
+
+Tuy nhiên, lọc quá chặt cũng có thể gây mất kết quả nếu metadata thiếu hoặc câu hỏi không khớp chính xác với chủ đề. Do đó, hệ thống cần ghi nhận phạm vi yêu cầu, phạm vi thực tế đã truy xuất và các trường hợp phải mở rộng phạm vi khi không tìm được context phù hợp.
+
+\subsection{Viết lại truy vấn và truy xuất đa truy vấn}
+
+Câu hỏi của người dùng thường ngắn, mơ hồ hoặc phụ thuộc vào lịch sử hội thoại. Query rewriting là bước viết lại câu hỏi thành dạng rõ hơn để phục vụ truy xuất. Multi-query retrieval mở rộng ý tưởng này bằng cách sinh nhiều truy vấn phụ, sau đó truy xuất và hợp nhất kết quả.
+
+Trong đồ án, LLM có thể được dùng để hỗ trợ tạo truy vấn giàu ngữ nghĩa hơn. Tuy nhiên, các truy vấn này chỉ phục vụ retrieval, không được xem là câu trả lời cuối cùng. Hiệu quả của query rewriting cần được kiểm tra bằng benchmark retrieval, thông qua việc so sánh kết quả trước và sau khi viết lại truy vấn.
+
+\subsection{Xếp hạng lại}
+
+Retriever ban đầu thường ưu tiên tốc độ và độ phủ, nên danh sách top-k có thể chứa các đoạn chưa thật sự liên quan. Reranking là bước đánh giá lại các candidate bằng một mô hình chính xác hơn, thường là cross-encoder, để đưa các đoạn phù hợp lên vị trí cao hơn.
+
+Reranking có thể cải thiện chất lượng context đưa vào LLM, nhưng làm tăng chi phí tính toán và độ trễ. Vì vậy, trong thực nghiệm cần so sánh kết quả retrieval trước và sau reranking để xác định lợi ích thực tế của bước này.
+
+\subsection{Truy xuất thích nghi}
+
+Một chiến lược truy xuất cố định không phù hợp với mọi câu hỏi. Câu hỏi định nghĩa cần đoạn nội dung chi tiết, câu hỏi về chương trình học cần metadata, còn câu hỏi tổng quan có thể cần nhiều đoạn đại diện. Adaptive retrieval là hướng chọn chiến lược truy xuất theo loại câu hỏi, phạm vi và tín hiệu ngữ cảnh.
+
+Trong đồ án, adaptive retrieval được xem là hướng giải pháp phù hợp vì dữ liệu SGK có cấu trúc phân cấp rõ ràng và người dùng có thể hỏi theo nhiều mức độ chi tiết khác nhau. Cơ chế này cũng tạo cơ sở để so sánh nhiều cấu hình retrieval trong chương thực nghiệm.
+
+Đánh giá hệ thống RAG cần tách hai câu hỏi: hệ thống có truy xuất đúng context không, và LLM có sinh câu trả lời tốt từ context đó không. Nếu chỉ nhìn câu trả lời cuối cùng, rất khó xác định lỗi đến từ retriever hay từ generator.
+
+Đối với retrieval, một kết quả được xem là đúng khi các context được truy xuất chứa thông tin cần thiết để trả lời câu hỏi. Các thước đo thường dùng gồm Hit@k, Recall@k, Precision@k, MRR và nDCG nếu có nhãn mức độ liên quan. Các thước đo này có thể tính tự động nếu benchmark có expected context, expected source hoặc expected keywords đủ rõ.
+
+Đối với generation, việc đánh giá khó tự động hóa hơn vì câu trả lời có thể đúng theo nhiều cách diễn đạt khác nhau. Trong phạm vi đồ án, chất lượng generation nên được đánh giá thủ công bằng rubric. Các tiêu chí chính gồm độ đúng nội dung, độ đầy đủ, mức độ bám context, độ rõ ràng và khả năng tránh hallucination. LLM có thể được dùng để sinh benchmark ban đầu, nhưng không được dùng làm bộ chấm chính cho generation trong giai đoạn này để tránh tăng chi phí và tránh trùng vai trò với node validate trong pipeline.
+
+\section{Kết chương}
+
+Chương này đã làm rõ phạm vi nghiên cứu của đồ án, bao gồm ngữ cảnh dữ liệu SGK, đối tượng sử dụng và bản chất của bài toán hỏi đáp dựa trên tài liệu. Bên cạnh đó, chương cũng đã khảo sát các hướng tiếp cận liên quan và chỉ ra rằng các giải pháp dựa trên RAG phù hợp hơn với yêu cầu bám sát SGK so với việc dùng trực tiếp mô hình ngôn ngữ lớn.
+
+Hai nhóm kiến thức nền được trình bày trong chương, gồm RAG cho hỏi đáp dựa trên tài liệu và các kỹ thuật retrieval, reranking cùng phương pháp đánh giá, tạo cơ sở trực tiếp cho việc thiết kế giải pháp ở chương tiếp theo. Trên nền tảng đó, Chương 3 sẽ trình bày chi tiết kiến trúc đề xuất, vai trò của từng node và phương pháp đánh giá các thành phần trọng tâm của hệ thống.
 
 \end{document}
