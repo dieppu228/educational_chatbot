@@ -1,0 +1,27 @@
+{
+  "output": "data/eval/retrieval_benchmark_step1_raw_v3_authored_full.jsonl",
+  "rows": 600,
+  "seeds": 300,
+  "covered_lessons": 185,
+  "by_group": {
+    "CD-10": 100,
+    "CD-11": 100,
+    "CD-12": 100,
+    "KNTT-10": 100,
+    "KNTT-11": 100,
+    "KNTT-12": 100
+  },
+  "by_type": {
+    "application": 141,
+    "compare": 81,
+    "definition": 153,
+    "fact": 150,
+    "list": 42,
+    "process": 33
+  },
+  "by_difficulty": {
+    "easy": 326,
+    "medium": 274
+  },
+  "gold_mode": "single_chunk"
+}
