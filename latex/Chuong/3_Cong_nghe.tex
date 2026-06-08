@@ -1,240 +1,606 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Chương 2 đã trình bày cơ sở lý thuyết, khảo sát các hướng tiếp cận và xác định RAG là hướng phù hợp cho bài toán hỏi đáp trên SGK. Trên cơ sở đó, chương này trình bày thiết kế chi tiết của giải pháp được đề xuất. Trọng tâm của chương là mô tả pipeline xử lý dữ liệu, pipeline xử lý câu hỏi, vai trò của từng node và phương pháp đánh giá các node quan trọng.
+Chương 2 đã trình bày cơ sở lý thuyết, khảo sát các hướng tiếp cận và xác định Retrieval-Augmented Generation là hướng tiếp cận phù hợp cho bài toán hỏi đáp trên SGK Tin học THPT. Trên cơ sở đó, chương này mô tả phương pháp được đề xuất, bao gồm kiến trúc tổng thể, các thành phần xử lý chính và cách tổ chức đánh giá cho các node trọng tâm trong pipeline.
 
-Khác với tài liệu thiết kế phần mềm thuần túy, chương này không đi sâu vào mô tả toàn bộ package hoặc giao diện web. Các thành phần phần mềm chỉ được trình bày ở mức cần thiết để làm rõ cách hệ thống hiện thực hóa giải pháp nghiên cứu. Hai node được đánh giá sâu trong đồ án là retrieval và generation. Các node còn lại như intent routing, context building, validation, session và trace được mô tả để làm rõ luồng xử lý và kiểm thử chức năng.
+Nội dung chương được trình bày theo hướng nghiên cứu, tập trung vào dữ liệu, retrieval, reranking, generation và evaluation, không đi sâu vào chi tiết cài đặt phần mềm.
 
-\section{Mục tiêu thiết kế}
+\section{Tổng quan kiến trúc hệ thống}
 
-Mục tiêu của giải pháp là xây dựng một trợ lý giáo dục có khả năng trả lời câu hỏi và hỗ trợ một số tác vụ học tập dựa trên nội dung SGK Tin học THPT. Câu trả lời của hệ thống cần bám sát tài liệu, phù hợp với phạm vi sách/lớp/chủ đề, và có thể phân tích được nguyên nhân lỗi khi kết quả chưa đạt.
+\subsection{Bài toán và yêu cầu}
 
-Từ mục tiêu đó, thiết kế hệ thống cần thỏa mãn các yêu cầu sau. Thứ nhất, dữ liệu SGK phải được xử lý thành các đơn vị truy xuất có metadata rõ ràng. Thứ hai, hệ thống phải truy xuất được context liên quan trước khi gọi LLM. Thứ ba, pipeline cần hỗ trợ thử nghiệm nhiều chiến lược search để so sánh chất lượng retrieval. Thứ tư, câu trả lời sinh ra cần được đánh giá bằng con người theo rubric, thay vì chỉ dựa vào một node validate tự động.
+Bài toán của đồ án là xây dựng một trợ lý giáo dục cho môn Tin học THPT, hỗ trợ người học và giáo viên khai thác nội dung từ sách giáo khoa trong môi trường tương tác số. Phạm vi dữ liệu của hệ thống được giới hạn vào sách giáo khoa Tin học lớp 10, 11 và 12 của hai bộ sách Cánh Diều và Kết Nối Tri Thức. Trên nền dữ liệu này, hệ thống không chỉ thực hiện tác vụ hỏi đáp kiến thức mà còn hỗ trợ các tác vụ sinh học liệu có cấu trúc, đòi hỏi khả năng tổng hợp và tổ chức lại nội dung.
 
-\section{Kiến trúc tổng thể của giải pháp}
+Ba nhóm tác vụ chính của hệ thống gồm hỏi đáp dựa trên SGK, sinh slide bài giảng và soạn giáo án. Với tác vụ hỏi đáp, hệ thống cần truy xuất các đoạn ngữ cảnh liên quan thông qua \textit{Retriever}, sau đó sử dụng \textit{LLM} để sinh câu trả lời bám sát tài liệu nguồn. Với tác vụ sinh slide và giáo án, hệ thống cần bao phủ nội dung bài học ở mức tổng thể, đồng thời tổ chức lại tri thức theo trình tự sư phạm thay vì chỉ trả về các đoạn văn bản rời rạc. Do đó, bài toán không dừng ở một pipeline \textit{Retrieval-Augmented Generation} (RAG) đơn giản, mà mở rộng thành bài toán điều phối nhiều bước xử lý với các yêu cầu khác nhau về truy xuất, tổng hợp và kiểm soát chất lượng.
 
-Giải pháp được tổ chức thành hai pipeline chính: pipeline chuẩn bị dữ liệu và pipeline xử lý truy vấn. Pipeline chuẩn bị dữ liệu chạy trước, có nhiệm vụ làm sạch tài liệu, chia chunk, tạo embedding và lưu metadata. Pipeline xử lý truy vấn chạy khi người dùng gửi câu hỏi, có nhiệm vụ phân tích ngữ cảnh, truy xuất context, rerank nếu cần và sinh câu trả lời.
+Trên cơ sở đó, phương pháp đề xuất cần thỏa mãn một số yêu cầu chính. Thứ nhất, hệ thống phải khai thác tri thức từ SGK theo đúng phạm vi lớp, bộ sách và chủ đề nhằm hạn chế sai lệch ngữ cảnh. Thứ hai, cơ chế truy xuất phải xử lý được cả câu hỏi cụ thể lẫn các yêu cầu tổng hợp nội dung ở mức bài học. Thứ ba, phần sinh nội dung phải có cơ chế kiểm soát chất lượng đầu ra đối với các sản phẩm dài như slide và giáo án. Cuối cùng, kiến trúc hệ thống phải hỗ trợ đánh giá riêng chất lượng truy hồi của \textit{Retriever}/\textit{Reranker} và chất lượng sinh của \textit{LLM}.
+
+\subsection{Kiến trúc tổng thể và luồng xử lý một yêu cầu}
+
+Kiến trúc của hệ thống được tổ chức theo hai tầng \textit{Agent} đặt trên nền \textit{Retrieval-Augmented Generation}. Tầng điều phối tác tử đảm nhiệm việc phân tích yêu cầu, lập kế hoạch và lựa chọn nhánh xử lý. Tầng sinh nội dung \textit{Multi-Agent} đảm nhiệm việc tạo các sản phẩm dài như slide và giáo án. Hai tầng này cùng sử dụng một lõi truy xuất tri thức chung để bảo đảm đầu ra được grounding trên nội dung SGK.
+
+\begin{figure}[!htbp]
+    \centering
+    \resizebox{0.95\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 0.75cm,
+        font=\small,
+        base/.style = {draw=black!80, thick, align=center, rounded corners=5pt, drop shadow={opacity=0.12, shadow xshift=1.5pt, shadow yshift=-1.5pt}},
+        io/.style = {base, ellipse, fill=orange!12, minimum width=5.8cm, minimum height=0.9cm},
+        layer/.style = {base, rectangle, fill=blue!8, minimum width=8.8cm, minimum height=1.05cm, text width=8.4cm},
+        service/.style = {base, rectangle, fill=cyan!10, minimum width=8.8cm, minimum height=1.05cm, text width=8.4cm},
+        rag/.style = {base, rectangle, fill=green!10, minimum width=8.8cm, minimum height=1.05cm, text width=8.4cm},
+        mem/.style = {base, rectangle, fill=gray!15, minimum width=8.8cm, minimum height=1.05cm, text width=8.4cm},
+        arrow/.style = {thick, -{Stealth[scale=1.1]}, draw=black!70}
+    ]
+
+    \node (input) [io] {\textbf{Yêu cầu từ người dùng / giao diện}};
+    \node (intent) [layer, below=of input] {\textbf{1. Ngữ cảnh và ý định}\\Phân tích ngữ cảnh, mở rộng truy vấn, nhận diện nhiều ý định};
+    \node (planning) [layer, below=of intent] {\textbf{2. Lập kế hoạch}\\Quản lý phiên và lập danh sách hành động cần thực hiện};
+    \node (loop) [layer, below=of planning] {\textbf{3. Vòng lặp đa tác vụ}\\Điều phối lần lượt từng hành động trong cùng một yêu cầu};
+    \node (domain) [service, below=of loop] {\textbf{4. Dịch vụ nghiệp vụ}\\Dịch vụ quiz, slide, giáo án, giải thích, hội thoại và xử lý dự phòng};
+    \node (quality) [service, below=of domain] {\textbf{7. Kiểm soát chất lượng đầu ra}\\Hậu kiểm câu trả lời, quiz và học liệu};
+    \node (response) [mem, below=of quality] {\textbf{8. Phản hồi và bộ nhớ}\\Trả kết quả theo luồng, ghi vết thực thi và lưu phiên};
+    \node (knowledge) [rag, right=3.2cm of domain] {\textbf{6. Truy xuất và công cụ}\\Truy xuất SGK, định dạng ngữ cảnh và lớp công cụ mở rộng};
+    \node (content) [service, below=of knowledge] {\textbf{5. Quy trình đa tác tử nội dung}\\Sinh slide và giáo án};
+
+    \draw [arrow] (input) -- (intent);
+    \draw [arrow] (intent) -- (planning);
+    \draw [arrow] (planning) -- (loop);
+    \draw [arrow] (loop) -- (domain);
+    \draw [arrow] (domain) -- (quality);
+    \draw [arrow] (quality) -- (response);
+
+    \draw [arrow, dashed] (domain.east) -- node[pos=0.45, above, font=\scriptsize] {cần tri thức SGK} (knowledge.west);
+    \draw [arrow, dashed] (knowledge) -- node[pos=0.45, right, font=\scriptsize] {ngữ cảnh nền} (content);
+    \draw [arrow, dashed] (content.west) -- ++(-1.0,0) |- node[pos=0.25, below, font=\scriptsize] {artifact để duyệt} (quality.east);
+    \draw [arrow, dashed] (domain.west) -- ++(-1.2,0) |- node[pos=0.25, left, font=\scriptsize] {chat đơn giản có thể bỏ qua RAG} (response.west);
+
+    \end{tikzpicture}
+    }
+    \caption{Kiến trúc tổng thể của phương pháp đề xuất theo hướng phân tầng, trong đó lõi truy xuất tri thức là nền dùng chung cho các nhánh xử lý}
+    \label{fig:method-overall-architecture}
+\end{figure}
+
+Trong Hình \ref{fig:method-overall-architecture}, trục chính của vòng đời xử lý đi theo chuỗi từ yêu cầu đầu vào, phân tích ngữ cảnh và ý định, lập kế hoạch, điều phối đa tác vụ, thực thi dịch vụ nghiệp vụ, kiểm soát chất lượng đầu ra, rồi đến phản hồi và lưu trạng thái phiên. Cách biểu diễn này cho thấy bộ điều phối của hệ thống hoạt động theo một luồng xử lý chính, trong khi các năng lực truy xuất và sinh học liệu dài được gọi vào theo từng loại yêu cầu, thay vì xuất hiện như một bước tuần tự bắt buộc cho mọi truy vấn.
+
+Ở bên phải của trục chính, khối ``Truy xuất và công cụ'' được đặt như một nền dùng chung cho các nhánh cần tri thức SGK. Từ khối ``Dịch vụ nghiệp vụ'', hệ thống gọi xuống lõi truy xuất để lấy ngữ cảnh thông qua \textit{Retriever}; nếu tác vụ là sinh slide hoặc giáo án thì ngữ cảnh này tiếp tục được đưa vào ``Quy trình đa tác tử nội dung''. Bố cục này phản ánh quan hệ phụ thuộc giữa các thành phần: truy xuất tri thức diễn ra trước khi tầng \textit{Multi-Agent} tổng hợp sản phẩm.
+
+Phần cuối của sơ đồ cho thấy mọi đầu ra đều đi qua khối ``Kiểm soát chất lượng đầu ra'' trước khi trả về cho người dùng. Với câu trả lời ngắn, lớp này kiểm tra mức độ phù hợp và bám sát ngữ cảnh; với quiz, slide và giáo án, lớp này thực hiện hậu kiểm trước khi công bố kết quả. Hai mũi tên nét đứt cũng thể hiện rằng chat đơn giản có thể bỏ qua lõi RAG, trong khi các tác vụ cần grounding trên SGK sẽ kết nối đến nền truy xuất chung.
+
+\subsection{Công nghệ nền}
+
+Về mặt công nghệ, phương pháp được hiện thực hóa trên một số thành phần nền tảng tương ứng với từng vai trò trong kiến trúc. Mô hình ngôn ngữ lớn Gemini được sử dụng như \textit{LLM} cho các bước cần suy luận ngôn ngữ như nhận diện ý định, viết lại truy vấn và sinh nội dung. LangGraph được sử dụng cho bộ điều phối nội dung ở tầng sinh học liệu, nơi quy trình có nhiều bước trung gian và có thể tạm dừng để con người tham gia duyệt. Ở tầng truy xuất, Qdrant được sử dụng như một \textit{Vector Database} để lưu trữ và tìm kiếm ngữ nghĩa trên tập chunk đã được lập chỉ mục.
+
+Đối với biểu diễn tri thức, hệ thống sử dụng mô hình \textit{Embedding} tiếng Việt để chuyển mỗi khối nội dung SGK thành vector ngữ nghĩa, qua đó bảo toàn tốt hơn đặc trưng ngôn ngữ của dữ liệu trong không gian biểu diễn. Song song với đó, một thành phần tìm kiếm từ khóa kiểu BM25 được dùng để bổ sung tín hiệu lexical, sau đó kết quả được hợp nhất bằng \textit{Reciprocal Rank Fusion}. Ở giai đoạn sau truy xuất, mô hình \textit{Reranker} dạng cross-encoder được dùng để sắp xếp lại các ứng viên theo mức độ liên quan đối với truy vấn.
+
+Trong phạm vi chương này, các công nghệ trên chỉ được trình bày ở mức cần thiết để làm rõ vai trò trong phương pháp đề xuất. Thông số cài đặt cụ thể của từng công nghệ sẽ được trình bày ở chương tiếp theo.
+
+\section{Nền tảng tri thức: tiền xử lý, chunking và lập chỉ mục}
+
+Mọi đầu ra của hệ thống đều được grounding trên nội dung sách giáo khoa, do đó chất lượng của tầng tri thức nền ảnh hưởng trực tiếp đến hiệu quả truy hồi và sinh nội dung. Phần này mô tả quy trình biến văn bản SGK thô thành một tập chunk có cấu trúc, được embedding và lập chỉ mục để phục vụ truy hồi. Hình~\ref{fig:method-ingest-pipeline} tóm tắt quy trình này, trong đó bước chunking theo tiêu đề (heading-based chunking) là thành phần trung tâm.
+
+Về bản chất, tầng tri thức của hệ thống không chỉ là một kho lưu trữ dữ liệu tĩnh mà là kết quả của một pipeline tiền xử lý nhiều bước. Mỗi bước trong pipeline này tác động trực tiếp đến chất lượng truy hồi ở giai đoạn sau. Nếu ranh giới chunk không phù hợp, mô hình embedding sẽ biểu diễn sai đơn vị kiến thức; nếu metadata không đầy đủ, tầng truy hồi sẽ khó giới hạn đúng phạm vi lớp, bộ sách và bài học; nếu chỉ mục vector không đồng bộ với dữ liệu nguồn, kết quả truy xuất có thể mất tính ổn định giữa các lần chạy thực nghiệm. Vì vậy, việc mô tả rõ quy trình xây dựng tầng tri thức là cần thiết trước khi phân tích cơ chế retrieval ở mục kế tiếp.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.62\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 0.7cm,
+        font=\small,
+        base/.style = {draw=black, thick, align=center, rounded corners=4pt},
+        io/.style = {base, ellipse, fill=orange!10, minimum width=6.2cm, minimum height=0.95cm, text width=5.8cm},
+        proc/.style = {base, fill=blue!8, minimum width=7.4cm, minimum height=1.0cm, text width=7.0cm},
+        heading/.style = {base, fill=green!14, minimum width=7.4cm, minimum height=1.2cm, text width=7.0cm},
+        store/.style = {base, fill=cyan!12, minimum width=7.4cm, minimum height=1.05cm, text width=7.0cm},
+        arrow/.style = {thick, -{Stealth[scale=1.1]}}
+    ]
+
+    \node (src) [io] {\textbf{Tệp Markdown SGK}\\chủ đề / bài / mục};
+    \node (chunk) [heading, below=of src] {\textbf{Chunking theo heading}\\tạo chunk theo tiêu đề;\\gán \texttt{level} và \texttt{breadcrumb}};
+    \node (norm) [proc, below=of chunk] {\textbf{Chuẩn hóa kích thước}\\gộp chunk ngắn; cắt chunk dài theo đoạn};
+    \node (label) [proc, below=of norm] {\textbf{Gán nhãn \texttt{type}}\\LLM phân loại nội dung; sinh \texttt{chunk\_id}};
+    \node (embed) [proc, below=of label] {\textbf{Embedding}\\mã hóa \texttt{full\_content} thành vector 768 chiều};
+    \node (qdrant) [store, below=of embed] {\textbf{Lập chỉ mục trên Qdrant}\\lưu vector theo cosine\\kèm payload metadata};
+
+    \draw [arrow] (src) -- (chunk);
+    \draw [arrow] (chunk) -- (norm);
+    \draw [arrow] (norm) -- (label);
+    \draw [arrow] (label) -- (embed);
+    \draw [arrow] (embed) -- (qdrant);
+
+    \end{tikzpicture}
+    }
+    \caption{Quy trình từ văn bản SGK đến tập chunk được lập chỉ mục, với chunking theo tiêu đề là bước trung tâm}
+    \label{fig:method-ingest-pipeline}
+\end{figure}
+
+Hình~\ref{fig:method-ingest-pipeline} mô tả quy trình một chiều biến tệp bài học SGK thành các chunk sẵn sàng cho truy hồi, gồm năm bước nối tiếp. Đầu vào là tệp Markdown của một bài học, trong đó cấu trúc phân cấp (chủ đề, tiêu đề bài, tiêu đề mục) đã được thể hiện qua các mốc tiêu đề. Bước trung tâm là \textit{chunking theo heading}: một máy trạng thái quét tuần tự văn bản và chốt một chunk mới tại mỗi mốc tiêu đề, đồng thời gán trường \texttt{level} (độ sâu tiêu đề) và dựng chuỗi breadcrumb cho chunk đó. Tiếp theo, bước chuẩn hóa kích thước gộp các chunk quá ngắn và cắt các chunk quá dài để đưa độ dài về khoảng hợp lý mà không phá vỡ ranh giới ngữ nghĩa. Bước thứ tư phân loại vai trò sư phạm (\texttt{type}) của mỗi chunk bằng một mô hình ngôn ngữ nhẹ và sinh \texttt{chunk\_id} tất định. Cuối cùng, mỗi chunk được embedding cùng breadcrumb thành vector 768 chiều và được lập chỉ mục trên Qdrant kèm toàn bộ payload metadata. Trong các bước này, chunking theo tiêu đề giữ vai trò quyết định vì nó định hình ranh giới và tính mạch lạc của mọi chunk ở các bước sau; ba mục tiếp theo lần lượt trình bày chi tiết nguồn dữ liệu và metadata, cơ chế chunking, và khâu vector hóa -- lưu trữ.
+
+\subsection{Nguồn SGK, cấu trúc phân cấp và lược đồ metadata}
+
+Dữ liệu nền của hệ thống là sách giáo khoa Tin học THPT của hai bộ Cánh Diều và Kết Nối Tri Thức, trải đều ba khối lớp 10, 11 và 12. Toàn bộ nội dung được số hóa về định dạng Markdown và tổ chức theo đúng cấu trúc phân cấp tự nhiên của sách: mỗi bộ sách (\textit{book}) chia theo khối lớp (\textit{grade}), mỗi lớp gồm nhiều chủ đề (\textit{topic}), mỗi chủ đề gồm nhiều bài học (\textit{lesson}), và mỗi bài học lại được chia thành các mục theo cấp độ tiêu đề. Cấu trúc thư mục phản ánh trực tiếp phân cấp này, trong đó mỗi tệp Markdown tương ứng với một bài học và tệp \texttt{README.md} ở mỗi thư mục chủ đề lưu mã cùng tên chủ đề.
+
+Sau bước xử lý, tập tri thức thu được gồm 2.348 chunk, bao phủ 36 chủ đề và 186 bài học khác nhau. Bảng~\ref{tab:chunk-distribution} trình bày phân bố số lượng chunk theo bộ sách và khối lớp.
+
+\begin{table}[!htbp]
+\centering
+\small
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Bộ sách} & \textbf{Lớp 10} & \textbf{Lớp 11} & \textbf{Lớp 12} & \textbf{Tổng} \\
+\hline
+Cánh Diều (CD) & 401 & 439 & 364 & 1.204 \\
+Kết Nối Tri Thức (KNTT) & 401 & 350 & 393 & 1.144 \\
+\hline
+\textbf{Tổng} & \textbf{802} & \textbf{789} & \textbf{757} & \textbf{2.348} \\
+\hline
+\end{tabular}
+\caption{Phân bố số lượng chunk theo bộ sách và khối lớp}
+\label{tab:chunk-distribution}
+\end{table}
+
+Số liệu trong Bảng~\ref{tab:chunk-distribution} cho thấy dữ liệu tương đối cân bằng giữa hai bộ sách, với 1.204 chunk thuộc bộ Cánh Diều và 1.144 chunk thuộc bộ Kết Nối Tri Thức. Phân bố theo khối lớp cũng không có chênh lệch lớn, lần lượt là 802 chunk ở lớp 10, 789 chunk ở lớp 11 và 757 chunk ở lớp 12. Phân bố này giúp giảm nguy cơ tầng truy hồi thiên lệch về một bộ sách hay một khối lớp cụ thể.
+
+Mỗi chunk được gắn một lược đồ metadata thống nhất nhằm phục vụ lọc phạm vi khi truy hồi và truy vết nguồn khi sinh nội dung. Bảng~\ref{tab:chunk-metadata} mô tả các trường chính của lược đồ này.
+
+\begin{table}[!htbp]
+\centering
+\small
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Trường} & \textbf{Kiểu} & \textbf{Ý nghĩa} \\
+\hline
+\texttt{chunk\_id} & uuid & Định danh duy nhất, sinh tất định \\
+\texttt{book} & str & Bộ sách (CD / KNTT) \\
+\texttt{grade} & str & Khối lớp (10 / 11 / 12) \\
+\texttt{topic}, \texttt{topic\_name} & str & Mã và tên chủ đề \\
+\texttt{lesson}, \texttt{lesson\_name} & str & Mã và tên bài học \\
+\texttt{section\_title} & str & Tiêu đề mục chứa chunk \\
+\texttt{level} & int & Độ sâu tiêu đề (1--6) \\
+\texttt{type} & str & Loại nội dung sư phạm \\
+\texttt{breadcrumb} & str & Đường dẫn ngữ cảnh: chủ đề > bài > mục \\
+\texttt{content} & str & Nội dung văn bản của chunk \\
+\texttt{full\_content} & str & Ghép breadcrumb và content để vector hóa \\
+\texttt{source\_path} & str & Đường dẫn tệp nguồn \\
+\hline
+\end{tabular}
+\caption{Lược đồ metadata của một chunk}
+\label{tab:chunk-metadata}
+\end{table}
+
+Bảng~\ref{tab:chunk-metadata} cho thấy mỗi chunk không chỉ lưu nội dung văn bản mà còn mang theo các trường metadata về phạm vi học liệu, vị trí phân cấp và nguồn gốc dữ liệu. Tập trường này là cơ sở để tầng truy hồi thực hiện lọc theo bộ sách, lớp, chủ đề và bài học, đồng thời hỗ trợ truy vết nguồn ở các bước sinh nội dung và đánh giá.
+
+Trường \texttt{type} phân loại mỗi chunk theo vai trò sư phạm thay vì chỉ theo hình thức văn bản, gồm sáu nhãn: \textit{theory} (lý thuyết, khái niệm, ví dụ), \textit{exercise} (luyện tập, bài tập), \textit{objective} (mục tiêu bài học), \textit{application} (vận dụng), \textit{summary} (tóm tắt) và \textit{note} (lưu ý). Bảng~\ref{tab:chunk-type} trình bày phân bố số lượng chunk theo từng nhãn.
+
+\begin{table}[!htbp]
+\centering
+\small
+\begin{tabular}{|l|l|c|c|}
+\hline
+\textbf{Loại (\texttt{type})} & \textbf{Vai trò} & \textbf{Số lượng} & \textbf{Tỷ lệ} \\
+\hline
+\textit{theory} & Lý thuyết, khái niệm, ví dụ & 1.682 & 71,6\% \\
+\textit{exercise} & Luyện tập, bài tập & 250 & 10,6\% \\
+\textit{objective} & Mục tiêu bài học & 193 & 8,2\% \\
+\textit{application} & Vận dụng & 122 & 5,2\% \\
+\textit{summary} & Tóm tắt & 85 & 3,6\% \\
+\textit{note} & Lưu ý & 16 & 0,7\% \\
+\hline
+\textbf{Tổng} & & \textbf{2.348} & \textbf{100\%} \\
+\hline
+\end{tabular}
+\caption{Phân bố số lượng chunk theo loại nội dung sư phạm (\texttt{type})}
+\label{tab:chunk-type}
+\end{table}
+
+Số liệu trong Bảng~\ref{tab:chunk-type} cho thấy phần lớn nội dung thuộc nhãn \textit{theory}, chiếm khoảng 71,6\% tổng số chunk. Phân bố này phản ánh đặc thù của SGK, trong đó phần trình bày khái niệm, giải thích và ví dụ chiếm ưu thế so với các thành phần như bài tập, mục tiêu hay tóm tắt. Nhãn loại nội dung này tạo cơ sở cho việc khai thác chọn lọc ở các tác vụ phía sau, chẳng hạn ưu tiên chunk \textit{objective} và \textit{summary} khi dựng dàn ý bài giảng, hoặc chunk \textit{exercise} khi sinh câu hỏi luyện tập.
+
+\subsection{Chunking theo tiêu đề}
+
+Khác với cách chia chunk theo cửa sổ ký tự cố định, chiến lược \textbf{chunking theo tiêu đề (heading-based chunking)} được sử dụng trong đồ án xác định ranh giới chunk trực tiếp từ cấu trúc tiêu đề Markdown của SGK. Theo đó, mỗi chunk tương ứng với một đơn vị nội dung mạch lạc về mặt sư phạm. Cụ thể, bộ chunking hoạt động như một máy trạng thái quét tuần tự từng dòng của tệp bài học; mỗi khi gặp một mốc phân cấp --- dòng chủ đề (``CHỦ ĐỀ ...''), tiêu đề bài (``\# Bài X: ...'') hay tiêu đề mục (``\#\# ...'', ``\#\#\# ...'') --- hệ thống chốt chunk đang tích lũy và mở một chunk mới gắn với mốc đó. Cách chia này bảo đảm mỗi chunk nằm trọn trong một mục của một bài, không bị cắt ngang giữa câu hay giữa các ý.
+
+Để làm rõ cơ chế này, có thể xét một tài liệu giả lập gồm ba tầng tiêu đề như sau:
+
+\begin{lstlisting}[basicstyle=\ttfamily\small,breaklines=true]
+CHU DE 2. Mang may tinh va Internet
+
+# Bai 3. Giao tiep tren mang
+Doan mo dau cua bai hoc.
+
+## 1. Dia chi IP
+Dia chi IP dung de dinh danh thiet bi tren mang.
+
+### Vi du
+May tinh A co dia chi 192.168.1.10.
+
+## 2. Ten mien
+Ten mien giup nguoi dung de nho dia chi tai nguyen hon.
+\end{lstlisting}
+
+Với đầu vào trên, hệ thống không tạo một chunk duy nhất cho toàn bộ bài học mà chốt chunk tại từng mốc tiêu đề. Bảng~\ref{tab:chunking-prototype} minh họa kết quả phân đoạn tương ứng.
+
+\begin{table}[!htbp]
+\centering
+\small
+\begin{tabular}{|l|c|p{0.32\textwidth}|p{0.28\textwidth}|}
+\hline
+\textbf{Chunk giả lập} & \textbf{Level} & \textbf{Breadcrumb} & \textbf{Nội dung chính} \\
+\hline
+$c_1$ & 1 & Chủ đề 2 > Bài 3 & Đoạn mở đầu của bài học \\
+\hline
+$c_2$ & 2 & Chủ đề 2 > Bài 3 > 1. Địa chỉ IP & Khái niệm địa chỉ IP \\
+\hline
+$c_3$ & 3 & Chủ đề 2 > Bài 3 > 1. Địa chỉ IP > Ví dụ & Ví dụ về địa chỉ IP cụ thể \\
+\hline
+$c_4$ & 2 & Chủ đề 2 > Bài 3 > 2. Tên miền & Khái niệm tên miền \\
+\hline
+\end{tabular}
+\caption{Ví dụ minh họa cách chunking theo tiêu đề trên một tài liệu ba tầng heading}
+\label{tab:chunking-prototype}
+\end{table}
+
+Bảng~\ref{tab:chunking-prototype} cho thấy ranh giới chunk được quyết định bởi tiêu đề gần nhất đang có hiệu lực. Đoạn mở đầu ngay sau tiêu đề bài được gán vào chunk mức $1$. Khi gặp mục ``1. Địa chỉ IP'', hệ thống tạo một chunk mới ở mức $2$. Phần ``Ví dụ'' bên trong mục này tiếp tục được tách thành một chunk mức $3$, do nó được mở bởi một tiêu đề con riêng. Tương tự, khi gặp mục ``2. Tên miền'', hệ thống chốt chunk trước đó và mở ra một chunk mới. Nhờ cách chia này, mỗi chunk giữ được cả nội dung trực tiếp lẫn vị trí phân cấp trong bài học.
+
+Mỗi chunk được gán trường \texttt{level} bằng đúng độ sâu tiêu đề trong Markdown: tiêu đề bài tương ứng \texttt{level}~$=1$, các mục chính \texttt{level}~$=2$, các mục con \texttt{level}~$\geq 3$. Phân bố thực tế cho thấy nội dung tập trung chủ yếu ở \texttt{level}~$2$ (1.229 chunk) và \texttt{level}~$3$ (921 chunk). Song song, mỗi chunk mang một chuỗi \textit{breadcrumb} dạng ``tên chủ đề > tên bài > tiêu đề mục'' làm ngữ cảnh phân cấp gọn nhẹ; breadcrumb được ghép vào trước nội dung khi embedding và khi xếp hạng lại bằng \textit{Reranker}, qua đó hỗ trợ phân biệt các chunk có câu chữ tương tự nhưng thuộc bài khác nhau.
+
+Vì ranh giới chunk bám theo tiêu đề nên kích thước chunk phụ thuộc độ dài tự nhiên của từng mục. Để xử lý hai trường hợp cực đoan, một bước chuẩn hóa kích thước nhẹ được áp dụng sau khi chia: các chunk quá ngắn (dưới 100 ký tự) được gộp vào chunk liền trước nếu cùng bài và cùng loại nội dung, còn các chunk quá dài (trên 2.000 ký tự) được cắt theo ranh giới đoạn văn. Các ngưỡng này chỉ tác động tới một phần nhỏ tập chunk và không làm thay đổi bản chất chia theo tiêu đề; độ dài chunk thực tế dao động quanh trung bình 651 ký tự. Cuối cùng, nhãn \texttt{type} được tinh chỉnh bằng một mô hình ngôn ngữ nhẹ (Gemini~2.5~Flash-Lite) trên cơ sở nhãn heuristic ban đầu, có cơ chế đệm (cache) để bảo đảm tính tái lập; đồng thời mỗi chunk nhận một \texttt{chunk\_id} sinh tất định bằng hàm băm trên (bộ sách, lớp, chủ đề, bài, breadcrumb, thứ tự, dấu vân nội dung), giúp việc tái dựng tập chunk có tính idempotent.
+
+\subsection{Biểu diễn vector tiếng Việt và lưu trữ Qdrant}
+
+Để hỗ trợ truy hồi ngữ nghĩa, mỗi chunk được chuyển thành một vector số thực bằng mô hình embedding tiếng Việt \texttt{dangvantuan/vietnamese-document-embedding}, sinh vector 768 chiều. Văn bản đưa vào mô hình là trường \texttt{full\_content} (breadcrumb ghép với nội dung) thay vì chỉ riêng nội dung, để ngữ cảnh phân cấp được phản ánh trong không gian vector. Sau khi mã hóa, các vector được chuẩn hóa $L_2$ nhằm bảo đảm độ đo cosine quy về tích vô hướng; quá trình này có kiểm tra và xử lý các vector suy biến (chuẩn gần không hoặc giá trị không hữu hạn) để duy trì tính ổn định của tập chỉ mục.
+
+Tập vector cùng metadata được lưu vào Qdrant dưới một collection tên \texttt{educational\_chatbot}, cấu hình không gian 768 chiều với độ đo khoảng cách cosine. Mỗi điểm (point) trong Qdrant nhận \texttt{chunk\_id} làm định danh, mang vector ngữ nghĩa và toàn bộ payload metadata ở Bảng~\ref{tab:chunk-metadata}; nhờ đó hệ thống có thể vừa tìm kiếm theo độ tương đồng vừa lọc cứng theo bộ sách, lớp, chủ đề trong cùng một truy vấn. Quá trình nạp dữ liệu được thực hiện theo lô và có kiểm tra tính nhất quán giữa số chunk và số vector. Ngoài ra, một dấu vân (fingerprint) trên nguồn embedding được lưu kèm để phát hiện khi dữ liệu chunk thay đổi và chỉ tính lại vector khi cần. Thiết kế lưu trữ này cho phép tầng truy hồi nạp dữ liệu từ kho Qdrant hoặc từ tệp vector cục bộ trong các kịch bản triển khai và thực nghiệm.
+
+\section{Cơ chế truy hồi ngữ cảnh (RAG core)}
+
+\subsection{Truy hồi lai BM25 và dense, hợp nhất bằng Reciprocal Rank Fusion}
+
+Lõi truy hồi của hệ thống được xây dựng theo hướng truy hồi lai, kết hợp giữa tìm kiếm từ khóa (\textit{keyword search}) và tìm kiếm ngữ nghĩa theo vector (\textit{vector search}). Trong đó, \textit{keyword search} phù hợp với các truy vấn có mức trùng khớp bề mặt cao với SGK, còn \textit{vector search} phù hợp với các truy vấn diễn đạt lại hoặc dùng từ đồng nghĩa.
+
+Với \textit{keyword search}, hệ thống sử dụng BM25. Xuất phát từ TF-IDF, trong đó tần suất từ được ký hiệu bởi Công thức~\ref{eq:tf}:
+\begin{equation}
+\mathrm{TF}(t, d) = f(t, d),
+\label{eq:tf}
+\end{equation}
+và tần suất nghịch đảo tài liệu được tính theo Công thức~\ref{eq:idf}:
+\begin{equation}
+\mathrm{IDF}(t) = \log \frac{N - n(t) + 0.5}{n(t) + 0.5},
+\label{eq:idf}
+\end{equation}
+Trong đó:\\
+\begin{itemize}
+\item $t$ là một term trong truy vấn.
+\item $N$ là số tài liệu trong tập chỉ mục.
+\item $n(t)$ là số tài liệu chứa từ $t$.
+\end{itemize}
+Trên cơ sở đó, điểm BM25 của truy vấn $q$ đối với chunk $d$ được tính như sau:
+\begin{equation}
+\mathrm{BM25}(q,d)=\sum_{t \in q} \mathrm{IDF}(t)\cdot
+\frac{f(t,d)\,(k_1+1)}
+{f(t,d)+k_1\left(1-b+b\cdot \frac{|d|}{\mathrm{avgdl}}\right)}.
+\label{eq:bm25}
+\end{equation}
+Trong đó:\\
+\begin{itemize}
+\item $q$ là truy vấn.
+\item $t$ là một term thuộc truy vấn $q$.
+\item $f(t,d)$ là số lần xuất hiện của từ $t$ trong chunk $d$.
+\item $|d|$ là độ dài của chunk $d$.
+\item $\mathrm{avgdl}$ là độ dài chunk trung bình của toàn bộ tập chỉ mục.
+\item $k_1$ và $b$ là các siêu tham số điều chỉnh ảnh hưởng của tần suất từ và độ dài tài liệu.
+\end{itemize}
+
+Với \textit{vector search}, mỗi truy vấn $q$ và mỗi chunk $d$ được ánh xạ thành embedding $\mathbf{e}_q$ và $\mathbf{e}_d$. Độ tương đồng được tính bằng cosine similarity theo Công thức~\ref{eq:cosine-sim}:
+\begin{equation}
+\mathrm{cos\_sim}(\mathbf{e}_q,\mathbf{e}_d)
+=
+\frac{\mathbf{e}_q \cdot \mathbf{e}_d}
+{\|\mathbf{e}_q\|_2\,\|\mathbf{e}_d\|_2}.
+\label{eq:cosine-sim}
+\end{equation}
+Trong đó:\\
+\begin{itemize}
+\item $\mathbf{e}_q$ là embedding của truy vấn.
+\item $\mathbf{e}_d$ là embedding của chunk.
+\item $\mathbf{e}_q \cdot \mathbf{e}_d$ là tích vô hướng giữa hai vector.
+\item $\|\cdot\|_2$ là chuẩn Euclid.
+\end{itemize}
+Do các vector được chuẩn hóa $L_2$ trước khi lập chỉ mục, độ đo này quy về so sánh hướng trong không gian vector và được dùng trực tiếp trong truy vấn Qdrant.
+
+Hai danh sách kết quả từ BM25 và \textit{vector search} được hợp nhất bằng \textit{Reciprocal Rank Fusion} (RRF), thay vì trộn trực tiếp điểm số. Với một chunk $d$, điểm RRF được xác định theo Công thức~\ref{eq:rrf}:
+\begin{equation}
+\mathrm{RRF}(d)=\sum_{r \in \mathcal{R}} \frac{1}{k+\mathrm{rank}_r(d)},
+\label{eq:rrf}
+\end{equation}
+Trong đó:\\
+\begin{itemize}
+\item $\mathcal{R}$ là tập các danh sách xếp hạng thành phần.
+\item $\mathrm{rank}_r(d)$ là thứ hạng của chunk $d$ trong danh sách $r$.
+\item $k$ là hằng số làm trơn.
+\end{itemize}
+Cách hợp nhất này tránh phụ thuộc vào khác biệt thang điểm giữa BM25 và cosine similarity, đồng thời giữ lại các chunk có thứ hạng cao ở ít nhất một kênh truy hồi. Kết quả của bước này là một tập candidate ban đầu để chuyển sang bước reranking.
+
+\subsection{Xếp hạng lại bằng cross-encoder}
+
+Sau bước truy hồi lai, hệ thống áp dụng một bước \textit{reranking} bằng cross-encoder để tái xếp hạng tập candidate. Mục tiêu của bước này là thay thế thứ tự dựa trên mức tương đồng sơ cấp bằng thứ tự gần hơn với mức độ liên quan thực sự giữa truy vấn và chunk.
+
+\textit{Reranker} nhận đầu vào là cặp \textit{(query, context)} và sinh ra một điểm số liên quan
+\begin{equation}
+s_{\mathrm{rerank}} = f_{\theta}(q, d),
+\label{eq:rerank-score}
+\end{equation}
+Trong đó:\\
+\begin{itemize}
+\item $q$ là truy vấn.
+\item $d$ là chunk ứng viên.
+\item $\theta$ là tập tham số của mô hình.
+\item $f_{\theta}$ là hàm chấm điểm của cross-encoder.
+\end{itemize}
+Khác với \textit{vector search}, mô hình này mã hóa đồng thời cả truy vấn và chunk, do đó có thể khai thác tương tác token-level giữa hai vế. Trong triển khai hiện tại, phần văn bản đưa vào \textit{Reranker} không chỉ gồm \texttt{content} mà còn ghép thêm \textit{breadcrumb}, nhằm cung cấp thêm ngữ cảnh phân cấp của chunk trong SGK.
+
+Sau khi tính lại điểm số, hệ thống chọn top-$N$ chunk để xây dựng ngữ cảnh cuối. Giá trị $N$ được đặt theo loại tác vụ: với hỏi đáp ngắn, $N$ nhỏ hơn để hạn chế nhiễu; với slide hoặc giáo án, $N$ lớn hơn để tăng độ bao phủ. Vì vậy, reranking vừa là bước cải thiện thứ hạng, vừa là bước chọn lọc ngữ cảnh đầu vào cho tầng generation.
+
+\subsection{Truy hồi thích ứng (Adaptive RAG)}
+\label{subsec:adaptive-rag}
+
+Không phải mọi truy vấn trong hệ thống đều cần cùng một cách truy hồi. Câu hỏi định nghĩa ngắn, yêu cầu liệt kê bài học, truy vấn tổng quan theo chủ đề và yêu cầu sinh slide từ một bài học có phạm vi ngữ cảnh khác nhau. Vì vậy, hệ thống sử dụng cơ chế \textit{Adaptive RAG} để chọn strategy truy hồi phù hợp theo loại truy vấn và thông tin phạm vi hiện có.
+
+Về mặt lý thuyết, cơ chế này có hai thành phần chính. Thành phần thứ nhất là bước phân loại truy vấn, nhằm xác định loại nhu cầu truy hồi trước khi chọn strategy. Thành phần thứ hai là bước ràng buộc phạm vi (\textit{scope filtering}) theo bộ sách, lớp hoặc chủ đề nếu các metadata này đã được nhận diện ở tầng điều phối. Nhờ đó, không gian tìm kiếm được thu hẹp trước khi thực hiện BM25 hoặc \textit{vector search}. Trong trường hợp strategy đang dùng không trả về đủ ngữ cảnh, hệ thống có thể fallback về cấu hình mặc định để bảo đảm độ phủ.
 
 \begin{figure}[H]
 \centering
-\resizebox{0.95\textwidth}{!}{
+\resizebox{0.88\textwidth}{!}{
 \begin{tikzpicture}[
-    node distance=0.9cm,
+    node distance = 1.0cm and 1.4cm,
     font=\small,
-    base/.style={draw=black!80, thick, align=center, rounded corners=4pt},
-    data/.style={base, fill=orange!12, minimum width=7.8cm, minimum height=0.9cm},
-    process/.style={base, fill=blue!8, minimum width=7.8cm, minimum height=0.9cm},
-    retrieval/.style={base, fill=green!10, minimum width=7.8cm, minimum height=0.9cm},
-    eval/.style={base, fill=red!8, minimum width=7.8cm, minimum height=0.9cm},
-    arrow/.style={thick, -{Stealth[scale=1.05]}}
+    base/.style = {draw=black, thick, align=center, rounded corners=4pt, fill=white},
+    process/.style = {base, fill=blue!10, minimum width=4.4cm, minimum height=1.0cm, text width=4.0cm},
+    strategy/.style = {base, fill=green!10, minimum width=3.05cm, minimum height=1.05cm, text width=2.72cm},
+    diamondbox/.style = {base, diamond, aspect=1.9, fill=red!12, text width=2.8cm, inner sep=1pt},
+    io/.style = {base, ellipse, fill=orange!10, minimum width=4.6cm, minimum height=0.95cm, text width=4.3cm},
+    arrow/.style = {thick, -{Stealth[scale=0.95]}}
 ]
 
-\node (docs) [data] {SGK Tin học THPT};
-\node (clean) [process, below=of docs] {Làm sạch và chuẩn hóa tài liệu};
-\node (chunk) [process, below=of clean] {Chunking theo cấu trúc bài học và gắn metadata};
-\node (embed) [process, below=of chunk] {Tạo embedding và chỉ mục truy xuất};
+\node (input) [io] {\textbf{Đầu vào truy xuất}\\câu hỏi, loại yêu cầu, bộ sách/lớp/chủ đề};
+\node (classifier) [diamondbox, below=of input] {\textbf{Phân loại}\\\textbf{truy vấn}\\định tuyến heuristic};
 
-\node (query) [data, right=3.8cm of docs] {Câu hỏi người dùng};
-\node (context) [process, below=of query] {Phân tích ngữ cảnh, intent và phạm vi};
-\node (retrieve) [retrieval, below=of context] {Retrieve: search, filter, query rewriting, rerank};
-\node (generate) [process, below=of retrieve] {Generate: sinh câu trả lời từ context};
-\node (validate) [process, below=of generate] {Validate, session và trace};
+\node (standard) [strategy, below=1.75cm of classifier, xshift=-5.7cm] {\textbf{STANDARD}\\BM25 + semantic\\RRF + rerank};
+\node (broad) [strategy, below=1.75cm of classifier, xshift=-1.9cm] {\textbf{BROAD}\\thông tin mô tả\\khối mục tiêu};
+\node (curriculum) [strategy, below=1.75cm of classifier, xshift=1.9cm] {\textbf{CURRIC.}\\danh sách bài\\đã khử trùng lặp};
+\node (hrag) [strategy, below=1.75cm of classifier, xshift=5.7cm] {\textbf{HRAG}\\khối cha\\khối con theo phạm vi};
 
-\node (bench) [eval, below=1.2cm of embed] {Benchmark retrieval sinh bằng LLM và rà soát thủ công};
-\node (human) [eval, below=1.2cm of validate] {Rubric đánh giá generation bởi con người};
+\node (combine) [process, below=1.9cm of broad, xshift=1.9cm] {Bộ kết hợp ngữ cảnh\\định dạng theo tác vụ};
+\node (mcp) [process, right=1.45cm of combine, fill=gray!12] {Lớp công cụ mở rộng\\truy xuất, định dạng, tìm kiếm web};
+\node (output) [io, below=1.15cm of combine] {\textbf{Đầu ra}\\ngữ cảnh phù hợp};
 
-\draw [arrow] (docs) -- (clean);
-\draw [arrow] (clean) -- (chunk);
-\draw [arrow] (chunk) -- (embed);
-\draw [arrow] (query) -- (context);
-\draw [arrow] (context) -- (retrieve);
-\draw [arrow] (retrieve) -- (generate);
-\draw [arrow] (generate) -- (validate);
-\draw [arrow] (embed.east) -- ++(1.1,0) |- (retrieve.west);
-\draw [arrow, dashed] (chunk) -- (bench);
-\draw [arrow, dashed] (retrieve) -- (bench);
-\draw [arrow, dashed] (generate) -- (human);
+\draw [arrow] (input) -- (classifier);
+\draw [arrow] (classifier.south) -- ++(0,-0.35) -| (standard.north);
+\draw [arrow] (classifier.south) -- ++(0,-0.35) -| (broad.north);
+\draw [arrow] (classifier.south) -- ++(0,-0.35) -| (curriculum.north);
+\draw [arrow] (classifier.south) -- ++(0,-0.35) -| (hrag.north);
+
+\coordinate (combineInA) at ($(combine.north)+(-1.45cm,0)$);
+\coordinate (combineInB) at ($(combine.north)+(-0.50cm,0)$);
+\coordinate (combineInC) at ($(combine.north)+(0.50cm,0)$);
+\coordinate (combineInD) at ($(combine.north)+(1.45cm,0)$);
+\draw [arrow] (standard.south) to[out=-90,in=155] (combineInA);
+\draw [arrow] (broad.south) to[out=-90,in=115] (combineInB);
+\draw [arrow] (curriculum.south) to[out=-90,in=65] (combineInC);
+\draw [arrow] (hrag.south) to[out=-90,in=25] (combineInD);
+\draw [arrow, dashed] (mcp.west) -- (combine.east);
+\draw [arrow] (combine) -- (output);
 
 \end{tikzpicture}
 }
-\caption{Tổng quan pipeline dữ liệu, pipeline truy vấn và hai luồng đánh giá}
-\label{fig:research-pipeline-overview}
+\caption{Cơ chế truy hồi thích ứng của hệ thống với bộ phân loại truy vấn và các chiến lược truy xuất tương ứng}
+\label{fig:method-adaptive-rag}
 \end{figure}
 
-Hình \ref{fig:research-pipeline-overview} cho thấy thiết kế không đặt trọng tâm vào giao diện ứng dụng, mà đặt trọng tâm vào mối quan hệ giữa dữ liệu, retrieval, generation và evaluation. Đây là cơ sở để Chương 4 triển khai kiểm thử và trình bày kết quả thực nghiệm.
+Trong Hình \ref{fig:method-adaptive-rag}, bộ phân loại truy vấn được đặt ở trung tâm vì đây là thành phần quyết định strategy truy hồi sẽ được áp dụng trước. Bốn strategy ở tầng dưới tương ứng với bốn kiểu nhu cầu truy hồi khác nhau, trong khi khối ``Bộ kết hợp ngữ cảnh'' chuẩn hóa đầu ra của từng strategy về một cấu trúc chung cho tầng trên sử dụng.
+Trong cấu trúc này, \textit{STANDARD} là strategy mặc định gồm BM25, \textit{vector search}, RRF và reranking. \textit{BROAD} ưu tiên các chunk mô tả ở mức khái quát. \textit{CURRICULUM} phục vụ các truy vấn liệt kê bài học hoặc cấu trúc chương trình, trong đó đầu ra cần ở mức danh sách bài thay vì đoạn nội dung chi tiết. \textit{HRAG} kết hợp các chunk mức cao và mức chi tiết trong cùng phạm vi bài học. Sau khi truy hồi, khối ``Bộ kết hợp ngữ cảnh'' thực hiện chuẩn hóa đầu ra để các strategy khác nhau có thể cung cấp ngữ cảnh theo cùng một cấu trúc cho tầng trên sử dụng.
 
-\section{Thiết kế dữ liệu đầu vào}
+\section{Tầng điều phối tác tử}
 
-Dữ liệu đầu vào của hệ thống là nội dung SGK Tin học THPT thuộc các lớp 10, 11 và 12 của hai bộ Cánh Diều và Kết Nối Tri Thức. Mỗi tài liệu có cấu trúc phân cấp gồm bộ sách, lớp, chủ đề, bài học và các mục con. Vì vậy, metadata không chỉ là thông tin phụ trợ mà là thành phần quan trọng để giới hạn phạm vi retrieval.
+\subsection{Sự cần thiết của tầng điều phối tác tử}
 
-Mỗi chunk sau khi xử lý cần có các nhóm thông tin sau:
+% TODO: Giải thích vì sao cần agentic orchestration thay cho pipeline tuyến tính.
 
-\begin{table}[H]
+\subsection{Định tuyến ý định bằng mô hình ngôn ngữ lớn}
+
+% TODO: Mô tả IntentRouter, multi-intent và trích xuất topic/grade/book.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.7\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 1.05cm,
+        font=\small,
+        base/.style = {draw=black, thick, align=center, rounded corners=4pt},
+        process/.style = {base, fill=green!10, minimum width=7.2cm, minimum height=1.05cm},
+        llm/.style = {base, fill=red!10, minimum width=7.2cm, minimum height=1.05cm},
+        io/.style = {base, ellipse, fill=orange!10, minimum width=6.8cm, minimum height=0.95cm, text width=6.4cm},
+        labelbox/.style = {fill=white, text=black!80, font=\scriptsize\ttfamily, inner sep=2pt},
+        arrow/.style = {thick, -{Stealth[scale=1.1]}}
+    ]
+
+    \node (input) [io] {\textbf{Đầu vào}\\câu hỏi, người dùng, bộ sách/lớp, phiên học};
+    \node (analyzer) [process, below=of input] {ContextAnalyzer\\phát hiện phụ thuộc lịch sử và làm giàu câu hỏi};
+    \node (rewriter) [llm, below=of analyzer] {QueryRewriter\\sinh truy vấn mở rộng khi cần};
+    \node (router) [llm, below=of rewriter] {Bộ nhận diện ý định\\trả tối đa 3 ý định};
+    \node (output) [io, below=of router] {\textbf{Đầu ra}\\danh sách ý định, truy vấn truy xuất, chủ đề, lớp, bộ sách};
+
+    \draw [arrow] (input) -- (analyzer);
+    \draw [arrow] (analyzer) -- node[labelbox] {câu hỏi đã làm giàu} (rewriter);
+    \draw [arrow] (rewriter) -- node[labelbox] {truy vấn mở rộng} (router);
+    \draw [arrow] (router) -- (output);
+
+    \end{tikzpicture}
+    }
+    \caption{Khối phân tích ngữ cảnh và định tuyến ý định trong tầng điều phối}
+    \label{fig:method-intent-routing}
+\end{figure}
+
+\subsection{Làm giàu ngữ cảnh hội thoại và viết lại truy vấn}
+
+% TODO: Mô tả ContextAnalyzer, QueryRewriter và các loại tín hiệu ngữ cảnh.
+
+\subsection{Lập kế hoạch hành động và thực thi đa hành động}
+
+% TODO: Mô tả ActionPlanner, Dispatcher và vòng OBSERVE--DECIDE--ACT.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.7\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 1.15cm,
+        font=\small,
+        base/.style = {draw=black, thick, align=center, rounded corners=4pt},
+        process/.style = {base, fill=green!10, minimum width=7.3cm, minimum height=1.05cm},
+        io/.style = {base, ellipse, fill=orange!10, minimum width=6.8cm, minimum height=0.95cm, text width=6.4cm},
+        labelbox/.style = {fill=white, text=black!80, font=\scriptsize\ttfamily, inner sep=2pt, draw=gray!40, rounded corners=2pt},
+        arrow/.style = {thick, -{Stealth[scale=1.1]}}
+    ]
+
+    \node (input) [io] {\textbf{Đầu vào}\\danh sách ý định, câu hỏi, người dùng};
+    \node (session) [process, below=of input] {SessionManager\\xác định phiên đang tiếp diễn hoặc tạo phiên mới};
+    \node (planner) [process, below=of session] {Bộ lập kế hoạch\\ánh xạ ý định sang hành động và loại trùng};
+    \node (output) [io, below=of planner] {\textbf{Đầu ra}\\phiên học và danh sách hành động};
+
+    \draw [arrow] (input) -- (session);
+    \draw [arrow] (session) -- node[labelbox] {trạng thái phiên} (planner);
+    \draw [arrow, rounded corners=10pt] (input.east) -- ++(1.1,0) |- node[labelbox, pos=0.35] {thông tin ý định} (planner.east);
+    \draw [arrow] (planner) -- (output);
+
+    \end{tikzpicture}
+    }
+    \caption{Cơ chế lập kế hoạch hành động ở tầng điều phối}
+    \label{fig:method-action-planning}
+\end{figure}
+
+\section{Tầng sinh nội dung đa tác tử}
+
+\subsection{Mô hình Supervisor--Specialist và lý do lựa chọn}
+
+% TODO: So sánh với single-agent và nêu lý do chọn kiến trúc Supervisor--Specialist.
+
+\subsection{Giao thức giao tiếp và cơ chế điều phối giữa các tác tử}
+
+% TODO: Mô tả AgentTask, AgentTaskResult, artifact, confidence, contract giữa các agent và vai trò điều phối của Content Supervisor.
+
+\begin{figure}[H]
+    \centering
+    \resizebox{0.92\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 1.0cm and 1.2cm,
+        font=\small,
+        base/.style = {draw=black, thick, align=center, rounded corners=4pt},
+        supervisor/.style = {base, fill=blue!10, minimum width=4.8cm, minimum height=1.1cm, text width=4.5cm},
+        agent/.style = {base, fill=green!10, minimum width=3.95cm, minimum height=1.0cm, text width=3.65cm},
+        tool/.style = {base, fill=gray!12, minimum width=4.3cm, minimum height=1.0cm, text width=4.0cm},
+        outnode/.style = {base, ellipse, fill=orange!10, minimum width=4.9cm, minimum height=0.95cm},
+        arrow/.style = {thick, -{Stealth[scale=1.1]}},
+        labelbox/.style = {fill=white, draw=gray!35, font=\scriptsize, inner sep=2pt}
+    ]
+
+    \node (supervisor) [supervisor] {\textbf{Bộ điều phối nội dung}\\LangGraph lập kế hoạch / định tuyến\\{\scriptsize phân công tác vụ}};
+    \node (planner) [agent, below left=1.35cm and 4.15cm of supervisor] {Agent lập kế hoạch\\dàn ý và trình tự học};
+    \node (draft) [agent, below=1.35cm of supervisor] {Agent viết nội dung\\nội dung chi tiết};
+    \node (media) [agent, below right=1.35cm and 4.15cm of supervisor] {Agent gợi ý media\\hình ảnh và tài nguyên};
+    \node (assessment) [agent, below=1.05cm of draft] {Agent đánh giá nhúng\\câu hỏi và hoạt động};
+    \node (merge) [tool, below=1.15cm of assessment] {\textbf{Bộ hợp nhất}\\service/tool xác định\\{\scriptsize kết quả từ các agent}};
+    \node (quality) [agent, below=1.1cm of merge] {Agent hậu kiểm\\kiểm tra chất lượng};
+    \node (output) [outnode, below=1.0cm of quality] {\textbf{slide/giáo án hoàn chỉnh}};
+
+    \draw [arrow] (supervisor.south) -- ++(0,-0.35) -| (planner.north);
+    \draw [arrow] (supervisor) -- (draft);
+    \draw [arrow] (supervisor.south) -- ++(0,-0.35) -| (media.north);
+    \draw [arrow] (draft) -- (assessment);
+    \draw [arrow] (planner.south) to[out=-90,in=165] (merge.west);
+    \draw [arrow] (assessment) -- (merge);
+    \draw [arrow] (media.south) to[out=-90,in=15] (merge.east);
+    \draw [arrow] (merge) -- (quality);
+    \draw [arrow] (quality) -- (output);
+    \draw [arrow, dashed, rounded corners=12pt] (quality.west) -- ++(-4.0,0) |- (supervisor.west);
+
+    \end{tikzpicture}
+    }
+    \caption{Kiến trúc đa tác tử cho bài toán sinh slide và giáo án}
+    \label{fig:method-content-multi-agent}
+\end{figure}
+
+\subsection{Các tác tử chuyên biệt trong pipeline sinh nội dung}
+
+% TODO: Trình bày vai trò của PedagogyPlannerAgent, ContentDraftingAgent, MediaResearchAgent và ContentAssessmentAgent trong pipeline.
+
+\subsection{Tổng hợp kết quả, kiểm soát chất lượng và con người trong vòng lặp}
+
+% TODO: Mô tả SlideMerger, QualityReviewerAgent, reflection loop và cơ chế Human-in-the-loop cho bước duyệt outline.
+
+\begin{figure}[H]
 \centering
-\caption{Các trường metadata chính của chunk}
-\label{tab:chunk-metadata}
-\begin{tabular}{|p{0.24\textwidth}|p{0.68\textwidth}|}
-\hline
-\textbf{Trường} & \textbf{Ý nghĩa} \\ \hline
-\texttt{chunk\_id} & Định danh duy nhất của chunk, dùng để trace và đánh giá retrieval. \\ \hline
-\texttt{book} & Bộ sách, ví dụ Cánh Diều hoặc Kết Nối Tri Thức. \\ \hline
-\texttt{grade} & Lớp học tương ứng, gồm 10, 11 hoặc 12. \\ \hline
-\texttt{topic} & Chủ đề hoặc mạch nội dung trong chương trình. \\ \hline
-\texttt{lesson} & Tên bài học chứa chunk. \\ \hline
-\texttt{section} & Mục nhỏ hoặc heading trong bài học nếu có. \\ \hline
-\texttt{text} & Nội dung văn bản được dùng cho retrieval và generation. \\ \hline
-\texttt{source} & Nguồn dữ liệu hoặc file gốc để kiểm tra lại khi cần. \\ \hline
-\end{tabular}
-\end{table}
+\resizebox{0.80\textwidth}{!}{
+\begin{tikzpicture}[
+    node distance = 0.62cm and 1.8cm,
+    font=\scriptsize,
+    base/.style = {draw=black, thick, align=center, rounded corners=4pt, fill=white},
+    process/.style = {base, fill=teal!10, minimum width=3.55cm, minimum height=0.72cm, text width=3.28cm},
+    quality/.style = {base, fill=orange!12, minimum width=3.55cm, minimum height=0.72cm, text width=3.28cm},
+    outnode/.style = {base, ellipse, fill=gray!15, minimum width=3.8cm, minimum height=0.72cm, text width=3.5cm},
+    arrow/.style = {thick, -{Stealth[scale=0.9]}},
+    labelbox/.style = {fill=white, draw=gray!30, font=\scriptsize, inner sep=2pt}
+]
 
-Việc lưu metadata cho phép hệ thống thực hiện filter theo phạm vi. Ví dụ, khi người dùng hỏi về bài học lớp 11 Cánh Diều, retriever có thể ưu tiên hoặc giới hạn kết quả trong đúng lớp và bộ sách này. Điều này đặc biệt quan trọng vì nhiều thuật ngữ Tin học xuất hiện ở nhiều lớp khác nhau.
+\node (dispatch) [outnode] {\textbf{Bộ định tuyến thực thi}\\hành động đã chọn};
 
-\section{Thiết kế tiền xử lý và chunking}
+\node (quizgen) [process, below=0.95cm of dispatch, xshift=-4.55cm] {Bộ sinh quiz\\trắc nghiệm, tự luận\\điền khuyết, đúng-sai};
+\node (quizquality) [quality, below=of quizgen] {Hậu kiểm quiz\\có thể yêu cầu sửa};
+\node (quizvalidator) [quality, below=of quizquality] {Kiểm tra câu hỏi\\tiêu chí đánh giá + nguồn tham chiếu};
+\node (quizstore) [process, below=of quizvalidator] {Lưu trạng thái quiz\\lượt làm bài + tiến độ học tập};
 
-Tiền xử lý tài liệu gồm các bước đọc dữ liệu nguồn, chuẩn hóa ký tự, loại bỏ đoạn rỗng hoặc nhiễu, nhận diện heading và gắn metadata. Mục tiêu của bước này là đưa tài liệu về dạng ổn định để chunking và retrieval có thể hoạt động nhất quán.
+\node (contentsupervisor) [process, below=0.95cm of dispatch, xshift=4.55cm] {Bộ điều phối nội dung\\các agent chuyên trách};
+\node (contentmerge) [process, below=of contentsupervisor] {Bộ hợp nhất\\ghép kết quả xác định};
+\node (contentquality) [quality, below=of contentmerge] {Agent hậu kiểm\\phản tư / sửa lại / chặn};
+\node (contentstore) [process, below=of contentquality] {Lưu tóm tắt nội dung\\trạng thái slide/giáo án};
 
-Chunking được thiết kế theo hướng ưu tiên cấu trúc bài học thay vì chỉ cắt theo độ dài cố định. Với dữ liệu SGK, mỗi heading hoặc tiểu mục thường tương ứng với một đơn vị kiến thức có ý nghĩa sư phạm. Nếu cắt ngang một định nghĩa hoặc ví dụ, context truy xuất có thể thiếu thông tin cần thiết để LLM trả lời đúng.
+\node (stream) [outnode, below=0.55cm of quizstore, xshift=4.55cm] {\textbf{Kết quả được duyệt}\\trả về người dùng};
 
-Tuy nhiên, chunk quá dài cũng làm retrieval kém chính xác vì chứa nhiều nội dung phụ. Vì vậy, sau khi chia theo cấu trúc, hệ thống vẫn cần kiểm soát độ dài chunk và có thể áp dụng overlap khi cần. Các tham số cần báo cáo trong thực nghiệm gồm kích thước chunk, overlap, số lượng chunk, độ dài trung bình và phân phối độ dài.
+\draw [arrow] (dispatch.south) -- ++(0,-0.28) -| node[labelbox, pos=0.2] {SINH QUIZ} (quizgen.north);
+\draw [arrow] (quizgen) -- (quizquality);
+\draw [arrow] (quizquality) -- (quizvalidator);
+\draw [arrow] (quizvalidator) -- (quizstore);
+\draw [arrow] (quizstore.south) to[out=-90,in=170] (stream.west);
 
-\section{Thiết kế embedding và indexing}
+\draw [arrow] (dispatch.south) -- ++(0,-0.28) -| node[labelbox, pos=0.2] {SLIDE/GIÁO ÁN} (contentsupervisor.north);
+\draw [arrow] (contentsupervisor) -- (contentmerge);
+\draw [arrow] (contentmerge) -- (contentquality);
+\draw [arrow] (contentquality) -- (contentstore);
+\draw [arrow] (contentstore.south) to[out=-90,in=10] (stream.east);
+\draw [arrow, dashed, rounded corners=8pt] (contentquality.east) -- ++(1.1,0) |- node[labelbox, pos=0.25] {sửa lại} (contentsupervisor.east);
+\draw [arrow, dashed, rounded corners=8pt] (quizquality.west) -- ++(-1.1,0) |- node[labelbox, pos=0.25] {sửa một lần} (quizgen.west);
 
-Sau khi có danh sách chunk, hệ thống tạo embedding cho từng chunk và lưu cùng metadata. Embedding giúp hệ thống thực hiện tìm kiếm ngữ nghĩa, trong khi metadata giúp lọc phạm vi. Hai nhóm thông tin này bổ sung cho nhau: embedding giúp tìm đoạn gần nghĩa với câu hỏi, còn metadata giúp tránh lấy nhầm đoạn thuộc phạm vi khác.
+\end{tikzpicture}
+}
+\caption{Hai nhánh sinh nội dung và cơ chế hậu kiểm chất lượng của hệ thống}
+\label{fig:method-generation-quality}
+\end{figure}
 
-Input của node embedding là nội dung chunk. Output là vector biểu diễn và payload metadata. Trong triển khai, mô hình embedding tiếng Việt được ưu tiên vì dữ liệu SGK và câu hỏi của người dùng đều ở tiếng Việt. Việc chọn embedding tiếng Việt giúp giảm rủi ro biểu diễn sai các thuật ngữ hoặc cấu trúc ngôn ngữ đặc thù.
+\subsection{Tái sử dụng kiến trúc cho các tác vụ sinh nội dung}
 
-Index cần hỗ trợ truy xuất top-k theo độ tương đồng vector và trả về metadata đi kèm. Khi dữ liệu thay đổi, hệ thống cần tái tạo hoặc cập nhật index để bảo đảm chunk, embedding và metadata đồng bộ. Đây là điều kiện cần để benchmark retrieval có thể tính metric chính xác.
+% TODO: Mô tả cách dùng chung kiến trúc cho slide và giáo án qua task_type, ContextBuilder, grounding và cơ chế xuất bản kết quả.
 
-\section{Thiết kế phân tích ngữ cảnh, intent và phạm vi}
+\section{Phương pháp đánh giá}
 
-Trước khi truy xuất, hệ thống cần làm rõ câu hỏi người dùng. Một câu hỏi có thể thiếu chủ đề, phụ thuộc vào lịch sử hội thoại hoặc chứa nhiều ý định trong cùng một lượt nhập. Nếu đưa trực tiếp câu hỏi như vậy vào retriever, kết quả có thể thiếu hoặc sai phạm vi.
+\subsection{Đánh giá truy hồi}
 
-Node phân tích ngữ cảnh nhận câu hỏi hiện tại, thông tin người dùng, phạm vi chọn từ giao diện và session trước đó. Output của node này gồm câu hỏi đã được làm giàu, danh sách truy vấn phục vụ RAG nếu có, thông tin intent, phạm vi sách/lớp/chủ đề và các debug step. Khi câu hỏi phụ thuộc vào lịch sử, hệ thống có thể dùng thông tin phiên trước để bổ sung ngữ cảnh.
+% TODO: Mô tả benchmark LLM-based, discriminative, single-gold và các metric Hit@k, MRR@k, nDCG@k.
 
-Intent routing xác định yêu cầu thuộc nhóm hỏi đáp, giải thích, sinh quiz, chấm đáp án, sinh slide, sinh giáo án hoặc fallback. Action planning ánh xạ intent thành hành động cụ thể. Trong thiết kế này, intent routing và action planning giúp đưa request vào đúng service, nhưng không phải node đánh giá định lượng chính của đồ án.
+\subsection{Đánh giá chất lượng sinh}
 
-\section{Thiết kế retrieval service}
-
-Retrieval service là thành phần trọng tâm của đồ án. Node này nhận câu hỏi hoặc danh sách truy vấn, áp dụng các cấu hình search khác nhau và trả về danh sách context candidate. Chất lượng của node retrieval ảnh hưởng trực tiếp đến chất lượng generation phía sau.
-
-\subsection{Vector search cơ bản}
-
-Vector search cơ bản chuyển câu hỏi thành embedding, sau đó tìm các chunk có vector gần nhất. Đây là baseline quan trọng vì hầu hết các cấu hình nâng cao đều được so sánh với nó. Output của vector search gồm danh sách chunk, điểm tương đồng và metadata.
-
-\subsection{Vector search có filter phạm vi}
-
-Khi người dùng cung cấp sách, lớp hoặc chủ đề, hệ thống có thể áp dụng filter metadata trước hoặc trong quá trình search. Cấu hình này giúp giảm nhiễu do các chunk thuộc lớp hoặc bộ sách khác. Tuy nhiên, nếu filter quá chặt, hệ thống có thể bỏ sót kết quả liên quan. Vì vậy, cần đánh giá riêng hiệu quả của filter scope.
-
-\subsection{Search với query rewriting}
-
-Query rewriting dùng LLM để viết lại câu hỏi hoặc sinh truy vấn phụ giàu ngữ nghĩa hơn. Ví dụ, câu hỏi ngắn có thể được mở rộng bằng chủ đề, lớp hoặc thuật ngữ liên quan. Các truy vấn này được dùng cho retrieval, không dùng để trả lời trực tiếp.
-
-Đánh giá node này cần so sánh retrieval trước và sau query rewriting. Nếu rewritten query làm tăng Hit@k hoặc MRR, bước này có giá trị thực nghiệm. Nếu kết quả không cải thiện, hệ thống cần cân nhắc chi phí gọi LLM so với lợi ích đạt được.
-
-\subsection{Multi-query retrieval và merge kết quả}
-
-Multi-query retrieval chạy nhiều truy vấn trên cùng một câu hỏi, sau đó hợp nhất kết quả. Cách làm này tăng độ phủ nhưng có thể đưa thêm nhiễu vào danh sách candidate. Vì vậy, bước merge cần loại trùng chunk, giữ metadata và có cách xếp hạng lại kết quả hợp nhất.
-
-\subsection{Reranking}
-
-Reranking nhận query và danh sách candidate chunks, sau đó sắp xếp lại theo mức độ liên quan. Trong pipeline RAG, reranking thường chỉ áp dụng trên số lượng candidate nhỏ để cân bằng chất lượng và độ trễ.
-
-Trong thiết kế đánh giá, reranking được kiểm tra bằng cách so sánh các metric retrieval trước và sau khi rerank. Nếu chunk đúng được đưa lên vị trí cao hơn, MRR và nDCG sẽ cải thiện. Đây là cơ sở để quyết định có nên giữ reranking trong pipeline mặc định hay không.
-
-\subsection{Adaptive retrieval}
-
-Adaptive retrieval chọn chiến lược truy xuất theo loại câu hỏi và phạm vi. Ví dụ, câu hỏi về danh sách bài học có thể ưu tiên metadata, trong khi câu hỏi định nghĩa cần chunk nội dung chi tiết. Thành phần này giúp hệ thống không dùng một cấu hình search cố định cho mọi trường hợp.
-
-Trong thực nghiệm, adaptive retrieval chỉ nên được xem là một cấu hình riêng nếu nó có chiến lược khác rõ ràng so với vector search thường. Nếu adaptive retrieval chỉ bao bọc lại vector search mà không thay đổi logic, không nên trình bày như một đóng góp độc lập.
-
-\section{Thiết kế context building và generation}
-
-Sau retrieval, hệ thống cần biến danh sách chunk thành context đưa vào prompt. Context building có nhiệm vụ loại trùng, sắp xếp thứ tự, giới hạn độ dài và giữ lại thông tin nguồn. Nếu context quá dài, prompt có thể chứa nhiều nhiễu. Nếu context quá ngắn, LLM có thể thiếu thông tin để trả lời.
-
-Node generation nhận câu hỏi, context, prompt template và metadata. Output là câu trả lời cuối cùng. Prompt cần yêu cầu mô hình trả lời dựa trên context, không bịa khi context không đủ, diễn giải phù hợp với học sinh THPT và giữ đúng thuật ngữ Tin học.
-
-Node validate nếu có được xem là bước kiểm soát nội bộ của pipeline. Node này có thể phát hiện một số lỗi format hoặc cảnh báo câu trả lời thiếu căn cứ, nhưng không thay thế đánh giá thủ công của con người đối với chất lượng generation. Đây là ranh giới quan trọng để tránh đánh đồng kiểm tra runtime với kết quả nghiên cứu.
-
-\section{Thiết kế benchmark retrieval}
-
-Để đánh giá retrieval, đồ án cần một file benchmark gồm các câu hỏi và thông tin kỳ vọng. Benchmark được sinh bằng LLM từ nội dung SGK hoặc các chunk đã xử lý, sau đó được rà soát thủ công để bảo đảm câu hỏi có đáp án trong tài liệu và metadata không bị lệch.
-
-Quy trình sinh benchmark gồm năm bước. Đầu tiên, chọn phạm vi dữ liệu theo sách, lớp, chủ đề hoặc bài học. Tiếp theo, đưa nội dung chunk hoặc bài học vào prompt để LLM sinh câu hỏi. Sau đó, yêu cầu LLM trả về câu hỏi, đáp án kỳ vọng, từ khóa kỳ vọng, metadata nguồn và loại câu hỏi. Bước thứ tư là lọc bỏ câu hỏi trùng, quá mơ hồ hoặc không trả lời được từ tài liệu. Cuối cùng, người thực hiện rà soát benchmark trước khi dùng để tính metric.
-
-Mỗi mẫu benchmark nên có các trường sau:
-
-\begin{table}[H]
-\centering
-\caption{Cấu trúc đề xuất cho một mẫu retrieval benchmark}
-\label{tab:retrieval-benchmark-schema}
-\begin{tabular}{|p{0.28\textwidth}|p{0.64\textwidth}|}
-\hline
-\textbf{Trường} & \textbf{Ý nghĩa} \\ \hline
-\texttt{id} & Mã câu hỏi benchmark. \\ \hline
-\texttt{question} & Câu hỏi dùng để chạy retrieval. \\ \hline
-\texttt{expected\_answer} & Đáp án tham chiếu ngắn để kiểm tra nội dung. \\ \hline
-\texttt{expected\_book} & Bộ sách kỳ vọng. \\ \hline
-\texttt{expected\_grade} & Lớp kỳ vọng. \\ \hline
-\texttt{expected\_topic} & Chủ đề kỳ vọng. \\ \hline
-\texttt{expected\_lesson} & Bài học hoặc mục chứa đáp án. \\ \hline
-\texttt{chunk ids} & Danh sách chunk kỳ vọng nếu đã có nhãn ổn định. \\ \hline
-\texttt{keywords} & Từ khóa cần xuất hiện trong context đúng. \\ \hline
-\texttt{question\_type} & Loại câu hỏi: định nghĩa, liệt kê, so sánh, quy trình, vận dụng hoặc ngoài phạm vi. \\ \hline
-\texttt{difficulty} & Mức độ khó của câu hỏi. \\ \hline
-\end{tabular}
-\end{table}
-
-Khi chưa có expected chunk ổn định, benchmark có thể dùng kết hợp expected metadata và expected keywords. Tuy nhiên, để tính metric chính xác hơn, đồ án nên dần gắn expected chunk hoặc expected source cho các câu hỏi quan trọng.
-
-\section{Thiết kế đánh giá retrieval}
-
-Retrieval được xem là đúng khi danh sách context trả về chứa thông tin cần thiết để trả lời câu hỏi. Tùy mức độ gắn nhãn của benchmark, một context có thể được xem là liên quan nếu nó có chunk id nằm trong expected chunk, hoặc có metadata đúng và chứa các expected keywords.
-
-Các metric chính gồm:
-
-\begin{itemize}
-    \item \textbf{Hit@k}: bằng 1 nếu trong top-k có ít nhất một context liên quan.
-    \item \textbf{Recall@k}: tỷ lệ context liên quan được tìm thấy trong top-k so với tập context kỳ vọng.
-    \item \textbf{Precision@k}: tỷ lệ context trong top-k là context liên quan.
-    \item \textbf{MRR}: nghịch đảo vị trí của context liên quan đầu tiên.
-    \item \textbf{nDCG}: đánh giá chất lượng thứ hạng khi có nhãn relevance nhiều mức.
-\end{itemize}
-
-Các cấu hình search cần so sánh gồm vector search cơ bản, vector search có filter scope, vector search với rewritten query, multi-query retrieval, vector search kết hợp rerank và adaptive retrieval. Kết quả cần được phân tích theo loại câu hỏi, lớp, bộ sách, chủ đề và nhóm lỗi thường gặp.
-
-\section{Thiết kế đánh giá generation}
-
-Generation được đánh giá dựa trên câu trả lời cuối cùng mà LLM sinh ra từ context. Khác với retrieval, đánh giá generation không nên chỉ dựa vào metric tự động vì một câu trả lời đúng có thể có nhiều cách diễn đạt. Trong phạm vi đồ án, generation được chấm bởi con người theo rubric.
-
-Rubric đề xuất gồm năm tiêu chí: correctness, faithfulness, completeness, clarity và hallucination. Correctness đánh giá câu trả lời có đúng nội dung SGK không. Faithfulness đánh giá câu trả lời có bám context truy xuất không. Completeness đánh giá mức độ đầy đủ so với expected answer. Clarity đánh giá độ rõ ràng và phù hợp với học sinh THPT. Hallucination ghi nhận việc câu trả lời có thêm thông tin không có trong context hay không.
-
-\begin{table}[H]
-\centering
-\caption{Rubric chấm generation theo thang 1-5}
-\label{tab:generation-rubric}
-\begin{tabular}{|p{0.12\textwidth}|p{0.78\textwidth}|}
-\hline
-\textbf{Điểm} & \textbf{Mô tả} \\ \hline
-5 & Câu trả lời đúng, đủ, bám context rõ ràng và diễn đạt phù hợp. \\ \hline
-4 & Câu trả lời đúng ý chính, bám context, nhưng thiếu một vài chi tiết nhỏ. \\ \hline
-3 & Câu trả lời đúng một phần hoặc thiếu căn cứ ở một số ý. \\ \hline
-2 & Câu trả lời thiếu nhiều thông tin, lệch context hoặc có suy diễn đáng kể. \\ \hline
-1 & Câu trả lời sai, bịa thông tin hoặc không trả lời đúng câu hỏi. \\ \hline
-\end{tabular}
-\end{table}
-
-Khi chấm, người đánh giá cần xem câu hỏi, expected answer, retrieved context và generated answer. Nếu điểm thấp, cần ghi lại lỗi chính để phân biệt lỗi do retrieval hay do generation. Node validate bằng LLM nếu có trong pipeline chỉ được dùng như thông tin tham khảo, không dùng làm ground truth chấm generation.
-
-\section{Thiết kế logging, session và trace}
-
-Logging và trace giúp hệ thống tái lập lỗi và phân tích kết quả thực nghiệm. Mỗi request cần lưu câu hỏi gốc, câu hỏi đã làm giàu, intent, action plan, phạm vi truy xuất, danh sách chunk lấy được, điểm retrieval hoặc rerank, prompt metadata, câu trả lời sinh ra và thông tin đánh giá nếu có.
-
-Session lưu trạng thái hội thoại và các tác vụ tương tác như quiz hoặc duyệt dàn ý slide. Trong nghiên cứu retrieval/generation, session không phải node đánh giá chính, nhưng nó giúp kiểm tra các câu hỏi phụ thuộc ngữ cảnh và hỗ trợ phân tích các request nối tiếp.
+% TODO: Mô tả hướng đánh giá generation bằng rubric, QualityReviewer hoặc RAGAS nếu cần nêu.
 
 \section{Kết chương}
 
-Chương này đã trình bày thiết kế giải pháp theo hướng nghiên cứu. Hệ thống được chia thành pipeline chuẩn bị dữ liệu và pipeline xử lý truy vấn. Các node như chunking, embedding, context analysis, retrieval, reranking, generation, validation và trace được mô tả theo vai trò trong pipeline.
-
-Trọng tâm đánh giá của đồ án là node retrieval và node generation. Retrieval được đánh giá định lượng bằng benchmark sinh từ SGK với sự hỗ trợ của LLM và được rà soát thủ công. Generation được đánh giá bằng con người theo rubric để tránh phụ thuộc vào LLM-as-judge và tránh tăng chi phí. Chương tiếp theo sẽ trình bày cài đặt hệ thống, kiểm thử và kết quả thực nghiệm tương ứng với thiết kế này.
+% TODO: Tóm tắt phương pháp đã đề xuất và dẫn sang chương 4.
 
 \end{document}

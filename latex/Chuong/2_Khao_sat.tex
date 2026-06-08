@@ -43,8 +43,6 @@ Dù vậy, nhiều hệ thống đi trước vẫn dựa mạnh vào kiến trú
 
 \begin{table}[H]
 \centering
-\caption{So sánh các nhóm giải pháp cho bài toán chatbot giáo dục}
-\label{tab:solution-comparison}
 \begin{tabular}{|p{0.22\textwidth}|p{0.18\textwidth}|p{0.2\textwidth}|p{0.22\textwidth}|}
 \hline
 \textbf{Nhóm giải pháp} & \textbf{Hiểu câu hỏi tự nhiên} & \textbf{Dùng dữ liệu SGK riêng} & \textbf{Khả năng giảm hallucination} \\ \hline
@@ -55,6 +53,8 @@ LLM trực tiếp & Cao & Thấp nếu không nạp context & Thấp-Trung bình
 RAG & Cao & Cao & Cao hơn nếu retrieval tốt \\ \hline
 Adaptive RAG & Cao & Cao & Cao hơn nhờ chọn chiến lược theo câu hỏi \\ \hline
 \end{tabular}
+\caption{So sánh các nhóm giải pháp cho bài toán chatbot giáo dục}
+\label{tab:solution-comparison}
 \end{table}
 
 Nhìn từ bảng so sánh, các mô hình LLM đa mục đích có ưu thế rõ rệt về năng lực diễn giải và xử lý mã nguồn, nhưng thiếu kiểm soát theo phạm vi SGK. Các chatbot doanh nghiệp trong nước mạnh về hạ tầng và xử lý tiếng Việt, nhưng không được thiết kế cho bài toán gia sư học thuật. Các hệ thống nghiên cứu đi trước tiếp cận gần hơn với bối cảnh giáo dục, song nhiều hệ thống vẫn còn cứng nhắc hoặc chưa có cơ chế retrieval đủ chặt để neo câu trả lời vào học liệu chuẩn.
