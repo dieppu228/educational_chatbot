@@ -299,10 +299,10 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--benchmark", default="data/eval/retrieval_benchmark_final_250_v1.jsonl")
+    parser.add_argument("--benchmark", default="data/eval/benchmark_eval.jsonl")
     parser.add_argument("--chunks", default=f"{settings.DATA_DIR}/{settings.CHUNKS_FILE}")
     parser.add_argument("--embeddings", default=f"{settings.DATA_DIR}/{settings.EMBEDDINGS_FILE}")
-    parser.add_argument("--output-dir", default="data/eval/retrieval_eval")
+    parser.add_argument("--output-dir", default="data/eval/eval_with_rerank")
     parser.add_argument("--ks", default="1,3,5,10")
     parser.add_argument("--retrieve-top-k", type=int, default=settings.RETRIEVER_TOP_K)
     parser.add_argument("--search-pool", type=int, default=50)
@@ -312,9 +312,9 @@ def main() -> None:
     parser.add_argument("--reranker-device", default=None)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--progress-every", type=int, default=10)
-    parser.add_argument("--per-query-name", default="retrieval_eval_per_query.jsonl")
-    parser.add_argument("--summary-csv-name", default="retrieval_eval_summary.csv")
-    parser.add_argument("--summary-json-name", default="retrieval_eval_summary.json")
+    parser.add_argument("--per-query-name", default="per_query.jsonl")
+    parser.add_argument("--summary-csv-name", default="summary.csv")
+    parser.add_argument("--summary-json-name", default="summary.json")
     args = parser.parse_args()
 
     evaluate(args)

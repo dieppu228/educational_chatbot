@@ -16,7 +16,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from filter_retrieval_benchmark_step2 import (
+from filter_benchmark import (
     build_seed_index,
     filter_rows,
     load_jsonl,
@@ -280,12 +280,12 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", default="data/eval/retrieval_benchmark_step1_raw_v2.jsonl")
+    parser.add_argument("--input", default="data/eval/benchmark_raw.jsonl")
     parser.add_argument("--chunks", default="data/rag_chunks_v2.json")
-    parser.add_argument("--validated", default="data/eval/retrieval_benchmark_step3_validated_v1.jsonl")
-    parser.add_argument("--rejected", default="data/eval/retrieval_benchmark_step3_rejected_v1.jsonl")
-    parser.add_argument("--final", default="data/eval/retrieval_benchmark_final_250_v1.jsonl")
-    parser.add_argument("--report", default="data/eval/retrieval_benchmark_step3_report_v1.json")
+    parser.add_argument("--validated", default="data/eval/benchmark_validated.jsonl")
+    parser.add_argument("--rejected", default="data/eval/benchmark_rejected.jsonl")
+    parser.add_argument("--final", default="data/eval/benchmark_eval.jsonl")
+    parser.add_argument("--report", default="data/eval/benchmark_validate_report.json")
     parser.add_argument("--sample-size", type=int, default=250)
     args = parser.parse_args()
 

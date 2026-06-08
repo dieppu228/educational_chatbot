@@ -1,7 +1,7 @@
 {
-  "input": "data/eval/retrieval_benchmark_step1_raw_v3_authored_full.jsonl",
-  "output": "data/eval/retrieval_benchmark_step2_filtered_v3_authored_full.jsonl",
-  "dropped": "data/eval/retrieval_benchmark_step2_dropped_v3_authored_full.jsonl",
+  "input": "data/eval/benchmark_raw.jsonl",
+  "output": "data/eval/benchmark_filtered.jsonl",
+  "dropped": "data/eval/benchmark_dropped.jsonl",
   "input_count": 600,
   "kept_count": 600,
   "dropped_count": 0,

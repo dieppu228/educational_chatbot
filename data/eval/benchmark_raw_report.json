@@ -1,5 +1,5 @@
 {
-  "output": "data/eval/retrieval_benchmark_step1_raw_v3_authored_full.jsonl",
+  "output": "data/eval/benchmark_raw.jsonl",
   "rows": 600,
   "seeds": 300,
   "covered_lessons": 185,

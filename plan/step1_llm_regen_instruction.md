@@ -8,7 +8,7 @@ Bằng chứng (eval lesson-level, single retriever):
 - 239/250 câu (95%) là **template rỗng nghĩa**. Eval Hit@1 = 0.43, Hit@10 = 0.76.
 - Nhóm 11 câu **non-template** đạt Hit@1 = 0.73, **Hit@10 = 1.00** → search tốt, benchmark tệ.
 
-Nguyên nhân gốc: `src/evaluation/generate_retrieval_benchmark_step1_v2.py` hàm `choose_question()` là
+Nguyên nhân gốc: `script sinh cũ đã bỏ` hàm `choose_question()` là
 **bộ sinh template tất định** (nhét anchor vào khuôn cứng), KHÔNG dùng LLM. Step 2/Step 3 cũng thuần rule,
 chỉ check token-overlap nên template lọt hết. 5 khuôn cần diệt:
 
@@ -26,12 +26,12 @@ Quyết định đã chốt:
 
 ## 1. Mục tiêu
 
-Viết file mới `src/evaluation/generate_retrieval_benchmark_step1_v3_llm.py` thay lõi sinh câu bằng LLM.
+Viết file mới `script sinh bằng LLM đã bỏ` thay lõi sinh câu bằng LLM.
 Đầu ra: `data/eval/retrieval_benchmark_step1_raw_v3.jsonl` cùng schema cũ (để Step 2/3 dùng lại được).
 
 ## 2. GIỮ NGUYÊN (tái dùng từ v2, import lại, đừng viết lại)
 
-Từ `generate_retrieval_benchmark_step1_v2.py`, import và dùng lại nguyên:
+Từ `script sinh cũ đã bỏ`, import và dùng lại nguyên:
 - `select_seeds(chunks, max_chars, target_total)` — đã phủ đủ 185 bài + cân book×grade. **Không sửa.**
 - `build_seed_content`, `lesson_key`, `LessonKey`, `compact`, `normalize`.
 - Toàn bộ logic chọn seed, coverage, balancing.
@@ -145,14 +145,14 @@ Seed nào sau validate còn < 1 câu → ghi `seeds_failed`, bỏ qua (bù ở q
 `select_seeds` trả 300 seed. Chạy quarter đầu để review chất lượng trước khi đốt LLM cho cả 300:
 
 ```
-venv/bin/python src/evaluation/generate_retrieval_benchmark_step1_v3_llm.py --limit 75 \
+venv/bin/python script sinh bằng LLM đã bỏ --limit 75 \
     --output data/eval/retrieval_benchmark_step1_raw_v3_q1.jsonl
 ```
 
 Sau khi review OK, chạy full (cache giữ lại quarter 1, chỉ gọi LLM cho phần còn lại):
 
 ```
-venv/bin/python src/evaluation/generate_retrieval_benchmark_step1_v3_llm.py \
+venv/bin/python script sinh bằng LLM đã bỏ \
     --output data/eval/retrieval_benchmark_step1_raw_v3.jsonl
 ```
 
@@ -166,9 +166,9 @@ venv/bin/python src/evaluation/generate_retrieval_benchmark_step1_v3_llm.py \
 
 ## 11. Điều chỉnh Step 2 & Step 3 cho khớp (làm sau, ghi chú để không quên)
 
-- **Step 2** (`filter_retrieval_benchmark_step2.py`): GIỮ dedup + title_leak. BỎ/nới filter `template` và
+- **Step 2** (`filter_benchmark.py`): GIỮ dedup + title_leak. BỎ/nới filter `template` và
   `anchor_missing` (giờ LLM kiểm soát chất lượng; validate ở mục 6 đã lo).
-- **Step 3** (`validate_retrieval_benchmark_step3.py`): THÊM **cổng discriminative bằng LLM** (khâu đang thiếu).
+- **Step 3** (`validate_benchmark.py`): THÊM **cổng discriminative bằng LLM** (khâu đang thiếu).
   Với mỗi câu, đưa cho LLM **chỉ câu hỏi** + danh sách 185 `lesson_name` (gom theo book-grade), hỏi
   "câu này trỏ đúng bài nào? mức độ duy nhất?". LOẠI nếu bài LLM đoán ≠ gold, hoặc không đủ duy nhất.
   Bản rẻ hơn: chỉ so gold với các bài cùng `topic_name`/cùng book-grade. Đây mới là filter đúng cho eval retrieval.
