@@ -299,10 +299,10 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--benchmark", default="data/eval/benchmark_eval.jsonl")
+    parser.add_argument("--benchmark", default="data/eval/retrieval/benchmark_eval.jsonl")
     parser.add_argument("--chunks", default=f"{settings.DATA_DIR}/{settings.CHUNKS_FILE}")
     parser.add_argument("--embeddings", default=f"{settings.DATA_DIR}/{settings.EMBEDDINGS_FILE}")
-    parser.add_argument("--output-dir", default="data/eval/eval_with_rerank")
+    parser.add_argument("--output-dir", default="data/eval/retrieval/with_rerank")
     parser.add_argument("--ks", default="1,3,5,10")
     parser.add_argument("--retrieve-top-k", type=int, default=settings.RETRIEVER_TOP_K)
     parser.add_argument("--search-pool", type=int, default=50)

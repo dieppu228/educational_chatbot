@@ -162,7 +162,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input",
-        default="data/eval/benchmark_raw.jsonl",
+        default="data/eval/retrieval/benchmark_raw.jsonl",
         help="Raw Step 1 JSONL file.",
     )
     parser.add_argument(
@@ -172,17 +172,17 @@ def main() -> None:
     )
     parser.add_argument(
         "--output",
-        default="data/eval/benchmark_filtered.jsonl",
+        default="data/eval/retrieval/benchmark_filtered.jsonl",
         help="Filtered Step 2 JSONL file.",
     )
     parser.add_argument(
         "--report",
-        default="data/eval/benchmark_filtered_report.json",
+        default="data/eval/retrieval/benchmark_filtered_report.json",
         help="Filter report JSON file.",
     )
     parser.add_argument(
         "--dropped",
-        default="data/eval/benchmark_dropped.jsonl",
+        default="data/eval/retrieval/benchmark_dropped.jsonl",
         help="Dropped rows with reasons.",
     )
     parser.add_argument("--min-title-ngram", type=int, default=5)

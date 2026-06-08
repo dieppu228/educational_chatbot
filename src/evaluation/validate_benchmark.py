@@ -280,12 +280,12 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", default="data/eval/benchmark_raw.jsonl")
+    parser.add_argument("--input", default="data/eval/retrieval/benchmark_raw.jsonl")
     parser.add_argument("--chunks", default="data/rag_chunks_v2.json")
-    parser.add_argument("--validated", default="data/eval/benchmark_validated.jsonl")
-    parser.add_argument("--rejected", default="data/eval/benchmark_rejected.jsonl")
-    parser.add_argument("--final", default="data/eval/benchmark_eval.jsonl")
-    parser.add_argument("--report", default="data/eval/benchmark_validate_report.json")
+    parser.add_argument("--validated", default="data/eval/retrieval/benchmark_validated.jsonl")
+    parser.add_argument("--rejected", default="data/eval/retrieval/benchmark_rejected.jsonl")
+    parser.add_argument("--final", default="data/eval/retrieval/benchmark_eval.jsonl")
+    parser.add_argument("--report", default="data/eval/retrieval/benchmark_validate_report.json")
     parser.add_argument("--sample-size", type=int, default=250)
     args = parser.parse_args()
 

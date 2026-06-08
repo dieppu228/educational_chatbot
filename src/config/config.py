@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     EVAL_NUM_SAMPLES: int = 250
     EVAL_LLM_MODEL: str = "gemini-2.5-flash-lite"
     EVAL_EMBEDDING_MODEL: str = "dangvantuan/vietnamese-document-embedding"
-    EVAL_OUTPUT_DIR: str = "eval_output"
+    EVAL_OUTPUT_DIR: str = "data/eval/ragas"
     
     # RAG Strategy
     RAG_BROAD_MAX_CHUNKS: int = 30  # Gioi han BROAD strategy

@@ -719,7 +719,7 @@ Yêu cầu môi trường:
 
 ## 14. Evaluation
 
-Evaluation nằm trong `src/evaluation/` và output hiện tại nằm trong `eval_output/`.
+Evaluation nằm trong `src/evaluation/` và output hiện tại nằm trong `data/eval/`.
 
 Các file chính:
 
@@ -727,12 +727,12 @@ Các file chính:
 - `src/evaluation/ragas_eval.py`
 - `src/evaluation/report.py`
 - `src/evaluation/data_collector.py`
-- `eval_output/eval_report.md`
-- `eval_output/eval_results.json`
-- `eval_output/eval_metrics.json`
-- `eval_output/eval_metrics.csv`
+- `data/eval/ragas/eval_report.md`
+- `data/eval/ragas/eval_results.json`
+- `data/eval/ragas/eval_metrics.json`
+- `data/eval/ragas/eval_metrics.csv`
 
-Kết quả hiện tại trong `eval_output/eval_report.md`:
+Kết quả hiện tại trong `data/eval/ragas/eval_report.md`:
 
 | Metric | Giá trị trung bình |
 | --- | ---: |
@@ -903,8 +903,8 @@ src/
     validators/
       question_validator.py
 
-data/                            Chunks, mappings, sessions, embeddings
-eval_output/                     Evaluation results
+data/                            Chunks, mappings, sessions, embeddings, evaluation artifacts
+data/eval/                       Evaluation results
 docs/                            Technical docs and refactor notes
 latex/                           Thesis LaTeX source
 ```
