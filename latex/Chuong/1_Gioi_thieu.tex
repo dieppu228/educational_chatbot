@@ -51,13 +51,13 @@ Về đóng góp chính, đề tài này tự xây dựng bộ máy truy xuất 
 
 Phần còn lại của báo cáo đồ án tốt nghiệp này được tổ chức như sau.
 
-Chương 2 trình bày về việc khảo sát thực trạng và phân tích yêu cầu của hệ thống trợ lý ảo giáo dục. Trong chương này, em giới thiệu các tác nhân tham gia vào hệ thống, các Use case tổng quan và Use case phân rã, đồng thời đặc tả chi tiết các luồng chức năng chính bao gồm Hỏi đáp kiến thức SGK, Sinh câu hỏi và bài tập, Chấm điểm và phản hồi, và Sinh slide bài giảng.
+Chương 2 trình bày phạm vi nghiên cứu, tổng quan bài toán, khảo sát các giải pháp liên quan và cơ sở lý thuyết cần thiết cho đề tài. Chương này làm rõ vì sao bài toán hỏi đáp trên SGK Tin học THPT cần một hệ thống RAG có khả năng kiểm soát phạm vi dữ liệu, truy xuất đúng ngữ cảnh và đánh giá riêng các thành phần trong pipeline.
 
-Chương 3 giới thiệu về các công nghệ và kiến thức nền tảng được áp dụng trong đồ án. Em trình bày các khái niệm về Trí tuệ nhân tạo (AI) và Mô hình ngôn ngữ lớn (LLM), thuật toán Tokenization và Embedding, kiến trúc Transformer và cơ chế Attention. Ngoài ra, chương này cũng phân tích chi tiết công nghệ RAG bao gồm các thuật toán truy xuất, tìm kiếm lai, cùng với kiến trúc Multi-Agent và các phương pháp đánh giá hệ thống.
+Chương 3 trình bày phương pháp đề xuất. Nội dung chương bao gồm kiến trúc tổng thể, nền tảng tri thức, cơ chế truy hồi ngữ cảnh, tầng điều phối tác tử, tầng sinh nội dung đa tác tử và phương pháp đánh giá. Đây là chương mô tả trực tiếp cách hệ thống xử lý dữ liệu SGK, thực hiện retrieval, reranking, generation và tổ chức các tác vụ sinh học liệu.
 
-Chương 4 trình bày về việc thiết kế và cài đặt hệ thống. Em mô tả kiến trúc tổng thể của hệ thống với nhiều lớp xử lý bao gồm Context \& Intent Layer, Planning Layer, Execution Layer, Knowledge Layer, Generation Layer và Response \& Memory. Chương này trình bày chi tiết từng thành phần từ ContextAnalyzer, QueryRewriter, IntentRouter, SessionManager, ActionPlanner, cho đến RAG Service với nhiều chiến lược truy xuất, Quiz Service và Slide Service với kiến trúc Multi-Agent Supervisor.
+Chương 4 trình bày quá trình cài đặt, kiểm thử và kết quả thực nghiệm. Chương này mô tả môi trường thực nghiệm, dữ liệu đánh giá, các kịch bản kiểm thử, kết quả retrieval trước và sau rerank, kết quả đánh giá generation, độ trễ hệ thống và các phân tích lỗi quan trọng.
 
-Chương 5 trình bày về các giải pháp kỹ thuật đóng góp chính của đồ án. Em giới thiệu chi tiết về việc tự xây dựng bộ máy truy xuất từ mức cơ sở, thiết kế kiến trúc Orchestrator code-level, mô hình Adaptive RAG Agent với suy luận Heuristics, 2-Level Intent Detection, chiến lược quản lý Memory State, và hệ thống Multi-Agent với Supervisor pattern cho sinh slide bài giảng.
+Chương 5 trình bày các giải pháp và đóng góp nổi bật của đồ án. Các đóng góp chính gồm tổ chức nền tảng tri thức từ SGK, thiết kế RAG core có truy hồi lai và adaptive retrieval, xây dựng tầng điều phối yêu cầu học tập, triển khai workflow multi-agent cho tác vụ sinh nội dung và tích hợp các cơ chế kiểm soát chất lượng đầu ra.
 
-Cuối cùng, phần Kết luận tổng kết các kết quả đạt được của đồ án, đánh giá các chỉ số hiệu năng, đồng thời đề xuất các hạn chế và hướng phát triển trong tương lai.
+Cuối cùng, Chương 6 tổng kết kết quả đạt được, nêu các hạn chế còn tồn tại và đề xuất hướng phát triển trong tương lai.
 \end{document}

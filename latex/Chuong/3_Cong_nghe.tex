@@ -1,3 +1,4 @@
+% !TeX root = ../DoAn.tex
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
@@ -404,13 +405,19 @@ Trong cấu trúc này, \textit{STANDARD} là strategy mặc định gồm BM25,
 
 \subsection{Sự cần thiết của tầng điều phối tác tử}
 
-% TODO: Giải thích vì sao cần agentic orchestration thay cho pipeline tuyến tính.
+Nếu hệ thống chỉ phục vụ một tác vụ hỏi đáp đơn giản, một pipeline tuyến tính gồm query analysis, retrieval và answer generation là đủ. Tuy nhiên, bài toán của đồ án bao gồm đồng thời nhiều nhóm yêu cầu khác nhau, từ hỏi đáp khái niệm, giải thích bài học, sinh slide đến soạn giáo án. Các yêu cầu này khác nhau không chỉ ở output format mà còn ở retrieval scope, mức độ phụ thuộc vào multi-turn context và số bước xử lý trung gian. Do đó, việc dùng một pipeline cố định cho mọi truy vấn làm giảm khả năng thích ứng của hệ thống.
+
+Tầng điều phối tác tử được đưa vào để tách riêng ba trách nhiệm: intent understanding, execution routing và action execution. Trong kiến trúc này, bộ điều phối không được thiết kế như một \textit{Agent} tự trị bao trùm toàn bộ hệ thống. Thay vào đó, nó là một lớp orchestration mỏng, giữ \textit{request state}, chỉ gọi \textit{LLM} ở các vị trí cần suy luận ngôn ngữ như intent routing hoặc query rewriting, và dùng deterministic logic cho planning, dispatch và session management. Cách tổ chức này giúp giảm số lượt gọi mô hình, hạn chế latency và làm rõ ranh giới giữa reasoning dựa trên ngôn ngữ với quyết định có thể mô hình hóa bằng rule.
+
+Vai trò thứ hai của tầng điều phối là hỗ trợ multi-intent request. Trong thực tế sử dụng, một câu hỏi có thể đồng thời chứa nhiều action, chẳng hạn vừa yêu cầu giải thích khái niệm, vừa yêu cầu tạo bài tập hoặc sinh dàn ý bài giảng. Khi đó, hệ thống cần phân rã đầu vào thành một \textit{action list} có thứ tự, tránh xử lý trùng lặp và duy trì được \textit{session state} xuyên suốt phiên làm việc. Đây là lý do phần điều phối được mô hình hóa thành một tầng riêng, thay vì gắn trực tiếp vào từng dịch vụ nghiệp vụ.
 
 \subsection{Định tuyến ý định bằng mô hình ngôn ngữ lớn}
 
-% TODO: Mô tả IntentRouter, multi-intent và trích xuất topic/grade/book.
+Điểm vào đầu tiên của tầng điều phối là bài toán intent routing. Với cùng một surface query, hệ thống cần xác định truy vấn đang hướng tới hỏi đáp kiến thức, sinh học liệu dài, hay một thao tác phụ trợ khác như thống kê tiến độ hoặc ôn câu sai. Ngoài intent type, hệ thống còn cần trích xuất các scope field như bộ sách, lớp, chủ đề và bài học khi thông tin này xuất hiện trong câu hỏi hoặc có thể suy ra từ session context.
 
-\begin{figure}[H]
+Trong phương pháp đề xuất, bước intent routing được giao cho \textit{LLM} thay vì heuristic thuần túy. Lý do là cùng một intent có thể được diễn đạt theo nhiều cách khác nhau, đặc biệt trong ngôn ngữ học sinh. Router cần xử lý được indirect query, composite query và cả các trường hợp câu hỏi ngắn nhưng phụ thuộc mạnh vào turn history. Đầu ra của bước này không phải một nhãn duy nhất, mà là một danh sách tối đa ba intent có thứ tự ưu tiên, đi kèm các scope field phục vụ các tầng sau.
+
+\begin{figure}[!htbp]
     \centering
     \resizebox{0.7\textwidth}{!}{
     \begin{tikzpicture}[
@@ -441,15 +448,37 @@ Trong cấu trúc này, \textit{STANDARD} là strategy mặc định gồm BM25,
     \label{fig:method-intent-routing}
 \end{figure}
 
+Hình~\ref{fig:method-intent-routing} mô tả processing chain từ câu hỏi gốc đến đầu ra intent routing. Đầu vào ban đầu gồm câu hỏi hiện tại, thông tin người dùng, bộ sách hoặc lớp được chọn trên giao diện và \textit{session state}. Thành phần \textit{ContextAnalyzer} đứng trước cùng vì đây là bước quyết định câu hỏi hiện tại có phụ thuộc vào turn history hay không. Nếu phụ thuộc, hệ thống lấy các lượt hội thoại gần và liên quan để mở rộng câu hỏi hiện tại trước khi chuyển sang bước sau.
+
+Sau bước phân tích ngữ cảnh, hệ thống chỉ gọi \textit{QueryRewriter} khi truy vấn cần được reformulate để hỗ trợ \textit{retrieval}. Thành phần này không thay thế câu hỏi gốc, mà tạo ra một hoặc nhiều expanded query nhằm tăng recall của tầng truy hồi trong các trường hợp câu hỏi quá ngắn, thiếu chủ ngữ hoặc dùng diễn đạt không trùng với SGK. Cuối cùng, bộ định tuyến ý định dùng \textit{LLM} để phân tích yêu cầu đã được làm giàu và trả về danh sách intent, retrieval query và các scope field như chủ đề, lớp và bộ sách. Đầu ra này là input trực tiếp cho tầng planning.
+
 \subsection{Làm giàu ngữ cảnh hội thoại và viết lại truy vấn}
 
-% TODO: Mô tả ContextAnalyzer, QueryRewriter và các loại tín hiệu ngữ cảnh.
+Context enrichment là bước cần thiết vì nhiều truy vấn trong thực tế không tự mang đủ thông tin để tầng truy hồi hoạt động chính xác. Các câu như ``giải thích kỹ hơn'', ``bài này khác gì bài trước'' hoặc ``làm cho em vài câu hỏi'' chỉ có thể được hiểu đúng nếu hệ thống nối chúng với turn trước đó. Do vậy, trước khi query rewriting, hệ thống trước hết phải xác định liệu câu hỏi hiện tại có phụ thuộc vào history hay không.
+
+Trong hệ thống, \textit{ContextAnalyzer} được hiện thực bằng deterministic logic. Thành phần này quan sát câu hỏi hiện tại, \textit{session state} và một số surface cue như đại từ hồi chỉ, câu rút gọn hoặc việc người dùng tiếp tục một chủ đề đã mở trước đó. Khi phát hiện context dependency, bộ phân tích trích xuất một cửa sổ hội thoại ngắn, ưu tiên các turn gần nhất và các turn có cùng lesson scope. Kết quả của bước này là một phiên bản câu hỏi đã được disambiguate, đủ để tầng dưới xử lý mà không cần mang theo toàn bộ history.
+
+\textit{QueryRewriter} đóng vai trò chuyển câu hỏi đã làm giàu thành dạng phù hợp hơn cho \textit{retrieval}. Với truy vấn hỏi đáp, bộ viết lại có thể sinh thêm các paraphrase gần nghĩa để tăng recall của \textit{keyword search} và \textit{vector search}. Với truy vấn sinh học liệu dài, bộ viết lại ưu tiên làm rõ lesson scope, topic scope và output type. Việc tách bước này khỏi \textit{IntentRouter} giúp hệ thống kiểm soát hai bài toán khác nhau: một bài toán là intent understanding, bài toán còn lại là retrieval-oriented reformulation.
+
+Trong thiết kế hiện tại, conversation context sau khi được phân tích không được đưa thẳng vào toàn bộ pipeline ở mọi bước. Thay vào đó, nó được nén thành một structured representation gồm câu hỏi đã làm rõ, expanded query, scope field và cờ đánh dấu mức độ phụ thuộc history. Cách chuẩn hóa này giúp các thành phần planning và retrieval dùng lại cùng một input schema, thay vì mỗi thành phần tự diễn giải lịch sử theo cách riêng.
+
+\subsection{Quản lý trạng thái hội thoại và vòng đời session}
+
+State management là nền của tầng điều phối, không phải một feature tách rời. Sau bước intent routing, hệ thống phải quyết định câu hỏi hiện tại có thuộc cùng một phiên làm việc với các turn trước đó hay không, rồi mới có thể lập kế hoạch hành động chính xác. Vì vậy, trong phương pháp đề xuất, \textit{SessionManager} được đặt đúng giữa intent routing và action planning, đóng vai trò duy trì continuity của multi-turn context, đồng thời ngăn việc trộn lẫn các workflow khác bản chất trong cùng một session.
+
+Mô hình trạng thái được tổ chức theo ba lớp. Ở lớp chung nhất là \textit{Session}, lưu định danh phiên, người dùng, topic hiện tại, intent chính, book scope, timestamp và lịch sử message. Trên nền đó, hệ thống chỉ kích hoạt một trong hai intent-specific state là \textit{QuizState} hoặc \textit{SlideState}, tương ứng với hai nhóm workflow có cấu trúc trạng thái khác nhau. \textit{QuizState} phục vụ các vòng sinh câu hỏi, chấm đáp án và ôn tập; \textit{SlideState} phục vụ các workflow sinh slide, giáo án và các điểm dừng \textit{human-in-the-loop}. Thiết kế này giúp session vừa giữ được conversation history dùng chung, vừa cô lập được state nghiệp vụ đặc thù của từng task type.
+
+Luật vòng đời session được thực hiện bởi \textit{SessionManager.resolve\_session()}. Nếu người dùng chưa có session hiện hành, hệ thống tạo session mới. Nếu \textit{IntentRouter} phát hiện đổi topic rõ ràng, session cũ được lưu lại và phiên mới được khởi tạo để tránh kéo theo context không còn liên quan. Với các yêu cầu sinh nội dung, hệ thống còn xét thêm \textit{task type transition}. Chẳng hạn, một session đang ở nhánh quiz có thể tiếp tục cho nhiều round cùng loại, nhưng khi chuyển từ quiz sang slide hoặc từ slide sang quiz thì hệ thống tách phiên mới, vì hai workflow này có state object, artifact và logic điều phối khác nhau. Khi không có tín hiệu đổi topic hoặc đổi task type, session hiện tại được reuse để bảo toàn ngữ cảnh hội thoại.
+
+Vai trò quan trọng thứ hai của session management là cung cấp history theo đúng mức chi tiết cho các bước suy luận ngôn ngữ. Trong thiết kế hiện tại, \textit{Session.get\_context\_messages()} trả về một cửa sổ message gần nhất để inject vào intent detection, giúp router phân biệt các truy vấn mơ hồ như ``làm tiếp'', ``chấm câu này'' hay ``giải thích ý trên''. Ở nhánh contextualization, \textit{ContextAnalyzer} và \textit{QueryRewriter} không dùng toàn bộ session thô, mà chỉ lấy phần history liên quan để tạo \textit{context snippet} rồi viết lại truy vấn phục vụ \textit{retrieval}. Cách dùng này giữ cho session trở thành nguồn trạng thái thống nhất của tầng điều phối, nhưng vẫn kiểm soát được độ dài context và ranh giới thông tin được truyền sang từng node.
+
+Việc tách state management thành một cơ chế thiết kế riêng trong tầng điều phối mang lại hai lợi ích. Thứ nhất, action planner luôn nhận được một \textit{session state} đã được chuẩn hóa về topic, task type và history context, nhờ đó quyết định tiếp theo không phải suy diễn lại trạng thái từ đầu. Thứ hai, các workflow multi-turn như ``sinh quiz rồi chấm đáp án'', ``sinh dàn ý rồi duyệt outline'', hoặc ``hỏi tiếp trong cùng bài học'' có thể vận hành liên tục mà không làm rò rỉ ngữ cảnh sang một tác vụ khác. Chi tiết cài đặt của lớp lưu phiên, cơ chế auto-save và đồng bộ truy cập sẽ được trình bày ở Chương~4, vì chúng thuộc phạm vi hiện thực hóa hơn là phạm vi thiết kế phương pháp.
 
 \subsection{Lập kế hoạch hành động và thực thi đa hành động}
 
-% TODO: Mô tả ActionPlanner, Dispatcher và vòng OBSERVE--DECIDE--ACT.
+Sau khi có danh sách intent, hệ thống chuyển sang bước action planning. Mục tiêu của bước này là ánh xạ từng intent sang một business action cụ thể, đồng thời quyết định execution order khi trong cùng một yêu cầu xuất hiện nhiều intent. Khác với bước intent routing, bài toán planning ở đây được giải quyết bằng deterministic logic thay vì \textit{LLM}. Lý do là action space của hệ thống là hữu hạn và đã biết trước, bao gồm hỏi đáp, giải thích khái niệm, sinh slide, sinh giáo án, sinh quiz, chấm đáp án, ôn câu sai và một số thao tác hỗ trợ khác.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \resizebox{0.7\textwidth}{!}{
     \begin{tikzpicture}[
@@ -478,15 +507,76 @@ Trong cấu trúc này, \textit{STANDARD} là strategy mặc định gồm BM25,
     \label{fig:method-action-planning}
 \end{figure}
 
+Hình~\ref{fig:method-action-planning} cho thấy bước planning gồm hai khối chính. Trước hết, \textit{SessionManager} xác định session hiện tại của người dùng, từ đó quyết định nên tiếp tục workflow đang có hay khởi tạo phiên mới. Tiếp theo, planner nhận đồng thời thông tin intent và \textit{session state} để sinh ra một \textit{action list} đã được deduplicate. Chẳng hạn, nếu nhiều intent liên tiếp cùng dẫn tới một hành động hỏi đáp trong cùng một lesson scope, hệ thống không tạo nhiều bước xử lý trùng nhau mà gộp về một action duy nhất.
+
+Sau bước planning, \textit{action list} được thực thi theo một execution loop đa hành động. Về bản chất, đây là một chu trình \textit{OBSERVE--DECIDE--ACT}: hệ thống đọc \textit{session state} và intermediate result, chọn action kế tiếp cần chạy, rồi dispatch sang đúng business service tương ứng. Cấu trúc này cho phép hệ thống stream dần kết quả của từng action, đồng thời cập nhật intermediate state mà không cần chờ toàn bộ composite request kết thúc mới sinh phản hồi.
+
+\begin{figure}[!htbp]
+    \centering
+    \resizebox{0.9\textwidth}{!}{
+    \begin{tikzpicture}[
+        node distance = 1.15cm and 1.55cm,
+        font=\small,
+        base/.style = {draw=black, thick, align=center, rounded corners=4pt},
+        process/.style = {base, fill=blue!10, minimum width=4.6cm, minimum height=1.05cm, text width=4.25cm},
+        service/.style = {base, fill=cyan!10, minimum width=4.7cm, minimum height=1.15cm, text width=4.35cm},
+        io/.style = {base, ellipse, fill=orange!10, minimum width=4.9cm, minimum height=1.0cm, text width=4.55cm},
+        labelbox/.style = {fill=white, draw=gray!35, text=black!80, font=\scriptsize, inner sep=1.8pt, rounded corners=2pt},
+        arrow/.style = {thick, -{Stealth[scale=1.1]}}
+    ]
+
+    \node (plans) [io] {\textbf{Danh sách hành động}\\kết quả của bước planning};
+    \node (observe) [process, below=of plans] {\textbf{OBSERVE}\\đọc trạng thái phiên và kết quả trung gian};
+    \node (decide) [process, below=of observe] {\textbf{DECIDE}\\chọn hành động kế tiếp và dịch vụ đích};
+    \node (dispatch) [process, below=of decide] {\textbf{ACT / Dispatch}\\gọi đúng dịch vụ nghiệp vụ};
+
+    \node (quiz) [service, below left=1.45cm and 4.2cm of dispatch] {\textbf{Dịch vụ quiz}\\sinh câu hỏi, chấm điểm, ôn tập};
+    \node (slide) [service, below=1.45cm of dispatch] {\textbf{Dịch vụ slide/giáo án}\\truy xuất tri thức, gọi content workflow};
+    \node (chat) [service, below right=1.45cm and 4.2cm of dispatch] {\textbf{Bộ xử lý hội thoại}\\giải thích, chat, fallback};
+    \node (output) [io, below=2.2cm of slide] {\textbf{Phản hồi từng phần}\\kết quả và trạng thái cập nhật};
+
+    \draw [arrow] (plans) -- (observe);
+    \draw [arrow] (observe) -- (decide);
+    \draw [arrow] (decide) -- (dispatch);
+    \draw [arrow] (dispatch.south) -- ++(0,-0.35) -| (quiz.north);
+    \draw [arrow] (dispatch) -- (slide);
+    \draw [arrow] (dispatch.south) -- ++(0,-0.35) -| (chat.north);
+    \draw [arrow] (quiz.south) |- (output.west);
+    \draw [arrow] (slide) -- (output);
+    \draw [arrow] (chat.south) |- (output.east);
+    \draw [arrow, dashed, rounded corners=10pt] (output.east) -- ++(1.2,0) |- node[labelbox, pos=0.25] {cập nhật trạng thái} (observe.east);
+
+    \end{tikzpicture}
+    }
+    \caption{Vòng thực thi đa hành động trong tầng điều phối theo chu trình quan sát -- quyết định -- hành động}
+    \label{fig:method-execution-loop}
+\end{figure}
+
+Hình~\ref{fig:method-execution-loop} làm rõ execution loop sau bước planning. Khối \textit{OBSERVE} đọc \textit{session state} và các intermediate result đã có. Khối \textit{DECIDE} chọn action kế tiếp cần chạy dựa trên \textit{action list} còn lại. Khối \textit{ACT} tương ứng với execution dispatcher, chịu trách nhiệm route sang đúng business service. Với các action gắn với quiz, luồng được chuyển sang dịch vụ quiz. Với các action cần sinh học liệu dài, luồng được chuyển sang dịch vụ slide/giáo án để tiếp tục gọi nhánh \textit{Multi-Agent}. Với các action giải thích hoặc hội thoại ngắn, hệ thống dùng chat handler chuyên biệt. Kết quả sau mỗi vòng được ghi trở lại vào \textit{session state} để phục vụ iteration kế tiếp.
+
+Thiết kế này cho phép bộ điều phối giữ vai trò trung tâm của phương pháp đề xuất mà không làm nó trở thành một monolithic reasoning block. \textit{LLM} chỉ xuất hiện ở những bước cần language understanding hoặc query reformulation; còn state management, planning và action dispatch vẫn được thực hiện bằng deterministic mechanism. Nhờ đó, hệ thống duy trì được tính giải thích được của processing flow, đồng thời vẫn đủ linh hoạt để hỗ trợ composite request trong cùng một session.
+
 \section{Tầng sinh nội dung đa tác tử}
 
 \subsection{Mô hình Supervisor--Specialist và lý do lựa chọn}
 
-% TODO: So sánh với single-agent và nêu lý do chọn kiến trúc Supervisor--Specialist.
+Đối với các tác vụ sinh slide và soạn giáo án, hệ thống không chỉ cần tạo văn bản đầu ra mà còn phải bảo đảm đồng thời nhiều ràng buộc như cấu trúc sư phạm, độ bám nguồn, khả năng gắn học liệu minh họa, mức độ đầy đủ của phần luyện tập và tính nhất quán của toàn bộ artifact cuối. Nếu toàn bộ quá trình này được giao cho một \textit{single-agent} duy nhất, prompt sẽ phải bao hàm cùng lúc yêu cầu lập dàn ý, viết nội dung, đề xuất media, sinh đánh giá và tự kiểm tra chất lượng. Cách tiếp cận đó làm tăng tải nhận thức của mô hình, khiến ranh giới trách nhiệm mờ đi và khó truy vết khi đầu ra không đạt yêu cầu.
+
+Vì vậy, đồ án lựa chọn kiến trúc \textit{Supervisor--Specialist}. Trong kiến trúc này, một \textit{Content Supervisor} giữ vai trò điều phối workflow, còn từng \textit{specialist agent} chỉ xử lý một lớp nhiệm vụ hẹp đã được xác định trước. Supervisor không trực tiếp sinh nội dung bài học mà thực hiện ba chức năng chính: (i) phân rã yêu cầu thành các bước con, (ii) ràng buộc thứ tự thực thi giữa các bước, và (iii) thu thập kết quả trung gian để quyết định bước tiếp theo. Cách phân tách này giúp workflow sinh nội dung gần với một quy trình xử lý có trạng thái (\textit{stateful workflow}) hơn là một lần gọi mô hình đơn lẻ.
+
+Một ưu điểm quan trọng khác của mô hình này là khả năng kiểm soát \textit{grounding}. Trong pipeline hiện tại, phần outline được sinh trước để xác lập khung sư phạm, sau đó agent viết nội dung mới được phép khai thác các chunk đã truy hồi để điền nội dung chi tiết cho từng slide hoặc từng mục giáo án. Việc tách outline và drafting thành hai bước độc lập giúp giảm nguy cơ mô hình vừa tự quyết cấu trúc vừa tự mở rộng nội dung ngoài phạm vi nguồn. Đồng thời, các bước tùy chọn như gợi ý media hoặc sinh đánh giá nhúng cũng có thể được thêm vào hoặc bỏ qua mà không làm thay đổi hợp đồng dữ liệu của các bước cốt lõi.
+
+Xét về mặt hiện thực hệ thống, kiến trúc \textit{Supervisor--Specialist} còn phù hợp với LangGraph, nơi toàn bộ workflow được mô hình hóa thành đồ thị có trạng thái, hỗ trợ \textit{interrupt--resume} cho \textit{human-in-the-loop} và hỗ trợ vòng phản tư (\textit{reflection loop}) khi hậu kiểm chất lượng yêu cầu sửa đổi. Do đó, đây là lựa chọn phù hợp hơn so với \textit{single-agent} nếu mục tiêu không chỉ là ``sinh được nội dung'', mà còn là quản lý được quá trình sinh nội dung một cách có thể giải thích và có thể kiểm chứng.
 
 \subsection{Giao thức giao tiếp và cơ chế điều phối giữa các tác tử}
 
-% TODO: Mô tả AgentTask, AgentTaskResult, artifact, confidence, contract giữa các agent và vai trò điều phối của Content Supervisor.
+Để các tác tử chuyên biệt có thể phối hợp mà không phụ thuộc chặt vào cài đặt nội bộ của nhau, hệ thống sử dụng một giao thức trao đổi thống nhất dựa trên hai thực thể \textit{AgentTask} và \textit{AgentTaskResult}. \textit{AgentTask} là gói lệnh mà supervisor gửi cho một specialist agent, bao gồm định danh tác vụ, loại tác vụ, mục tiêu, đầu vào, tập ràng buộc, tham chiếu ngữ cảnh và loại artifact kỳ vọng. Chiều ngược lại, \textit{AgentTaskResult} là gói phản hồi chuẩn hóa, chứa trạng thái thực thi, artifact đầu ra, điểm tin cậy (\textit{confidence}), danh sách cảnh báo, thời gian xử lý và thông tin lỗi nếu có. Việc chuẩn hóa hai thực thể này giúp supervisor có thể điều phối nhiều agent bằng cùng một cơ chế, thay vì phải xây dựng một giao diện riêng cho từng agent.
+
+Toàn bộ workflow được duy trì trên một \textit{workflow state} dùng chung. Trạng thái này chứa không chỉ các trường đầu vào như \texttt{task\_type}, \texttt{query}, \texttt{topic}, \texttt{grade}, \texttt{book} và tập \texttt{rag\_chunks}, mà còn lưu các artifact trung gian như \texttt{outline\_payload}, \texttt{content\_payload}, \texttt{media\_payload}, \texttt{quiz\_payload}, \texttt{quality\_review} và một \textit{artifact registry} để supervisor có thể tra cứu kết quả theo \texttt{artifact\_type}. Cấu trúc trạng thái này đóng vai trò là lớp bộ nhớ thao tác của riêng pipeline sinh nội dung, tách biệt với \textit{session state} ở tầng điều phối đã trình bày trước đó.
+
+Hình \ref{fig:method-content-multi-agent} mô tả quan hệ giữa supervisor, các specialist agent và bộ hợp nhất kết quả. Ở đỉnh sơ đồ là bộ điều phối nội dung, chịu trách nhiệm quyết định bước nào sẽ được gọi kế tiếp. Ở tầng dưới là các specialist agent tương ứng với các nhiệm vụ con: lập dàn ý, viết nội dung, gợi ý media và sinh đánh giá nhúng. Điểm cần nhấn mạnh là các agent này không giao tiếp trực tiếp với nhau; mọi yêu cầu đều đi qua supervisor. Cách tổ chức này giữ cho luồng điều khiển tập trung tại một điểm, nhờ đó dễ áp dụng các ràng buộc thứ tự như ``phải có outline trước khi viết nội dung'' hoặc ``chỉ được hậu kiểm sau khi đã hợp nhất kết quả''.
+
+Trong triển khai hiện tại, cơ chế điều phối được hiện thực bằng các \textit{tool adapter} gắn với supervisor. Chúng vừa đóng vai trò cầu nối để chuyển từ quyết định của supervisor sang một \textit{AgentTask} cụ thể, vừa đảm bảo rằng dữ liệu đầu vào cho từng specialist luôn tuân theo hợp đồng tương ứng. Chẳng hạn, bước \texttt{generate\_content} sẽ bị chặn nếu chưa có \texttt{outline\_payload}; bước \texttt{merge\_results} chỉ được phép chạy sau khi ít nhất outline và content đã sẵn sàng; còn bước \texttt{check\_quality} chỉ được kích hoạt sau khi artifact cuối đã được hợp nhất. Nhờ vậy, phần suy luận bằng mô hình ngôn ngữ được giữ trong phạm vi ``quyết định dùng tác tử nào'', còn điều kiện hợp lệ của workflow vẫn được bảo vệ bằng logic xác định.
 
 \begin{figure}[H]
     \centering
@@ -531,11 +621,23 @@ Trong cấu trúc này, \textit{STANDARD} là strategy mặc định gồm BM25,
 
 \subsection{Các tác tử chuyên biệt trong pipeline sinh nội dung}
 
-% TODO: Trình bày vai trò của PedagogyPlannerAgent, ContentDraftingAgent, MediaResearchAgent và ContentAssessmentAgent trong pipeline.
+Trong pipeline hiện tại, \textit{PedagogyPlannerAgent} là tác tử được kích hoạt đầu tiên. Đầu vào của tác tử này là \texttt{context\_map} đã được tổng hợp từ các chunk truy hồi, cùng với metadata về chủ đề, lớp, bộ sách và \texttt{task\_type}. Nhiệm vụ của nó là xây dựng \textit{outline payload} gồm tiêu đề bài học và danh sách các slide hoặc section dự kiến, mỗi phần tử có \texttt{slide\_type}, tiêu đề, các ý chính và tham chiếu đến các chunk nguồn liên quan. Về bản chất, đây là bước chuyển từ ngữ cảnh truy hồi sang cấu trúc sư phạm ở mức khung, tạo tiền đề cho các bước sinh nội dung sau đó.
+
+\textit{ContentDraftingAgent} là tác tử cốt lõi của pipeline vì nó trực tiếp biến outline thành nội dung giảng dạy. Tác tử này nhận \texttt{outline\_payload} đã được duyệt cùng với \texttt{chunk\_map}, sau đó sinh \texttt{content\_payload} ở mức từng slide hoặc từng mục giáo án. Trong ràng buộc gửi kèm \textit{AgentTask}, hệ thống đặt \texttt{must\_use\_source\_chunks=True}; do đó, nội dung sinh ra phải bám vào tập chunk đã truy hồi thay vì mở rộng tùy ý theo tri thức tham số của mô hình. Đây là cơ chế quan trọng để duy trì \textit{grounding} cho các artifact có độ dài lớn hơn hỏi đáp ngắn.
+
+\textit{MediaResearchAgent} giữ vai trò bổ trợ. Tác tử này không làm thay đổi luồng kiến thức chính của bài giảng mà chỉ sinh các gợi ý media như ảnh minh họa hoặc tài nguyên trực quan phù hợp với loại slide. Kết quả của bước này được lưu dưới dạng \texttt{media\_payload}, gồm media cho trang mở đầu và media gắn với các slide nội dung. Trong trường hợp bước này thất bại, workflow vẫn có thể tiếp tục vì media được xem là thành phần tăng cường chứ không phải điều kiện bắt buộc để hoàn thành artifact.
+
+\textit{ContentAssessmentAgent} chịu trách nhiệm sinh phần đánh giá nhúng (\textit{embedded assessment}) thay vì tạo một bài kiểm tra độc lập. Đầu vào của tác tử này là chủ đề và ngữ cảnh bài học; đầu ra là \texttt{quiz\_payload} chứa tập câu hỏi có thể gắn vào slide luyện tập hoặc vào phần cuối giáo án. Cách tổ chức này phù hợp với mục tiêu sử dụng thực tế của slide bài giảng, nơi thành phần đánh giá thường chỉ là một phần nhỏ trong artifact tổng thể. Tương tự media, nếu bước này không thành công thì supervisor vẫn có thể hoàn tất workflow bằng cách bỏ qua hoặc giảm nhẹ phần đánh giá.
 
 \subsection{Tổng hợp kết quả, kiểm soát chất lượng và con người trong vòng lặp}
 
-% TODO: Mô tả SlideMerger, QualityReviewerAgent, reflection loop và cơ chế Human-in-the-loop cho bước duyệt outline.
+Sau khi các specialist agent hoàn thành phần việc của mình, hệ thống không giao cho một mô hình ngôn ngữ khác nhiệm vụ ``viết lại toàn bộ'' artifact cuối. Thay vào đó, bước hợp nhất được thực hiện bởi một dịch vụ xác định (\textit{deterministic service}) là \textit{SlideMerger}. Dịch vụ này lấy \texttt{outline\_payload} làm khung chuẩn, sau đó lần lượt ghép nội dung chi tiết, media và câu hỏi tương ứng vào từng slide theo \texttt{slide\_id}. Cách hợp nhất này giúp bảo toàn cấu trúc đã được lập kế hoạch từ trước, đồng thời hạn chế nguy cơ một lượt gọi mô hình cuối cùng làm thay đổi ngoài ý muốn thứ tự hoặc nội dung của các phần đã được specialist tạo ra.
+
+Về mặt chất lượng, hệ thống áp dụng hai lớp kiểm soát bổ sung nhau. Lớp thứ nhất là các kiểm tra cấu trúc mang tính xác định, chẳng hạn kiểm tra sự hiện diện của các loại slide tối thiểu, kiểm tra việc thiếu tiêu đề hoặc thiếu \texttt{source\_chunk\_ids} ở các slide cần grounding. Lớp thứ hai là \textit{QualityReviewerAgent}, một tác tử hậu kiểm dùng mô hình ngôn ngữ để đánh giá artifact đầu ra theo rubric tổng quát và trả về \texttt{quality\_review}. Kết quả hậu kiểm không chỉ gồm điểm số và các vấn đề phát hiện được, mà còn chỉ ra \textit{reflection action} tương ứng, ví dụ chấp nhận, yêu cầu sửa outline, yêu cầu sửa content, yêu cầu sửa phần đánh giá hoặc chặn kết quả để cần người duyệt.
+
+Hình \ref{fig:method-generation-quality} mô tả mối quan hệ giữa nhánh sinh nội dung và cơ chế hậu kiểm. Trong nhánh slide/giáo án, bộ điều phối nội dung gọi lần lượt các specialist, chuyển kết quả sang khối hợp nhất, rồi mới đưa artifact cuối qua lớp hậu kiểm chất lượng. Mũi tên nét đứt quay ngược từ khối hậu kiểm về bộ điều phối biểu diễn \textit{reflection loop}: nếu reviewer xác định đầu ra cần chỉnh sửa, supervisor sẽ phát sinh một \texttt{revision\_instruction} và kích hoạt lại đúng bước liên quan thay vì chạy lại toàn bộ pipeline từ đầu. Giới hạn số vòng phản tư được đặt nhỏ để kiểm soát chi phí và độ trễ.
+
+Ngoài hậu kiểm tự động, pipeline còn tích hợp \textit{human-in-the-loop} tại bước outline. Sau khi \textit{PedagogyPlannerAgent} sinh dàn ý ban đầu, workflow có thể tạm dừng ở trạng thái \textit{interrupt}. Người dùng được phép duyệt nguyên trạng hoặc chỉnh sửa outline trước khi supervisor tiếp tục gọi bước viết nội dung. Điểm chèn con người tại đây là hợp lý vì outline là nơi quyết định cấu trúc sư phạm tổng thể; một chỉnh sửa sớm ở giai đoạn này thường hiệu quả hơn so với can thiệp sau khi toàn bộ slide hoặc giáo án đã được sinh xong.
 
 \begin{figure}[H]
 \centering
@@ -587,20 +689,32 @@ Trong cấu trúc này, \textit{STANDARD} là strategy mặc định gồm BM25,
 
 \subsection{Tái sử dụng kiến trúc cho các tác vụ sinh nội dung}
 
-% TODO: Mô tả cách dùng chung kiến trúc cho slide và giáo án qua task_type, ContextBuilder, grounding và cơ chế xuất bản kết quả.
+Một mục tiêu thiết kế quan trọng của tầng sinh nội dung là không xây dựng hai pipeline tách rời cho slide và giáo án. Thay vào đó, hệ thống dùng chung một kiến trúc đa tác tử, trong đó khác biệt giữa hai tác vụ được điều khiển chủ yếu bởi biến \texttt{task\_type}. Giá trị này được truyền xuyên suốt từ đầu vào của \textit{ContentPipelineInput}, vào \textit{workflow state}, rồi đến từng \textit{AgentTask}. Nhờ đó, cùng một supervisor và cùng một tập specialist có thể thích nghi đầu ra cho hai loại artifact mà không cần nhân đôi logic orchestration.
+
+Việc tái sử dụng này thể hiện ở nhiều mức. Thứ nhất, cả hai tác vụ đều dùng chung tầng truy hồi, cùng cơ chế tổng hợp ngữ cảnh và cùng giao thức \textit{AgentTask}/\textit{AgentTaskResult}. Thứ hai, các specialist dùng chung hầu hết prompt và contract dữ liệu, chỉ thay đổi một số ràng buộc theo \texttt{task\_type}, chẳng hạn slide thường yêu cầu ngắn gọn hơn và ưu tiên phần luyện tập nhúng, trong khi giáo án có thể cần cấu trúc section dài hơn. Thứ ba, bước hậu kiểm và phản tư vẫn giữ nguyên logic, chỉ thay reviewer hoặc rubric tương ứng với loại artifact cần đánh giá.
+
+Khác biệt chủ yếu nằm ở giai đoạn đóng gói đầu ra. Với \texttt{task\_type=slide}, artifact sau khi hợp nhất có thể được chuyển tiếp sang \textit{SlideExportService} để xuất tệp PPTX. Với \texttt{task\_type=lesson\_plan}, pipeline vẫn dùng chung các bước sinh nội dung và hậu kiểm, nhưng không cần qua lớp xuất bản slide. Cách tổ chức này cho phép tái sử dụng phần lớn hạ tầng sinh nội dung, đồng thời vẫn giữ đủ linh hoạt để mở rộng thêm các loại artifact mới trong tương lai mà không phải thiết kế lại toàn bộ workflow.
 
 \section{Phương pháp đánh giá}
 
 \subsection{Đánh giá truy hồi}
 
-% TODO: Mô tả benchmark LLM-based, discriminative, single-gold và các metric Hit@k, MRR@k, nDCG@k.
+Trong đồ án này, retrieval là thành phần được đánh giá định lượng chính vì đây là bước quyết định chất lượng ngữ cảnh đầu vào cho toàn bộ pipeline RAG. Phương pháp đánh giá được tổ chức dưới dạng một benchmark hỏi đáp gắn với dữ liệu SGK, trong đó mỗi câu hỏi được liên kết với một bài học đích thông qua \\textit{lesson key}. Cách tổ chức này phù hợp với đặc thù dữ liệu của đồ án: một bài học thường được chia thành nhiều chunk, nên điều cần kiểm tra trước hết là hệ thống có truy xuất đúng bài học mục tiêu hay không, thay vì yêu cầu gán nhãn relevance chi tiết cho toàn bộ chunk trong kho tri thức.
+
+Với mỗi truy vấn kiểm thử, một chunk được xem là đúng nếu metadata của nó khớp với bài học vàng theo các trường phạm vi như bộ sách, lớp, chủ đề và bài học. Trên cơ sở đó, đồ án sử dụng các độ đo Hit@$k$, Recall@$k$, Precision@$k$, MRR@$k$ và nDCG@$k$ để đánh giá chất lượng retrieval tại các mức $k$ khác nhau. Các độ đo này được dùng nhằm phản ánh ba khía cạnh bổ sung nhau: khả năng tìm thấy bài học đúng trong top-$k$, vị trí xuất hiện của kết quả đúng trong danh sách xếp hạng, và mức độ tập trung của các kết quả liên quan ở các thứ hạng đầu.
+
+Để tách riêng ảnh hưởng của retriever và reranker, quy trình đánh giá retrieval được chia thành hai cấu hình. Cấu hình \\textit{no-rerank} đo trực tiếp chất lượng của khối truy xuất ban đầu sau bước hợp nhất candidate. Cấu hình \\textit{with-rerank} dùng cùng tập candidate nhưng đánh giá lại sau khi áp dụng cross-encoder reranker. Cách tách này giúp xác định rõ reranker có thực sự cải thiện thứ hạng của các chunk liên quan hay không. Các số liệu thực nghiệm tương ứng được trình bày ở Chương 4.
 
 \subsection{Đánh giá chất lượng sinh}
 
-% TODO: Mô tả hướng đánh giá generation bằng rubric, QualityReviewer hoặc RAGAS nếu cần nêu.
+Khác với retrieval, chất lượng generation không được đánh giá chủ yếu bằng một độ đo duy nhất ở mức chunk hay lesson, mà được xem xét theo mức độ đúng nội dung, mức độ bám nguồn và mức độ phù hợp với câu hỏi của người học. Trong đồ án, phần đánh giá này được thực hiện theo hai hướng bổ trợ nhau. Hướng thứ nhất là sử dụng kết quả đánh giá tự động đã có sẵn bằng RAGAS để quan sát các tiêu chí như \\textit{faithfulness}, \\textit{answer relevancy}, \\textit{context precision} và \\textit{context recall}. Hướng thứ hai là đọc và phân tích đầu ra theo rubric thủ công khi cần xem xét sâu hơn các trường hợp lỗi hoặc các mẫu câu trả lời đặc thù.
+
+Điểm cần nhấn mạnh là node \\textit{validate} hoặc \\textit{quality reviewer} xuất hiện trong pipeline runtime không được dùng như bộ chấm điểm chính cho generation trong thực nghiệm. Vai trò của chúng là kiểm soát đầu ra khi hệ thống vận hành, còn đánh giá trong luận văn vẫn phải dựa trên benchmark, tiêu chí đã xác định trước và kết quả kiểm chứng tách biệt với pipeline chạy thực tế. Nhờ đó, phần đánh giá generation giữ được ranh giới rõ giữa cơ chế kiểm soát runtime và bằng chứng thực nghiệm.
 
 \section{Kết chương}
 
-% TODO: Tóm tắt phương pháp đã đề xuất và dẫn sang chương 4.
+Chương này đã trình bày phương pháp đề xuất của đồ án theo ba lớp chính: nền tảng tri thức được xây dựng từ dữ liệu SGK đã chunking và lập chỉ mục; lõi truy hồi ngữ cảnh dựa trên hybrid retrieval, reranking và truy hồi thích ứng; cùng với tầng điều phối tác tử và tầng sinh nội dung đa tác tử cho các tác vụ phức tạp hơn. Bên cạnh đó, chương cũng xác định cách đánh giá hai thành phần trọng tâm của hệ thống là retrieval và generation, trong đó retrieval được xem là bằng chứng định lượng chính, còn generation được đánh giá theo mức độ bám nguồn và mức độ phù hợp với câu hỏi.
+
+Trên cơ sở phương pháp đã mô tả, Chương 4 sẽ trình bày cách hiện thực hóa hệ thống, quy trình xây dựng benchmark, các kiểm thử chức năng và những kết quả thực nghiệm đã thu được. Đây là phần dùng để kiểm chứng mức độ hiệu quả của giải pháp trên dữ liệu SGK Tin học THPT trong điều kiện cài đặt cụ thể của đồ án.
 
 \end{document}

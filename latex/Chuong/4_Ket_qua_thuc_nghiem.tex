@@ -1,479 +1,240 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Chương 3 đã trình bày thiết kế giải pháp và phương pháp đánh giá các node trọng tâm trong pipeline RAG. Trên cơ sở đó, Chương 4 mô tả hiện trạng cài đặt của hệ thống, các bước kiểm thử chức năng và các kết quả thực nghiệm đã thu được. Nội dung chương tập trung vào môi trường thực nghiệm, dữ liệu SGK, kiến trúc xử lý yêu cầu, cơ chế truy xuất tri thức, các pipeline nghiệp vụ và kết quả đánh giá retrieval/generation.
-
-Mục tiêu của chương này là làm rõ hệ thống đã được hiện thực hóa như thế nào so với thiết kế ở Chương 3. Các sơ đồ trong chương được trình bày theo từng lớp xử lý để thể hiện vai trò của mỗi khối trong vòng đời yêu cầu, đồng thời phân biệt rõ bộ điều phối cấp hệ thống, các dịch vụ nghiệp vụ, quy trình đa tác tử nội bộ và lớp truy xuất tri thức.
+Chương 4 trình bày cách hiện thực hóa giải pháp đã đề xuất ở Chương 3, đồng thời báo cáo các kết quả kiểm thử và thực nghiệm đã thu được. Khác với Chương 3 vốn tập trung vào phương pháp, chương này chỉ giữ lại mức chi tiết cài đặt vừa đủ để chứng minh hệ thống đã được triển khai, benchmark đã được xây dựng và quy trình đánh giá đã có thể vận hành trên dữ liệu thực. Trọng tâm của chương là pipeline xử lý tài liệu, pipeline hỏi đáp, quy trình tạo benchmark, kiểm thử chức năng và các kết quả thực nghiệm hiện có đối với retrieval và generation.
 
 \section{Môi trường và dữ liệu thực nghiệm}
-\subsection{Môi trường phát triển}
-Hệ thống được xây dựng chủ yếu bằng ngôn ngữ lập trình Python, kết hợp với các thư viện xử lý số như Numpy và Pandas để thao tác trên ma trận vector nhúng. Phần điều phối tổng thể được thiết kế theo hướng bộ điều khiển luồng mỏng; các quyết định định tuyến chính được giữ ở tầng mã nguồn để giảm độ trễ, hỗ trợ gỡ lỗi và thuận lợi cho việc theo vết. LangGraph không được sử dụng như nền tảng bao trùm toàn bộ hệ thống, mà được dùng tập trung cho bộ điều phối sinh học liệu dài, phục vụ hai tác vụ sinh slide và giáo án.
 
-Việc sinh ngôn ngữ tự nhiên được thực hiện thông qua API Google Gemini với mô hình \texttt{gemini-2.5-flash-lite} qua thư viện \textit{google-genai}. Đối với truy xuất ngữ nghĩa, hệ thống sử dụng mô hình nhúng \textit{dangvantuan/vietnamese-document-embedding}, tạo vector 768 chiều cho mỗi khối dữ liệu. Giai đoạn tái xếp hạng ở cuối quy trình truy xuất được đảm nhiệm bởi mô hình Cross-Encoder \textit{AITeamVN/Vietnamese\_Reranker}. Ngoài truy xuất ngữ nghĩa, hệ thống tự xây dựng thành phần tìm kiếm từ khóa bằng Custom BM25 và hợp nhất kết quả với semantic search thông qua Reciprocal Rank Fusion (RRF).
+Hệ thống được cài đặt chủ yếu bằng Python. Tầng điều phối nội dung cho tác vụ sinh slide và giáo án được xây dựng trên LangGraph, trong khi các thành phần còn lại như xử lý ngữ cảnh, định tuyến ý định, lập kế hoạch hành động, truy xuất tri thức và ghi vết thực thi được hiện thực bằng logic xác định trong mã nguồn. Cách tổ chức này giúp giữ chi phí suy luận ở mức hợp lý và tạo điều kiện thuận lợi cho việc phân tích lỗi theo từng bước của pipeline.
 
-\subsection{Dữ liệu thực nghiệm}
-Nguồn dữ liệu gốc được khai thác từ toàn bộ tài liệu Sách Giáo Khoa Tin học lớp 10, 11 và 12, thuộc hai bộ sách Cánh Diều và Kết Nối Tri Thức. Qua quá trình tiền xử lý, văn bản được làm sạch và dán nhãn phân cấp từ chủ đề, bài học đến tiểu mục. Mỗi bài học trong một cuốn sách được coi là một tài liệu nguồn, sau đó được chia nhỏ theo các heading bên trong bài để giữ nguyên ranh giới của từng đơn vị kiến thức. Tổng cộng, dữ liệu được phân rã thành 2348 khối dữ liệu, mỗi khối có thông tin mô tả như bộ sách, lớp, chủ đề, tên bài, kiểu nội dung và cấp phân cấp. Cấu trúc này phục vụ trực tiếp cho truy xuất phân cấp (Hierarchical RAG) và các tác vụ sinh học liệu cần bao phủ toàn bộ bài học.
-
-\section{Tổng quan kiến trúc toàn bộ hệ thống}
-Kiến trúc hiện tại của hệ thống được tổ chức quanh một trạng thái yêu cầu trung tâm. Mỗi yêu cầu người dùng đi qua các bước phân tích ngữ cảnh, nhận diện ý định, lập kế hoạch hành động, thực thi qua các dịch vụ nghiệp vụ, truy xuất tri thức khi cần, sinh kết quả, hậu kiểm chất lượng, rồi lưu trạng thái phiên và lịch sử thực thi. Thiết kế này tách rõ ba nhóm trách nhiệm: điều phối luồng chạy, xử lý nghiệp vụ, và cung cấp năng lực truy xuất/công cụ.
-
-Sơ đồ tổng quan tại Hình \ref{fig:overall-architecture-repo} thể hiện vòng đời xử lý chính của một yêu cầu trong hệ thống.
-
-\begin{figure}[H]
-    \centering
-    \resizebox{0.95\textwidth}{!}{
-    \begin{tikzpicture}[
-        node distance = 0.75cm,
-        font=\small,
-        base/.style = {draw=black!80, thick, align=center, rounded corners=5pt, drop shadow={opacity=0.12, shadow xshift=1.5pt, shadow yshift=-1.5pt}},
-        io/.style = {base, ellipse, fill=orange!12, minimum width=5.8cm, minimum height=0.9cm},
-        layer/.style = {base, rectangle, fill=blue!8, minimum width=8.8cm, minimum height=1.05cm, text width=8.4cm},
-        service/.style = {base, rectangle, fill=cyan!10, minimum width=8.8cm, minimum height=1.05cm, text width=8.4cm},
-        rag/.style = {base, rectangle, fill=green!10, minimum width=8.8cm, minimum height=1.05cm, text width=8.4cm},
-        mem/.style = {base, rectangle, fill=gray!15, minimum width=8.8cm, minimum height=1.05cm, text width=8.4cm},
-        arrow/.style = {thick, -{Stealth[scale=1.1]}, draw=black!70}
-    ]
-
-    \node (input) [io] {\textbf{Yêu cầu từ người dùng / giao diện}};
-    \node (intent) [layer, below=of input] {\textbf{1. Ngữ cảnh và ý định}\\Phân tích ngữ cảnh, mở rộng truy vấn, nhận diện nhiều ý định};
-    \node (planning) [layer, below=of intent] {\textbf{2. Lập kế hoạch}\\Quản lý phiên và lập danh sách hành động cần thực hiện};
-    \node (loop) [layer, below=of planning] {\textbf{3. Vòng lặp đa tác vụ}\\Điều phối lần lượt từng hành động trong cùng một yêu cầu};
-    \node (domain) [service, below=of loop] {\textbf{4. Dịch vụ nghiệp vụ}\\Dịch vụ quiz, slide, giáo án, giải thích, hội thoại và xử lý dự phòng};
-    \node (content) [service, below=of domain] {\textbf{5. Quy trình đa tác tử nội dung}\\Sinh slide và giáo án};
-    \node (knowledge) [rag, below=of content] {\textbf{6. Truy xuất và công cụ}\\Truy xuất SGK, định dạng ngữ cảnh và lớp công cụ mở rộng};
-    \node (quality) [service, below=of knowledge] {\textbf{7. Sinh nội dung và hậu kiểm}\\Tách riêng đường kiểm tra quiz và đường kiểm tra học liệu};
-    \node (response) [mem, below=of quality] {\textbf{8. Phản hồi và bộ nhớ}\\Trả kết quả theo luồng, ghi vết thực thi và lưu phiên};
-
-    \draw [arrow] (input) -- (intent);
-    \draw [arrow] (intent) -- (planning);
-    \draw [arrow] (planning) -- (loop);
-    \draw [arrow] (loop) -- (domain);
-    \draw [arrow] (domain) -- (content);
-    \draw [arrow] (content) -- (knowledge);
-    \draw [arrow] (knowledge) -- (quality);
-    \draw [arrow] (quality) -- (response);
-
-    \draw [arrow, dashed] (domain.east) -- ++(1.2,0) |- node[pos=0.25, right, font=\scriptsize] {RAG khi cần tri thức SGK} (knowledge.east);
-    \draw [arrow, dashed] (domain.west) -- ++(-1.2,0) |- node[pos=0.25, left, font=\scriptsize] {chat đơn giản có thể bỏ qua RAG} (response.west);
-
-    \end{tikzpicture}
-    }
-    \caption{Sơ đồ tổng quan kiến trúc hệ thống theo vòng đời xử lý yêu cầu}
-    \label{fig:overall-architecture-repo}
-\end{figure}
-
-Trong kiến trúc này, bộ điều phối không đóng vai một agent tự trị toàn phần. Nó chỉ giữ trạng thái xử lý của yêu cầu, gọi mô hình ngôn ngữ ở các vị trí thật sự cần suy luận ngôn ngữ, và sử dụng mã nguồn xác định cho các bước lập kế hoạch, định tuyến, lưu phiên và ghi vết. Nhờ vậy, hệ thống vừa hỗ trợ nhiều ý định trong một yêu cầu, vừa tránh việc tạo thêm nhiều lượt gọi mô hình không cần thiết ở các bước có thể quyết định bằng logic.
-
-\section{Thiết kế chi tiết các thành phần hệ thống}
-\label{sec:system-details}
-
-\subsection{Thiết kế Lớp Ngữ cảnh và Ý định (Context \& Intent Layer)}
-Đầu vào của hệ thống gồm câu hỏi gốc, thông tin người dùng, bộ sách/lớp được chọn từ giao diện, lịch sử phiên, các truy vấn phục vụ truy xuất tri thức và thông tin hỗ trợ theo vết. Lớp Ngữ cảnh và Ý định có nhiệm vụ làm rõ yêu cầu hiện tại trước khi hệ thống lập kế hoạch hành động.
-
-\begin{figure}[H]
-    \centering
-    \resizebox{0.7\textwidth}{!}{
-    \begin{tikzpicture}[
-        node distance = 1.05cm,
-        font=\small,
-        base/.style = {draw=black, thick, align=center, rounded corners=4pt},
-        process/.style = {base, fill=green!10, minimum width=7.2cm, minimum height=1.05cm},
-        llm/.style = {base, fill=red!10, minimum width=7.2cm, minimum height=1.05cm},
-        io/.style = {base, ellipse, fill=orange!10, minimum width=6.8cm, minimum height=0.95cm, text width=6.4cm},
-        labelbox/.style = {fill=white, text=black!80, font=\scriptsize\ttfamily, inner sep=2pt},
-        arrow/.style = {thick, -{Stealth[scale=1.1]}}
-    ]
-
-    \node (input) [io] {\textbf{Đầu vào}\\câu hỏi, người dùng, bộ sách/lớp, phiên học};
-    \node (analyzer) [process, below=of input] {ContextAnalyzer\\phát hiện phụ thuộc lịch sử và làm giàu câu hỏi};
-    \node (rewriter) [llm, below=of analyzer] {QueryRewriter\\sinh truy vấn mở rộng khi cần};
-    \node (router) [llm, below=of rewriter] {Bộ nhận diện ý định\\trả tối đa 3 ý định};
-    \node (output) [io, below=of router] {\textbf{Đầu ra}\\danh sách ý định, truy vấn truy xuất, chủ đề, lớp, bộ sách};
-
-    \draw [arrow] (input) -- (analyzer);
-    \draw [arrow] (analyzer) -- node[labelbox] {câu hỏi đã làm giàu} (rewriter);
-    \draw [arrow] (rewriter) -- node[labelbox] {truy vấn mở rộng} (router);
-    \draw [arrow] (router) -- (output);
-
-    \end{tikzpicture}
-    }
-    \caption{Chi tiết cấu trúc và luồng xử lý tại Lớp Ngữ cảnh và Ý định}
-    \label{fig:intent-understanding-detail}
-\end{figure}
-
-\textbf{ContextAnalyzer} được triển khai bằng logic mã nguồn để đánh giá câu hỏi hiện tại có phụ thuộc vào lịch sử hội thoại hay không. Khi cần, hệ thống trích xuất các lượt hội thoại gần và liên quan để bổ sung vào câu hỏi hiện tại.
-
-\textbf{QueryRewriter} chỉ được gọi khi cần làm giàu truy vấn cho RAG. Thành phần này có thể tạo nhiều truy vấn ngữ nghĩa từ cùng một câu hỏi, giúp retrieval bao phủ tốt hơn những câu hỏi thiếu ngữ cảnh.
-
-Bộ nhận diện ý định là lời gọi LLM quan trọng ở đầu quy trình. Thành phần này phân tích đồng thời nhiều ý định trong một câu hỏi và trả về danh sách ý định gồm loại yêu cầu chính, chủ đề, lớp, bộ sách và thứ tự xử lý. Giới hạn tối đa 3 ý định được dùng để tránh mở rộng trạng thái quá mức khi người dùng nhập một yêu cầu phức hợp.
-
-\subsection{Thiết kế Lớp Lập kế hoạch (Planning Layer)}
-\label{subsec:planning-layer}
-Sau khi có danh sách ý định, hệ thống chuyển sang tầng lập kế hoạch hoàn toàn bằng luật. Tầng này quản lý phiên học và lập kế hoạch hành động; không sử dụng thêm LLM để quyết định hành động.
-
-\begin{figure}[H]
-    \centering
-    \resizebox{0.7\textwidth}{!}{
-    \begin{tikzpicture}[
-        node distance = 1.15cm,
-        font=\small,
-        base/.style = {draw=black, thick, align=center, rounded corners=4pt},
-        process/.style = {base, fill=green!10, minimum width=7.3cm, minimum height=1.05cm},
-        io/.style = {base, ellipse, fill=orange!10, minimum width=6.8cm, minimum height=0.95cm, text width=6.4cm},
-        labelbox/.style = {fill=white, text=black!80, font=\scriptsize\ttfamily, inner sep=2pt, draw=gray!40, rounded corners=2pt},
-        arrow/.style = {thick, -{Stealth[scale=1.1]}}
-    ]
-
-    \node (input) [io] {\textbf{Đầu vào}\\danh sách ý định, câu hỏi, người dùng};
-    \node (session) [process, below=of input] {SessionManager\\xác định phiên đang tiếp diễn hoặc tạo phiên mới};
-    \node (planner) [process, below=of session] {Bộ lập kế hoạch\\ánh xạ ý định sang hành động và loại trùng};
-    \node (output) [io, below=of planner] {\textbf{Đầu ra}\\phiên học và danh sách hành động};
-
-    \draw [arrow] (input) -- (session);
-    \draw [arrow] (session) -- node[labelbox] {trạng thái phiên} (planner);
-    \draw [arrow, rounded corners=10pt] (input.east) -- ++(1.1,0) |- node[labelbox, pos=0.35] {thông tin ý định} (planner.east);
-    \draw [arrow] (planner) -- (output);
-
-    \end{tikzpicture}
-    }
-    \caption{Chu trình lập kế hoạch hành động bằng rule-based logic}
-    \label{fig:planning-layer-detail}
-\end{figure}
-
-\textbf{SessionManager} kiểm tra phiên tương ứng với người dùng và chủ đề hiện tại. Thành phần này quyết định nên tiếp tục phiên đang có, khôi phục từ bộ nhớ phiên, hay tạo phiên mới.
-
-Bộ lập kế hoạch ánh xạ mỗi ý định sang một hành động cụ thể. Các hành động chính bao gồm sinh quiz, sinh slide, sinh giáo án, chấm đáp án, ôn câu sai, thống kê tiến độ, giải thích khái niệm và chat. Khi nhiều ý định liên tiếp tạo ra cùng một hành động, bộ lập kế hoạch loại bỏ trùng lặp để tránh thực thi dư thừa.
-
-\subsection{Thiết kế Lớp Thực thi (Execution Layer)}
-\label{subsec:execution-layer}
-Lớp Thực thi nhận danh sách hành động và xử lý theo vòng lặp đa tác vụ. Ở mỗi vòng, bộ điều phối chọn tác vụ đang chạy, sau đó chuyển quyền thực thi cho bộ định tuyến thực thi. Bộ định tuyến dùng danh mục nội bộ để gọi đúng dịch vụ hoặc bộ xử lý.
-
-\begin{figure}[H]
-    \centering
-    \resizebox{0.9\textwidth}{!}{
-    \begin{tikzpicture}[
-        node distance = 1.15cm and 1.6cm,
-        font=\small,
-        base/.style = {draw=black, thick, align=center, rounded corners=4pt},
-        process/.style = {base, fill=blue!10, minimum width=4.4cm, minimum height=1.05cm, text width=4.1cm},
-        service/.style = {base, fill=cyan!10, minimum width=4.6cm, minimum height=1.15cm, text width=4.25cm},
-        io/.style = {base, ellipse, fill=orange!10, minimum width=4.8cm, minimum height=1.0cm, text width=4.5cm},
-        labelbox/.style = {fill=white, draw=gray!35, text=black!80, font=\scriptsize, inner sep=1.8pt, rounded corners=2pt},
-        arrow/.style = {thick, -{Stealth[scale=1.1]}}
-    ]
-
-    \node (plans) [io] {\textbf{Danh sách hành động}};
-    \node (loop) [process, below=of plans] {Vòng lặp đa tác vụ\\chạy lần lượt từng tác vụ};
-    \node (dispatcher) [process, below=of loop] {Bộ định tuyến thực thi\\định tuyến theo danh mục nội bộ};
-
-    \node (quiz) [service, below left=1.45cm and 4.2cm of dispatcher] {\textbf{Dịch vụ quiz}\\sinh quiz, chấm điểm, ôn câu sai, thống kê học tập};
-    \node (slide) [service, below=1.45cm of dispatcher] {\textbf{Dịch vụ slide/giáo án}\\sinh học liệu, duyệt dàn ý, gọi quy trình nội dung};
-    \node (handler) [service, below right=1.45cm and 4.2cm of dispatcher] {\textbf{Bộ xử lý hội thoại}\\giải thích, chat, xử lý dự phòng};
-    \node (output) [io, below=2.2cm of slide] {\textbf{Kết quả trả dần}\\phân tách giữa các tác vụ};
-
-    \draw [arrow] (plans) -- (loop);
-    \draw [arrow] (loop) -- (dispatcher);
-    \draw [arrow] (dispatcher.south) -- ++(0,-0.35) -| (quiz.north);
-    \draw [arrow] (dispatcher) -- (slide);
-    \draw [arrow] (dispatcher.south) -- ++(0,-0.35) -| (handler.north);
-    \draw [arrow] (quiz.south) |- (output.west);
-    \draw [arrow] (slide) -- (output);
-    \draw [arrow] (handler.south) |- (output.east);
-    \draw [arrow, dashed, rounded corners=10pt] (output.east) -- ++(1.2,0) |- (loop.east);
-
-    \end{tikzpicture}
-    }
-    \caption{Sơ đồ vòng lặp đa tác vụ và điều phối dịch vụ nghiệp vụ}
-    \label{fig:execution-layer-detail}
-\end{figure}
-
-Dịch vụ quiz sở hữu toàn bộ vòng đời quiz độc lập: sinh câu hỏi, hậu kiểm chất lượng, chấm đáp án, giải thích câu hỏi, ôn câu sai, thống kê và cập nhật tiến độ học tập. Vì luồng này có nhiều trạng thái tương tác như lượt làm quiz và bản ghi từng câu hỏi, nó được giữ ở dạng dịch vụ nghiệp vụ thay vì đưa vào quy trình đa tác tử sinh học liệu.
-
-Dịch vụ slide/giáo án là lớp mặt tiền cho cả hai tác vụ sinh slide và giáo án. Dịch vụ này truy xuất dữ liệu từ lớp tri thức, tạo đầu vào cho bộ điều phối nội dung, quản lý bước duyệt dàn ý có con người tham gia, và lưu thông tin tóm tắt để có thể tiếp tục quy trình ở lượt tương tác sau.
-
-Các bộ xử lý giải thích, hội thoại tự do và xử lý dự phòng đảm nhiệm các nhánh hội thoại hẹp hơn. Với câu hỏi cần tri thức SGK, bộ định tuyến gọi RAG trước khi đưa ngữ cảnh vào bộ xử lý; với hội thoại tự do, hệ thống có thể bỏ qua RAG để giảm độ trễ.
-
-\subsection{Thiết kế Quy trình Đa tác tử cho Slide và Giáo án}
-\label{subsec:content-multi-agent}
-Hai chức năng sinh slide và sinh giáo án có cùng bản chất nghiệp vụ: cần lấy nội dung SGK liên quan, lập trình tự sư phạm, viết nội dung chi tiết, gợi ý media, sinh hoạt động đánh giá nhúng, hợp nhất kết quả trung gian và kiểm tra chất lượng. Vì vậy hệ thống dùng chung một bộ điều phối nội dung thay vì duy trì hai bộ điều phối riêng. Khác biệt giữa hai tác vụ được biểu diễn bằng loại học liệu cần sinh: slide hoặc giáo án.
-
-\begin{figure}[H]
-    \centering
-    \resizebox{0.92\textwidth}{!}{
-    \begin{tikzpicture}[
-        node distance = 1.0cm and 1.2cm,
-        font=\small,
-        base/.style = {draw=black, thick, align=center, rounded corners=4pt},
-        supervisor/.style = {base, fill=blue!10, minimum width=4.8cm, minimum height=1.1cm, text width=4.5cm},
-        agent/.style = {base, fill=green!10, minimum width=3.95cm, minimum height=1.0cm, text width=3.65cm},
-        tool/.style = {base, fill=gray!12, minimum width=4.3cm, minimum height=1.0cm, text width=4.0cm},
-        outnode/.style = {base, ellipse, fill=orange!10, minimum width=4.9cm, minimum height=0.95cm},
-        arrow/.style = {thick, -{Stealth[scale=1.1]}},
-        labelbox/.style = {fill=white, draw=gray!35, font=\scriptsize, inner sep=2pt}
-    ]
-
-    \node (supervisor) [supervisor] {\textbf{Bộ điều phối nội dung}\\LangGraph lập kế hoạch / định tuyến\\{\scriptsize phân công tác vụ}};
-    \node (planner) [agent, below left=1.35cm and 4.15cm of supervisor] {Agent lập kế hoạch\\dàn ý và trình tự học};
-    \node (draft) [agent, below=1.35cm of supervisor] {Agent viết nội dung\\nội dung chi tiết};
-    \node (media) [agent, below right=1.35cm and 4.15cm of supervisor] {Agent gợi ý media\\hình ảnh và tài nguyên};
-    \node (assessment) [agent, below=1.05cm of draft] {Agent đánh giá nhúng\\câu hỏi và hoạt động};
-    \node (merge) [tool, below=1.15cm of assessment] {\textbf{Bộ hợp nhất}\\service/tool xác định\\{\scriptsize kết quả từ các agent}};
-    \node (quality) [agent, below=1.1cm of merge] {Agent hậu kiểm\\kiểm tra chất lượng};
-    \node (output) [outnode, below=1.0cm of quality] {\textbf{slide/giáo án hoàn chỉnh}};
-
-    \draw [arrow] (supervisor.south) -- ++(0,-0.35) -| (planner.north);
-    \draw [arrow] (supervisor) -- (draft);
-    \draw [arrow] (supervisor.south) -- ++(0,-0.35) -| (media.north);
-    \draw [arrow] (draft) -- (assessment);
-    \draw [arrow] (planner.south) to[out=-90,in=165] (merge.west);
-    \draw [arrow] (assessment) -- (merge);
-    \draw [arrow] (media.south) to[out=-90,in=15] (merge.east);
-    \draw [arrow] (merge) -- (quality);
-    \draw [arrow] (quality) -- (output);
-    \draw [arrow, dashed, rounded corners=12pt] (quality.west) -- ++(-4.0,0) |- (supervisor.west);
-
-    \end{tikzpicture}
-    }
-    \caption{Pipeline đa tác tử nội bộ cho sinh slide và giáo án}
-    \label{fig:content-multi-agent-pipeline}
-\end{figure}
-
-Giao tiếp giữa bộ điều phối và các agent chuyên trách sử dụng hợp đồng A2A-lite nội bộ. Mỗi nhiệm vụ được mô tả bằng bên gửi, bên nhận, loại nhiệm vụ, mục tiêu, dữ liệu vào, ràng buộc và kết quả kỳ vọng. Agent trả về trạng thái xử lý, kết quả trung gian, mức tin cậy, cảnh báo, danh sách công cụ đã dùng, độ trễ và lỗi nếu có. Các kết quả này được lưu trong trạng thái của quy trình qua ba nhóm dữ liệu: nhiệm vụ đã giao, kết quả agent và danh mục kết quả trung gian.
-
-Agent lập kế hoạch sư phạm tạo dàn ý và trình tự học tập. Agent viết nội dung tạo nội dung chi tiết cho từng slide hoặc từng mục trong giáo án dựa trên dàn ý và ngữ cảnh nguồn. Agent gợi ý media hiện đề xuất thông tin hình ảnh và tài nguyên; tìm kiếm ảnh và kiểm tra URL qua công cụ ngoài được xem là điểm mở rộng, chưa mô tả như năng lực production hoàn chỉnh. Agent đánh giá nhúng chỉ sinh câu hỏi hoặc hoạt động đánh giá trong slide/giáo án, không thay thế dịch vụ quiz độc lập. Agent hậu kiểm chất lượng kiểm tra độ đúng sự kiện, độ bao phủ, tính sư phạm và định dạng sau khi hợp nhất.
-
-Thành phần hợp nhất kết quả không được xem là agent. Đây là service/tool xác định, có nhiệm vụ hợp nhất dàn ý, nội dung, media và phần đánh giá thành danh sách slide/section cuối cùng. Việc tách bước hợp nhất khỏi agent giúp hệ thống tránh gán tính tự trị cho một bước không cần suy luận LLM.
-
-\subsection{Thiết kế Lớp Tri thức (Knowledge Layer)}
-\label{subsec:knowledge-layer}
-Lớp Tri thức cung cấp giao diện truy xuất chính cho các thành phần nghiệp vụ. Bên trong, bộ truy xuất thích nghi sử dụng bộ phân loại truy vấn dựa trên heuristic, không gọi LLM, để chọn chiến lược truy xuất phù hợp với loại câu hỏi và phạm vi lớp/bộ sách/chủ đề.
-
-\begin{figure}[H]
-\centering
-\resizebox{0.82\textwidth}{!}{
-\begin{tikzpicture}[
-    node distance = 1.0cm and 1.4cm,
-    font=\small,
-    base/.style = {draw=black, thick, align=center, rounded corners=4pt, fill=white},
-    process/.style = {base, fill=blue!10, minimum width=4.4cm, minimum height=1.0cm, text width=4.0cm},
-    strategy/.style = {base, fill=green!10, minimum width=3.05cm, minimum height=1.05cm, text width=2.72cm},
-    diamondbox/.style = {base, diamond, aspect=1.9, fill=red!12, text width=2.8cm, inner sep=1pt},
-    io/.style = {base, ellipse, fill=orange!10, minimum width=4.6cm, minimum height=0.95cm, text width=4.3cm},
-    arrow/.style = {thick, -{Stealth[scale=0.95]}}
-]
-
-\node (input) [io] {\textbf{Đầu vào truy xuất}\\câu hỏi, loại yêu cầu, bộ sách/lớp/chủ đề};
-\node (classifier) [diamondbox, below=of input] {\textbf{Phân loại}\\\textbf{truy vấn}\\định tuyến heuristic};
-
-\node (standard) [strategy, below=1.75cm of classifier, xshift=-5.7cm] {\textbf{STANDARD}\\BM25 + semantic\\RRF + rerank};
-\node (broad) [strategy, below=1.75cm of classifier, xshift=-1.9cm] {\textbf{BROAD}\\thông tin mô tả\\khối mục tiêu};
-\node (curriculum) [strategy, below=1.75cm of classifier, xshift=1.9cm] {\textbf{CURRIC.}\\danh sách bài\\đã khử trùng lặp};
-\node (hrag) [strategy, below=1.75cm of classifier, xshift=5.7cm] {\textbf{HRAG}\\khối cha\\khối con theo phạm vi};
-
-\node (combine) [process, below=1.9cm of broad, xshift=1.9cm] {Bộ kết hợp ngữ cảnh\\định dạng theo tác vụ};
-\node (mcp) [process, right=1.45cm of combine, fill=gray!12] {Lớp công cụ mở rộng\\truy xuất, định dạng, tìm kiếm web};
-\node (output) [io, below=1.15cm of combine] {\textbf{Đầu ra}\\ngữ cảnh phù hợp};
-
-\draw [arrow] (input) -- (classifier);
-\draw [arrow] (classifier.south) -- ++(0,-0.35) -| (standard.north);
-\draw [arrow] (classifier.south) -- ++(0,-0.35) -| (broad.north);
-\draw [arrow] (classifier.south) -- ++(0,-0.35) -| (curriculum.north);
-\draw [arrow] (classifier.south) -- ++(0,-0.35) -| (hrag.north);
-
-\coordinate (combineInA) at ($(combine.north)+(-1.45cm,0)$);
-\coordinate (combineInB) at ($(combine.north)+(-0.50cm,0)$);
-\coordinate (combineInC) at ($(combine.north)+(0.50cm,0)$);
-\coordinate (combineInD) at ($(combine.north)+(1.45cm,0)$);
-\draw [arrow] (standard.south) to[out=-90,in=155] (combineInA);
-\draw [arrow] (broad.south) to[out=-90,in=115] (combineInB);
-\draw [arrow] (curriculum.south) to[out=-90,in=65] (combineInC);
-\draw [arrow] (hrag.south) to[out=-90,in=25] (combineInD);
-\draw [arrow, dashed] (mcp.west) -- (combine.east);
-\draw [arrow] (combine) -- (output);
-
-\end{tikzpicture}
-}
-\caption{Cấu trúc xử lý và truy xuất thông tin của Knowledge Layer}
-\label{fig:knowledge-layer}
-\end{figure}
-
-\textbf{STANDARD} phục vụ các truy vấn cụ thể bằng Hybrid Search: Custom BM25 và semantic search được hợp nhất qua RRF, sau đó đi qua Cross-Encoder Reranker để lấy nhóm khối dữ liệu liên quan nhất. \textbf{BROAD} dùng tra cứu thông tin mô tả trên các khối mục tiêu, phù hợp với truy vấn tổng quan. \textbf{CURRICULUM} trả danh sách bài/chủ đề đã khử trùng lặp, không cần tìm kiếm vector. \textbf{HIERARCHICAL} trước tiên tìm các khối cha ở cấp cao, sau đó tìm tiếp các khối con trong cùng bài/chủ đề.
-
-Nếu BROAD hoặc HIERARCHICAL không tìm đủ ngữ cảnh, hệ thống có thể chuyển sang STANDARD để bảo vệ độ phủ. Sau truy xuất, bộ kết hợp ngữ cảnh định dạng thông tin theo loại tác vụ: các tác vụ hỏi đáp hoặc quiz ưu tiên thứ tự điểm liên quan, còn slide và giáo án nhóm ngữ cảnh theo chủ đề/bài học để giữ mạch sư phạm.
-
-Kiến trúc MCP trong project hiện ở dạng lớp công cụ chạy trong tiến trình, gồm thành phần quản lý client, server và danh mục công cụ. Các công cụ chính phục vụ truy xuất tri thức và định dạng nội dung. Chức năng tìm kiếm web được xem là điểm mở rộng cho media/resource search, không phải kết quả thực nghiệm chính trong chương này.
-
-\subsection{Thiết kế Lớp Sinh phản hồi và Hậu kiểm (Generation \& Validation)}
-Tầng sinh và hậu kiểm hiện không còn là một bộ kiểm tra chung cho mọi nhánh. Hệ thống tách rõ hai đường kiểm soát chất lượng: quiz độc lập và quy trình sinh slide/giáo án.
-
-Ở nhánh quiz độc lập, yêu cầu của người dùng thường tạo ra một đối tượng có vòng đời tương tác dài. Câu hỏi sau khi sinh không chỉ được trả về ngay, mà còn được lưu để phục vụ chấm điểm, giải thích đáp án, ôn câu sai và thống kê tiến độ. Vì vậy nhánh này cần kiểm soát chặt chất lượng từng câu hỏi trước khi ghi vào trạng thái phiên.
-
-Ở nhánh slide và giáo án, đầu ra là một sản phẩm tổng hợp gồm nhiều phần nội dung. Các agent chuyên trách tạo từng nhóm nội dung riêng, sau đó bước hợp nhất ghép kết quả theo một quy tắc xác định trước khi chuyển sang hậu kiểm. Agent hậu kiểm chất lượng không thay thế các agent sinh nội dung, mà chỉ đánh giá kết quả đã hợp nhất để quyết định chấp nhận, yêu cầu sửa lại hoặc chặn đầu ra lỗi nghiêm trọng.
-
-\begin{figure}[H]
-\centering
-\resizebox{0.80\textwidth}{!}{
-\begin{tikzpicture}[
-    node distance = 0.62cm and 1.8cm,
-    font=\scriptsize,
-    base/.style = {draw=black, thick, align=center, rounded corners=4pt, fill=white},
-    process/.style = {base, fill=teal!10, minimum width=3.55cm, minimum height=0.72cm, text width=3.28cm},
-    quality/.style = {base, fill=orange!12, minimum width=3.55cm, minimum height=0.72cm, text width=3.28cm},
-    outnode/.style = {base, ellipse, fill=gray!15, minimum width=3.8cm, minimum height=0.72cm, text width=3.5cm},
-    arrow/.style = {thick, -{Stealth[scale=0.9]}},
-    labelbox/.style = {fill=white, draw=gray!30, font=\scriptsize, inner sep=2pt}
-]
-
-\node (dispatch) [outnode] {\textbf{Bộ định tuyến thực thi}\\hành động đã chọn};
-
-\node (quizgen) [process, below=0.95cm of dispatch, xshift=-4.55cm] {Bộ sinh quiz\\trắc nghiệm, tự luận\\điền khuyết, đúng-sai};
-\node (quizquality) [quality, below=of quizgen] {Hậu kiểm quiz\\có thể yêu cầu sửa};
-\node (quizvalidator) [quality, below=of quizquality] {Kiểm tra câu hỏi\\tiêu chí đánh giá + nguồn tham chiếu};
-\node (quizstore) [process, below=of quizvalidator] {Lưu trạng thái quiz\\lượt làm bài + tiến độ học tập};
-
-\node (contentsupervisor) [process, below=0.95cm of dispatch, xshift=4.55cm] {Bộ điều phối nội dung\\các agent chuyên trách};
-\node (contentmerge) [process, below=of contentsupervisor] {Bộ hợp nhất\\ghép kết quả xác định};
-\node (contentquality) [quality, below=of contentmerge] {Agent hậu kiểm\\phản tư / sửa lại / chặn};
-\node (contentstore) [process, below=of contentquality] {Lưu tóm tắt nội dung\\trạng thái slide/giáo án};
-
-\node (stream) [outnode, below=0.55cm of quizstore, xshift=4.55cm] {\textbf{Kết quả được duyệt}\\trả về người dùng};
-
-\draw [arrow] (dispatch.south) -- ++(0,-0.28) -| node[labelbox, pos=0.2] {SINH QUIZ} (quizgen.north);
-\draw [arrow] (quizgen) -- (quizquality);
-\draw [arrow] (quizquality) -- (quizvalidator);
-\draw [arrow] (quizvalidator) -- (quizstore);
-\draw [arrow] (quizstore.south) to[out=-90,in=170] (stream.west);
-
-\draw [arrow] (dispatch.south) -- ++(0,-0.28) -| node[labelbox, pos=0.2] {SLIDE/GIÁO ÁN} (contentsupervisor.north);
-\draw [arrow] (contentsupervisor) -- (contentmerge);
-\draw [arrow] (contentmerge) -- (contentquality);
-\draw [arrow] (contentquality) -- (contentstore);
-\draw [arrow] (contentstore.south) to[out=-90,in=10] (stream.east);
-\draw [arrow, dashed, rounded corners=8pt] (contentquality.east) -- ++(1.1,0) |- node[labelbox, pos=0.25] {sửa lại} (contentsupervisor.east);
-\draw [arrow, dashed, rounded corners=8pt] (quizquality.west) -- ++(-1.1,0) |- node[labelbox, pos=0.25] {sửa một lần} (quizgen.west);
-
-\end{tikzpicture}
-}
-\caption{Hai đường sinh và hậu kiểm chất lượng trong hệ thống}
-\label{fig:generation-layer-detail}
-\end{figure}
-
-Với \textbf{quiz độc lập}, dịch vụ quiz lấy ngữ cảnh từ RAG, gọi bộ sinh tương ứng với loại câu hỏi, chạy hậu kiểm chất lượng, có thể yêu cầu sửa một lần, sau đó kiểm tra câu hỏi theo tiêu chí và nguồn tham chiếu. Chỉ những câu hỏi được phê duyệt mới được lưu vào trạng thái lượt làm quiz. Các bước chấm điểm, ôn câu sai và thống kê tiếp tục đọc từ trạng thái quiz này.
-
-Với \textbf{slide và giáo án}, dịch vụ slide gọi bộ điều phối nội dung. Sau khi các agent chuyên trách trả kết quả, bước hợp nhất ghép các phần thành đầu ra cuối. Agent hậu kiểm đánh giá độ đúng sự kiện, độ bao phủ, tính sư phạm và định dạng. Nếu kết quả chưa đạt, bộ điều phối có thể định tuyến lại agent chịu trách nhiệm để sửa; nếu lỗi nghiêm trọng, đầu ra bị chặn thay vì trả về người dùng.
-
-\subsection{Thiết kế Trả phản hồi, Lưu phiên và Ghi vết}
-\label{subsec:response-memory}
-Chặng cuối của quy trình chịu trách nhiệm trả kết quả theo luồng, ghi vết thực thi và lưu trạng thái phiên. Thiết kế này giúp người dùng nhận phản hồi sớm trong khi hệ thống vẫn giữ được lịch sử đủ để tiếp tục các tác vụ tương tác như chấm bài, ôn câu sai hoặc tiếp tục quy trình sinh slide/giáo án.
-
-\begin{figure}[H]
-    \centering
-    \resizebox{0.95\textwidth}{!}{
-    \begin{tikzpicture}[
-        node distance = 1.15cm and 2.1cm,
-        font=\small,
-        base/.style = {draw=black!75, thick, align=center, rounded corners=4pt},
-        process/.style = {base, fill=blue!7, minimum width=4.4cm, minimum height=1.0cm, text width=4.05cm},
-        db/.style = {base, cylinder, shape border rotate=90, aspect=0.25, fill=purple!7, minimum width=4.1cm, minimum height=1.35cm, text width=3.65cm},
-        io/.style = {base, ellipse, fill=orange!10, minimum width=4.4cm, minimum height=0.95cm, text width=4.0cm},
-        arrow/.style = {thick, -{Stealth[scale=1.05]}, draw=black!70},
-        labelbox/.style = {fill=white, draw=gray!30, font=\scriptsize, inner sep=2pt}
-    ]
-
-    \node (approved) [io] {\textbf{Kết quả được duyệt}\\ngữ cảnh hoặc văn bản đã định dạng};
-    \node (streaming) [process, below=of approved] {Trả phản hồi theo luồng\\hiển thị từng phần cho giao diện};
-    \node (debug) [process, below=1.25cm of streaming, xshift=-4.2cm] {Thông tin thực thi\\phục vụ gỡ lỗi};
-    \node (trace) [db, below=of debug] {Ghi vết thực thi\\lưu yêu cầu và phản hồi};
-    \node (session) [db, below=1.25cm of streaming, xshift=4.2cm] {Bộ nhớ phiên JSON\\tự động lưu phiên};
-    \node (hitl) [process, below=of session] {Thông tin tiếp tục HITL\\mã luồng, cấu hình, trạng thái tạm dừng, loại học liệu};
-    \node (done) [io, below=1.55cm of trace, xshift=4.2cm] {\textbf{Phiên sẵn sàng}\\cho lượt hỏi tiếp theo};
-
-    \draw [arrow] (approved) -- (streaming);
-    \draw [arrow] (streaming.south) -- ++(0,-0.45) -| node[labelbox, pos=0.2] {gỡ lỗi} (debug.north);
-    \draw [arrow] (debug) -- (trace);
-    \draw [arrow] (streaming.south) -- ++(0,-0.45) -| node[labelbox, pos=0.2] {tự lưu} (session.north);
-    \draw [arrow] (session) -- (hitl);
-    \draw [arrow] (trace.south) -- ++(0,-0.45) -| (done.west);
-    \draw [arrow] (hitl.south) -- ++(0,-0.45) -| (done.east);
-
-    \end{tikzpicture}
-    }
-    \caption{Khối phản hồi, ghi trace và lưu trạng thái phiên}
-    \label{fig:response-layer-detail}
-\end{figure}
-
-Bộ nhớ phiên lưu dữ liệu cục bộ dưới dạng JSON, cho phép hệ thống khôi phục lịch sử hội thoại, trạng thái quiz và trạng thái slide giữa các lượt tương tác. Thành phần ghi vết lưu lại đường đi của yêu cầu, bao gồm các bước thực thi phục vụ gỡ lỗi. Riêng với quy trình slide/giáo án, khi bộ điều phối nội dung dừng ở bước duyệt dàn ý, dịch vụ slide lưu thông tin tiếp tục gồm mã luồng, cấu hình luồng, cờ tạm dừng và loại học liệu để nối lại đúng quy trình sau khi người dùng gửi phản hồi.
-
-\section{Đánh giá hiệu năng và Kết quả thực nghiệm}
-\subsection{Phương pháp đánh giá}
-Hệ thống sử dụng phương pháp đánh giá định lượng dành riêng cho hệ thống Retrieval-Augmented Generation (RAG) thông qua Ragas framework. Tập dữ liệu kiểm thử gồm 246 mẫu câu hỏi và đáp án tham chiếu được trích xuất từ dữ liệu giáo khoa, tập trung vào nhiều cấp độ hành vi nhận thức từ nhận biết, thông hiểu đến vận dụng.
-
-Quá trình đánh giá được thực hiện trên 4 độ đo cốt lõi của Ragas:
-
-\textbf{Faithfulness (Độ trung thực):} Đo lường mức độ câu trả lời của mô hình bám sát vào ngữ cảnh mà hệ thống truy xuất được. Mức điểm cao chứng tỏ mô hình không bịa đặt thông tin ngoài nguồn.
-
-\textbf{Answer Relevancy (Độ phù hợp):} Đánh giá xem câu trả lời có giải quyết trực tiếp truy vấn ban đầu của người dùng hay không, tránh trả lời lan man hoặc sai trọng tâm.
-
-\textbf{Context Precision (Độ chính xác ngữ cảnh):} Đánh giá khả năng xếp hạng của cụm truy xuất. Điểm số cao đồng nghĩa với việc các tài liệu liên quan nhất được xếp ở các thứ hạng đầu.
-
-\textbf{Context Recall (Độ bao phủ ngữ cảnh):} Đo lường khả năng hệ thống tìm ra đầy đủ các thông tin cần thiết từ cơ sở tri thức so với đáp án tham chiếu.
-
-\subsection{Kết quả thực nghiệm phân hệ RAG}
-Sau quá trình chạy tự động 246 mẫu thử trên quy trình RAG của hệ thống, kết quả điểm số đánh giá trung bình trên các độ đo như sau:
+Về mô hình và hạ tầng tri thức, hệ thống sử dụng Google Gemini làm mô hình sinh ngôn ngữ, mô hình embedding tiếng Việt \texttt{dangvantuan/vietnamese-document-embedding} để biểu diễn chunk, mô hình reranker \texttt{AITeamVN/Vietnamese\_Reranker} cho bước xếp hạng lại và Qdrant làm vector database. Bên cạnh \textit{vector search}, hệ thống còn duy trì một kênh \textit{keyword search} dựa trên BM25 tự cài đặt, sau đó hợp nhất hai danh sách kết quả bằng Reciprocal Rank Fusion. Các thành phần cài đặt chính của môi trường thực nghiệm được tóm tắt trong Bảng \ref{tab:exp-environment}.
 
 \begin{table}[H]
     \centering
-    \renewcommand{\arraystretch}{1.3}
-    \begin{tabular}{|p{0.60\textwidth}|>{\centering\arraybackslash}p{0.24\textwidth}|}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|p{0.28\textwidth}|p{0.60\textwidth}|}
         \hline
-        \textbf{Chỉ số đánh giá (Metric)} & \textbf{Điểm số trung bình (Mean)} \\
+        \textbf{Thành phần} & \textbf{Cấu hình sử dụng} \\
         \hline
-        Faithfulness (Độ trung thực) & $\mathbf{0.9757}$ \\
+        Ngôn ngữ lập trình & Python \\
         \hline
-        Answer Relevancy (Độ thiết thực của câu trả lời) & $\mathbf{0.8571}$ \\
+        Mô hình sinh ngôn ngữ & Google Gemini \texttt{gemini-2.5-flash-lite} \\
         \hline
-        Context Precision (Độ chính xác của ngữ cảnh) & $\mathbf{0.8555}$ \\
+        Mô hình embedding & \texttt{dangvantuan/vietnamese-document-embedding} \\
         \hline
-        Context Recall (Độ bao phủ của ngữ cảnh) & $\mathbf{0.9593}$ \\
+        Mô hình reranker & \texttt{AITeamVN/Vietnamese\_Reranker} \\
+        \hline
+        Vector database & Qdrant \\
+        \hline
+        Pipeline đa tác tử & LangGraph \\
+        \hline
+        Retriever lexical & BM25 tự cài đặt \\
+        \hline
+        Retriever ngữ nghĩa & Dense retrieval theo cosine similarity \\
         \hline
     \end{tabular}
     \vspace{0.2cm}
-    \caption{Kết quả đánh giá hệ thống theo framework Ragas}
-    \label{tab:rag-metrics}
+    \caption{Môi trường phần mềm và các thành phần cốt lõi của hệ thống thực nghiệm}
+    \label{tab:exp-environment}
 \end{table}
 
-\textbf{Phân tích kết quả:} Faithfulness đạt 0.9757 và Context Recall đạt 0.9593. Kết quả này cho thấy chiến lược Hierarchical RAG kết hợp với chunking theo phân cấp SGK đã giúp hệ thống truy xuất được phần lớn các đơn vị kiến thức cần thiết, đồng thời hạn chế hiện tượng sinh thông tin ngoài ngữ cảnh.
+Nguồn dữ liệu của đồ án gồm SGK Tin học lớp 10, 11 và 12 thuộc hai bộ sách Cánh Diều và Kết Nối Tri Thức. Sau bước tiền xử lý và chunking, kho tri thức thu được 2348 chunk, mỗi chunk mang metadata về bộ sách, lớp, chủ đề, bài học, loại nội dung và cấp phân cấp. Chính cấu trúc này cho phép hệ thống vừa truy xuất ở mức cục bộ cho câu hỏi ngắn, vừa hỗ trợ các tác vụ cần bao phủ một bài học hoàn chỉnh như sinh slide hoặc soạn giáo án.
 
-\textbf{Context Precision (0.8555)} và \textbf{Answer Relevancy (0.8571)} ổn định quanh mức 85\%. Kết quả này phản ánh hiệu quả của việc kết hợp BM25, semantic search, RRF và Cross-Encoder Reranker trong việc đưa các khối dữ liệu liên quan lên nhóm đầu. Khi ngữ cảnh đầu vào có độ liên quan cao hơn, lời nhắc sinh câu trả lời có cơ sở tốt hơn để bám sát trọng tâm câu hỏi.
+\section{Cấu trúc cài đặt hệ thống}
 
-Các tầng chất lượng trong hệ thống đóng vai trò hậu kiểm theo từng loại tác vụ. Các thành phần này không thay thế RAG, mà bổ sung thêm lớp kiểm soát để giảm rủi ro trả về nội dung sai, thiếu căn cứ hoặc không đúng định dạng.
+Tại mức cài đặt, hệ thống được chia thành bốn nhóm module chính. Nhóm thứ nhất là lớp tiếp nhận và điều phối yêu cầu, bao gồm các thành phần tạo \textit{RequestContext}, phân tích ngữ cảnh hội thoại, định tuyến ý định, lập kế hoạch hành động và quản lý vòng đời session. Nhóm thứ hai là lớp dịch vụ nghiệp vụ, nơi triển khai các chức năng hỏi đáp, quiz, sinh slide và sinh giáo án. Nhóm thứ ba là lớp tri thức, phụ trách ingestion, chunking, embedding, indexing, retrieval, reranking và dựng ngữ cảnh đầu vào cho LLM. Nhóm cuối cùng là lớp thực nghiệm và đánh giá, gồm benchmark retrieval, kết quả generation theo RAGAS và các file raw output phục vụ phân tích lỗi.
 
-\subsection{Đánh giá độ trễ hệ thống (Latency)}
-Bên cạnh chất lượng phản hồi, hệ thống còn được đo đạc về mặt thời gian thực thi nhằm đánh giá trải nghiệm người dùng thực tế. Các chỉ số thời gian được ghi nhận cho mỗi truy vấn đầy đủ như sau:
+Cách chia này nhằm giữ ranh giới rõ giữa phần điều phối hệ thống và phần nghiên cứu chính. Các module điều phối giúp hệ thống vận hành trên nhiều loại yêu cầu, nhưng phần đóng góp kỹ thuật được kiểm chứng trong chương này vẫn tập trung vào retrieval và generation. Do đó, Chương 4 không đi vào liệt kê toàn bộ package hay từng file cài đặt, mà chỉ trình bày đủ để người đọc hiểu dữ liệu đi qua những khối nào trước khi trở thành câu trả lời hoặc artifact cuối.
+
+\section{Cài đặt pipeline xử lý tài liệu}
+
+Pipeline xử lý tài liệu bắt đầu từ tập văn bản SGK đã được chuẩn hóa. Ở bước đầu, nội dung được làm sạch để loại bỏ nhiễu trình bày, sau đó được tách theo cấu trúc heading của từng bài học. Mỗi đoạn nội dung sau khi tách được gắn \textit{breadcrumb}, \textit{level} và metadata bài học tương ứng. Cách cài đặt này giúp chunk vẫn giữ được mối liên hệ với ngữ cảnh sư phạm của SGK, thay vì chỉ là các đoạn văn bản rời rạc.
+
+Sau khi chunking, hệ thống sinh embedding trên trường \texttt{full\_content} và nạp vector vào Qdrant. Song song với đó, các trường văn bản cần thiết cũng được lưu để phục vụ BM25 và để hiển thị nguồn khi phân tích kết quả retrieval. Việc lưu đồng thời cả metadata phân cấp lẫn vector embedding cho phép hệ thống lọc trước theo \textit{scope} rồi mới thực hiện truy xuất, từ đó giảm rủi ro nhầm lẫn giữa các bài học có thuật ngữ gần nhau nhưng khác bộ sách hoặc khác khối lớp.
+
+Dữ liệu tạo benchmark retrieval cũng được sinh trực tiếp từ kho chunk này. Mỗi seed được gắn với một bài học đích, từ đó sinh các câu hỏi có \textit{gold key} tương ứng để phục vụ đánh giá \textit{single-gold}. Nhờ vậy, cùng một nền dữ liệu vừa đóng vai trò kho tri thức cho hệ thống, vừa là nguồn chuẩn để tạo bộ câu hỏi kiểm thử nhất quán với phạm vi dữ liệu của đồ án.
+
+\section{Cài đặt pipeline hỏi đáp}
+
+Khi người dùng gửi câu hỏi, hệ thống trước hết tạo một \textit{RequestContext} để gom câu hỏi hiện tại, thông tin bộ sách hoặc lớp được chọn, lịch sử hội thoại gần và các trường debug cần thiết. Từ đây, \textit{ContextAnalyzer} kiểm tra xem câu hỏi có phụ thuộc vào turn trước hay không; nếu có, hệ thống trích một phần ngữ cảnh hội thoại để làm giàu truy vấn. \textit{IntentRouter} sau đó xác định loại yêu cầu, chẳng hạn hỏi đáp kiến thức, sinh quiz, sinh slide hoặc soạn giáo án.
+
+Với các intent cần tri thức từ SGK, \textit{ActionPlanner} tạo hành động tương ứng và chuyển cho \textit{ExecutionDispatcher}. Ở nhánh hỏi đáp, dispatcher gọi \textit{RAGService} để truy xuất ngữ cảnh, gửi ngữ cảnh này vào prompt sinh câu trả lời và ghi lại trace của toàn bộ phiên xử lý. Với các tác vụ dài như slide hoặc giáo án, dispatcher không sinh đầu ra trực tiếp mà chuyển tiếp cho pipeline đa tác tử đã mô tả ở Chương 3. Nhờ vậy, phần thực thi vẫn thống nhất ở tầng orchestration, trong khi logic chuyên biệt của từng tác vụ được cô lập ở các service tương ứng.
+
+Điểm quan trọng trong cài đặt hiện tại là hệ thống không xem mọi yêu cầu như một lời gọi LLM đơn lẻ. Thay vào đó, truy vấn được biến đổi có kiểm soát qua các bước phân tích ngữ cảnh, định tuyến, retrieval, rồi mới tới generation. Cách tổ chức này làm rõ hơn quan hệ nhân quả giữa lỗi retrieval và lỗi answer, vốn là điều cần thiết cho các thí nghiệm báo cáo ở phần sau của chương.
+
+\section{Cài đặt retrieval, reranking và generation}
+
+Trong cấu hình retrieval dùng cho thực nghiệm hiện tại, hệ thống lấy \textit{search pool} 50 candidate từ hai kênh lexical và dense, sau đó hợp nhất bằng RRF để thu được danh sách 25 candidate cuối cho bước đánh giá no-rerank. Ở cấu hình có rerank, cùng tập candidate này sẽ được chuyển qua cross-encoder để chấm lại mức độ liên quan trước khi chọn ra top-$N$ cuối cùng. Cơ chế lọc theo \textit{scope} được áp dụng trước truy xuất khi câu hỏi hoặc session đã xác định được \textit{book}, \textit{grade} hoặc \textit{topic}.
+
+Ở phía generation, prompt đầu vào luôn gồm hai thành phần: câu hỏi của người dùng và tập ngữ cảnh đã truy xuất. Hệ thống yêu cầu mô hình trả lời theo ngôn ngữ phù hợp với học sinh THPT, đồng thời ưu tiên bám sát thông tin xuất hiện trong context hơn là suy luận mở rộng từ tri thức tham số. Khi ngữ cảnh không đủ hoặc không truy xuất được tài liệu phù hợp, hệ thống được thiết kế để trả lời theo hướng nêu rõ giới hạn thay vì tiếp tục sinh nội dung không có căn cứ.
+
+Việc tách riêng retrieval, reranking và generation trong cài đặt cho phép đánh giá từng bước một cách độc lập. Đây là tiền đề để phần kết quả retrieval ở Mục 4.8 và phần generation ở Mục 4.9 có thể được diễn giải như hai lớp bằng chứng khác nhau cho hiệu quả của hệ thống, thay vì trộn lẫn chúng trong một điểm số tổng hợp duy nhất.
+
+\section{Cài đặt benchmark và quy trình đánh giá}
+
+Bộ benchmark retrieval hiện tại được xây dựng theo hướng \textit{single-gold}. Mỗi câu hỏi được gắn với một \textit{lesson key} đích, gồm bộ sách, lớp, chủ đề, bài và tên bài học. Thay vì yêu cầu gán nhãn relevance chi tiết cho từng chunk, đồ án dùng lesson key làm chuẩn so khớp chính, nhờ đó việc tạo benchmark có thể mở rộng trên toàn bộ kho SGK mà vẫn giữ được tính nhất quán. Quá trình sinh benchmark bắt đầu từ 300 seed, cho ra 600 câu hỏi thô và bao phủ toàn bộ 185 bài học trong tập dữ liệu.
+
+Sau bước sinh câu hỏi, benchmark được lọc bằng các tiêu chí xác định như khử trùng lặp, loại bỏ các câu mang tính template và kiểm tra rò rỉ tiêu đề ở mức n-gram. Kết quả lọc hiện tại không loại bỏ thêm mẫu nào, tức toàn bộ 600 câu đều đạt yêu cầu tối thiểu để đi tiếp vào pipeline đánh giá. Phân bố của bộ benchmark theo nhóm sách và khối lớp được trình bày trong Bảng \ref{tab:benchmark-distribution}; phân bố câu hỏi theo loại và độ khó cho thấy bộ câu hỏi thiên về các truy vấn định nghĩa, factual và application, phù hợp với hành vi hỏi đáp thực tế của học sinh.
 
 \begin{table}[H]
     \centering
-    \renewcommand{\arraystretch}{1.3}
-    \begin{tabular}{|l|c|}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|p{0.28\textwidth}|>{\centering\arraybackslash}p{0.18\textwidth}|>{\centering\arraybackslash}p{0.18\textwidth}|}
         \hline
-        \textbf{Thành phần thực thi} & \textbf{Thời gian trung bình (Giây)} \\
+        \textbf{Nhóm dữ liệu} & \textbf{Số lượng câu hỏi} & \textbf{Số bài được bao phủ} \\
         \hline
-        Khối truy xuất (Retriever \& Reranker) & $4.579$ \\
+        CD-10 & 100 & \multirow{6}{*}{185} \\
+        \cline{1-2}
+        CD-11 & 100 & \\
+        \cline{1-2}
+        CD-12 & 100 & \\
+        \cline{1-2}
+        KNTT-10 & 100 & \\
+        \cline{1-2}
+        KNTT-11 & 100 & \\
+        \cline{1-2}
+        KNTT-12 & 100 & \\
         \hline
-        Khối sinh câu trả lời (LLM Generator) & $1.979$ \\
-        \hline
-        \textbf{Tổng thời gian xử lý} & $\mathbf{6.558}$ \\
+        Tổng cộng & 600 & 185 \\
         \hline
     \end{tabular}
     \vspace{0.2cm}
-    \caption{Thống kê thời gian trễ của các khối kiến trúc trong hệ thống}
-    \label{tab:latency}
+    \caption{Phân bố bộ benchmark retrieval theo bộ sách và khối lớp}
+    \label{tab:benchmark-distribution}
 \end{table}
 
-Tổng thời gian cho một vòng xử lý RAG đầy đủ đạt trung bình xấp xỉ $\mathbf{6.5}$ giây. Trọng số thời gian chủ yếu nằm ở khâu truy xuất và reranking do hệ thống phải thực hiện Hybrid Search, hợp nhất kết quả và tái xếp hạng bằng Cross-Encoder. Tuy nhiên, cơ chế streaming ở tầng phản hồi giúp người dùng nhận kết quả theo từng phần thay vì phải chờ toàn bộ nội dung hoàn tất mới hiển thị.
+Đối với generation, đồ án tận dụng kết quả đánh giá RAGAS đã có sẵn trên 246 mẫu. Cách làm này phù hợp với điều kiện chi phí thực nghiệm: retrieval được đánh giá lại trực tiếp trên benchmark 600 câu hỏi mới, còn generation sử dụng lại tập đánh giá đã được chạy đầy đủ từ trước. Tại thời điểm viết báo cáo, luồng đánh giá with-rerank cho benchmark 600 câu hỏi vẫn chưa hoàn tất, vì vậy số liệu ở phần retrieval mới chỉ phản ánh cấu hình no-rerank. Phần còn thiếu này được giữ mở để cập nhật sau mà không làm thay đổi cấu trúc chung của chương.
 
-Chương này đã trình bày hiện trạng triển khai của hệ thống trợ lý giáo dục theo vòng đời xử lý một yêu cầu. Kiến trúc hiện tại sử dụng trạng thái yêu cầu trung tâm, bộ điều phối mỏng, bộ định tuyến thực thi và các dịch vụ nghiệp vụ để xử lý từng nhóm tác vụ. Quy trình sinh slide và giáo án được tách thành một nhánh đa tác tử riêng, trong khi quiz độc lập tiếp tục được quản lý bởi dịch vụ quiz để bảo toàn các chức năng chấm điểm, ôn tập và thống kê.
+\section{Kiểm thử chức năng}
 
-Các kết quả thực nghiệm cho thấy quy trình RAG đạt điểm cao ở hai khía cạnh trung thực và bao phủ ngữ cảnh. Điều này phù hợp với mục tiêu của đồ án là xây dựng một hệ thống sinh phản hồi có căn cứ từ SGK thay vì chỉ dựa vào tri thức nội tại của mô hình ngôn ngữ lớn. Những kết quả và giới hạn triển khai được trình bày trong chương này là cơ sở để Chương 5 phân tích sâu hơn các giải pháp và đóng góp kỹ thuật của đồ án.
+Ngoài đánh giá định lượng, hệ thống còn được kiểm thử ở mức chức năng để bảo đảm các bước cài đặt cơ sở vận hành đúng trước khi chạy benchmark. Các ca kiểm thử được chọn theo các điểm nút quan trọng của pipeline, từ ingestion dữ liệu, chunking, indexing đến scope filtering, retrieval, generation và trace logging. Bảng \ref{tab:functional-tests} tóm tắt các ca kiểm thử chính đã được sử dụng trong quá trình phát triển.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{|p{0.10\textwidth}|p{0.22\textwidth}|p{0.33\textwidth}|p{0.18\textwidth}|}
+        \hline
+        \textbf{Mã} & \textbf{Chức năng} & \textbf{Kết quả mong đợi} & \textbf{Kết quả} \\
+        \hline
+        TC01 & Đọc dữ liệu SGK & Tài liệu được parse và làm sạch đúng định dạng đầu vào & Đạt \\
+        \hline
+        TC02 & Chunking theo heading & Sinh chunk có metadata bài học và level nhất quán & Đạt \\
+        \hline
+        TC03 & Embedding và indexing & Vector được tạo và nạp vào kho chỉ mục không lỗi & Đạt \\
+        \hline
+        TC04 & Scope filtering & Truy xuất được giới hạn đúng theo sách hoặc lớp đã chọn & Đạt \\
+        \hline
+        TC05 & Retrieval & Top-$k$ chứa ngữ cảnh liên quan cho câu hỏi kiến thức & Đạt \\
+        \hline
+        TC06 & Generation & Câu trả lời bám tài liệu và có thể ghi lại context debug & Đạt \\
+        \hline
+        TC07 & Out-of-scope handling & Hệ thống ưu tiên báo thiếu thông tin thay vì bịa nội dung & Đạt \\
+        \hline
+        TC08 & Multi-intent routing & Yêu cầu phức hợp được tách thành nhiều action hợp lệ & Đạt \\
+        \hline
+        TC09 & Logging và trace & Mỗi request có debug step phục vụ phân tích lỗi & Đạt \\
+        \hline
+    \end{tabular}
+    \vspace{0.2cm}
+    \caption{Các ca kiểm thử chức năng chính của hệ thống trước khi chạy thực nghiệm}
+    \label{tab:functional-tests}
+\end{table}
+
+Kết quả ở Bảng \ref{tab:functional-tests} cho thấy các khối nền tảng của hệ thống đã vận hành ổn định trước khi bước vào thực nghiệm. Đây là điều kiện cần để các số liệu retrieval và generation ở các mục tiếp theo có thể được diễn giải như kết quả của phương pháp, thay vì chỉ phản ánh lỗi cài đặt cơ bản của phần mềm.
+
+\section{Kết quả đánh giá retrieval}
+
+Thực nghiệm retrieval hiện đã được chạy đầy đủ trên 600 câu hỏi của benchmark \textit{single-gold} trong cấu hình no-rerank. Mỗi câu hỏi được chấm tại các mức $k \in \{1,3,5,10\}$ với các độ đo Hit@$k$, Recall@$k$, Precision@$k$, MRR@$k$ và nDCG@$k$. Vì benchmark sử dụng lesson key làm chuẩn đúng, các độ đo này phản ánh trực tiếp khả năng của retriever trong việc đưa đúng bài học mục tiêu vào top-$k$ đầu tiên.
+
+Bảng \ref{tab:retrieval-overall} cho thấy kết quả tổng thể của cấu hình no-rerank. Có thể thấy retriever đạt Hit@1 bằng 0,7617 và tăng lên 0,9817 ở Hit@10. MRR@10 đạt 0,8484 cho thấy ở phần lớn trường hợp, bài học đúng đã xuất hiện rất sớm trong danh sách kết quả. nDCG@10 đạt 0,4267 thấp hơn các độ đo Hit và MRR, điều này phù hợp với bản chất \textit{single-gold}: mặc dù bài học đúng thường được truy xuất thành công, số lượng chunk liên quan trong cùng bài vẫn lớn nên việc phân bố thứ hạng bên trong lesson còn chưa tối ưu hoàn toàn.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|p{0.22\textwidth}|>{\centering\arraybackslash}p{0.14\textwidth}|>{\centering\arraybackslash}p{0.14\textwidth}|>{\centering\arraybackslash}p{0.14\textwidth}|>{\centering\arraybackslash}p{0.14\textwidth}|}
+        \hline
+        \textbf{Chỉ số} & \textbf{@1} & \textbf{@3} & \textbf{@5} & \textbf{@10} \\
+        \hline
+        Hit@$k$ & 0,7617 & 0,9367 & 0,9683 & 0,9817 \\
+        \hline
+        Recall@$k$ & 0,0684 & 0,1396 & 0,1879 & 0,2856 \\
+        \hline
+        Precision@$k$ & 0,7617 & 0,5300 & 0,4350 & 0,3372 \\
+        \hline
+        MRR@$k$ & 0,7617 & 0,8394 & 0,8467 & 0,8484 \\
+        \hline
+        nDCG@$k$ & 0,7617 & 0,5790 & 0,5013 & 0,4267 \\
+        \hline
+    \end{tabular}
+    \vspace{0.2cm}
+    \caption{Kết quả retrieval tổng thể trên 600 câu hỏi benchmark ở cấu hình no-rerank}
+    \label{tab:retrieval-overall}
+\end{table}
+
+Để quan sát độ ổn định của retriever theo từng nhóm dữ liệu, Bảng \ref{tab:retrieval-book-grade} báo cáo ba độ đo đại diện là Hit@1, Hit@10 và MRR@10 theo từng cặp bộ sách -- khối lớp. Kết quả cho thấy nhóm CD-11 đạt tốt nhất với Hit@1 bằng 0,90 và MRR@10 bằng 0,9367, trong khi CD-10 và KNTT-11 là hai nhóm khó hơn ở mức xếp hạng đầu. Dù vậy, tất cả các nhóm đều đạt Hit@10 từ 0,97 trở lên, cho thấy vấn đề chính không nằm ở việc bỏ sót hoàn toàn bài học đúng mà chủ yếu ở việc đẩy bài học đó lên đủ cao ở top đầu.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|p{0.22\textwidth}|>{\centering\arraybackslash}p{0.16\textwidth}|>{\centering\arraybackslash}p{0.16\textwidth}|>{\centering\arraybackslash}p{0.16\textwidth}|}
+        \hline
+        \textbf{Nhóm dữ liệu} & \textbf{Hit@1} & \textbf{Hit@10} & \textbf{MRR@10} \\
+        \hline
+        CD-10 & 0,7000 & 0,9700 & 0,8086 \\
+        \hline
+        CD-11 & 0,9000 & 0,9900 & 0,9367 \\
+        \hline
+        CD-12 & 0,7700 & 0,9800 & 0,8427 \\
+        \hline
+        KNTT-10 & 0,7400 & 0,9800 & 0,8417 \\
+        \hline
+        KNTT-11 & 0,7000 & 1,0000 & 0,8132 \\
+        \hline
+        KNTT-12 & 0,7600 & 0,9700 & 0,8479 \\
+        \hline
+    \end{tabular}
+    \vspace{0.2cm}
+    \caption{Kết quả retrieval no-rerank theo từng nhóm bộ sách và khối lớp}
+    \label{tab:retrieval-book-grade}
+\end{table}
+
+Về thời gian xử lý, toàn bộ 600 câu hỏi được đánh giá trong khoảng 59,7 giây ở cấu hình no-rerank, tương đương trung bình xấp xỉ 0,10 giây cho mỗi truy vấn retrieval trong điều kiện chạy benchmark cục bộ. Con số này cho thấy cấu hình retriever hiện tại đủ nhẹ để mở rộng cho các thí nghiệm tiếp theo. Riêng cấu hình with-rerank vẫn chưa có số liệu hoàn chỉnh tại thời điểm viết báo cáo, do đó phần so sánh trước/sau rerank sẽ được cập nhật sau khi quá trình chạy đầy đủ trên toàn bộ benchmark hoàn tất.
+
+\section{Kết quả đánh giá generation và thảo luận}
+
+Đối với generation, đồ án sử dụng lại kết quả RAGAS đã được chạy trên 246 mẫu hỏi đáp. Các độ đo trung bình thu được gồm Faithfulness bằng 0,9757, Answer Relevancy bằng 0,8571, Context Precision bằng 0,8555 và Context Recall bằng 0,9593. Đồng thời, thời gian phản hồi trung bình của retriever là 4,579 giây, của bước sinh câu trả lời là 1,979 giây và của toàn bộ pipeline là 6,558 giây. Các số liệu này được tóm tắt trong Bảng \ref{tab:generation-ragas}.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|p{0.50\textwidth}|>{\centering\arraybackslash}p{0.24\textwidth}|}
+        \hline
+        \textbf{Chỉ số đánh giá} & \textbf{Giá trị trung bình} \\
+        \hline
+        Faithfulness & 0,9757 \\
+        \hline
+        Answer Relevancy & 0,8571 \\
+        \hline
+        Context Precision & 0,8555 \\
+        \hline
+        Context Recall & 0,9593 \\
+        \hline
+        Thời gian retriever (giây) & 4,579 \\
+        \hline
+        Thời gian generator (giây) & 1,979 \\
+        \hline
+        Tổng thời gian pipeline (giây) & 6,558 \\
+        \hline
+    \end{tabular}
+    \vspace{0.2cm}
+    \caption{Kết quả đánh giá generation theo RAGAS trên 246 mẫu}
+    \label{tab:generation-ragas}
+\end{table}
+
+Kết quả ở Bảng \ref{tab:generation-ragas} cho thấy hai điểm đáng chú ý. Thứ nhất, \textit{faithfulness} và \textit{context recall} đều ở mức cao, cho thấy khi retriever cung cấp được ngữ cảnh phù hợp, mô hình có xu hướng bám tốt vào nguồn và ít bịa thông tin ngoài tài liệu. Thứ hai, \textit{answer relevancy} và \textit{context precision} thấp hơn một bậc, phản ánh rằng chất lượng câu trả lời vẫn còn phụ thuộc mạnh vào việc sắp xếp đúng các chunk giá trị nhất ở đầu danh sách context. Nhận xét này cũng phù hợp với kết quả retrieval no-rerank ở Mục 4.8: bài học đúng thường đã được tìm thấy, nhưng thứ hạng giữa các chunk trong cùng lesson vẫn còn dư địa để cải thiện.
+
+Từ hai nhóm kết quả trên, có thể rút ra rằng cấu hình hiện tại đã chứng minh được tính khả thi của hướng tiếp cận RAG trên dữ liệu SGK Tin học THPT. Retrieval ở mức lesson key hoạt động tốt ngay cả khi chưa áp dụng rerank đầy đủ trên benchmark 600 câu hỏi, trong khi generation đạt mức trung thực cao trên tập RAGAS đã có. Hạn chế lớn nhất tại thời điểm này là phần đối chứng with-rerank vẫn chưa hoàn tất, nên chưa thể kết luận định lượng mức cải thiện thực tế của cross-encoder trên benchmark mới. Đây cũng là hạng mục cần được bổ sung đầu tiên khi cập nhật lại chương thực nghiệm trong các bản sau.
+
+Tóm lại, Chương 4 đã trình bày việc hiện thực hóa hệ thống từ dữ liệu SGK đến pipeline hỏi đáp hoàn chỉnh, đồng thời mô tả cách xây dựng benchmark và cách tổ chức đánh giá riêng cho retrieval và generation. Các kết quả hiện có cho thấy hệ thống đạt hiệu quả tốt ở cả khả năng truy xuất bài học đúng lẫn khả năng sinh câu trả lời bám nguồn. Phần kết quả với rerank chưa hoàn tất được giữ mở có chủ đích, nhằm bảo đảm rằng các kết luận trong chương chỉ dựa trên những số liệu đã thực sự được chạy và kiểm chứng.
 
 \end{document}
