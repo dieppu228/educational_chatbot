@@ -1,0 +1,28 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+\chapter*{DANH MỤC CÔNG THỨC}
+\addcontentsline{toc}{chapter}{DANH MỤC CÔNG THỨC}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|p{0.18\textwidth}|p{0.52\textwidth}|>{\centering\arraybackslash}p{0.12\textwidth}|}
+\hline
+\textbf{Công thức} & \textbf{Nội dung} & \textbf{Trang} \\
+\hline
+(\ref{eq:tf}) & Tần suất từ (\textit{term frequency}) & \pageref{eq:tf} \\
+\hline
+(\ref{eq:idf}) & Tần suất nghịch đảo tài liệu (\textit{inverse document frequency}) & \pageref{eq:idf} \\
+\hline
+(\ref{eq:bm25}) & Hàm tính điểm BM25 cho truy vấn và chunk & \pageref{eq:bm25} \\
+\hline
+(\ref{eq:cosine-sim}) & Độ tương đồng cosine giữa hai vector embedding & \pageref{eq:cosine-sim} \\
+\hline
+(\ref{eq:rrf}) & Hàm hợp nhất thứ hạng Reciprocal Rank Fusion (RRF) & \pageref{eq:rrf} \\
+\hline
+(\ref{eq:rerank-score}) & Hàm chấm điểm của cross-encoder reranker & \pageref{eq:rerank-score} \\
+\hline
+\end{tabular}
+\end{center}
+
+\end{document}

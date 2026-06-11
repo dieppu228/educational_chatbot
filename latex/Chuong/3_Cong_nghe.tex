@@ -79,7 +79,7 @@ Trong phạm vi chương này, các công nghệ trên chỉ được trình bà
 
 \section{Nền tảng tri thức: tiền xử lý, chunking và lập chỉ mục}
 
-Mọi đầu ra của hệ thống đều được grounding trên nội dung sách giáo khoa, do đó chất lượng của tầng tri thức nền ảnh hưởng trực tiếp đến hiệu quả truy hồi và sinh nội dung. Phần này mô tả quy trình biến văn bản SGK thô thành một tập chunk có cấu trúc, được embedding và lập chỉ mục để phục vụ truy hồi. Hình~\ref{fig:method-ingest-pipeline} tóm tắt quy trình này, trong đó bước chunking theo tiêu đề (heading-based chunking) là thành phần trung tâm.
+Mọi đầu ra của hệ thống đều được grounding trên nội dung sách giáo khoa, do đó chất lượng của tầng tri thức nền ảnh hưởng trực tiếp đến hiệu quả truy hồi và sinh nội dung. Phần này mô tả quy trình biến văn bản SGK thô thành một tập chunk có cấu trúc, được embedding và lập chỉ mục để phục vụ truy hồi. Trong toàn bộ pipeline này, bước chunking theo tiêu đề (heading-based chunking) giữ vai trò trung tâm vì nó quyết định ranh giới của đơn vị tri thức được đưa vào các bước xử lý sau.
 
 Về bản chất, tầng tri thức của hệ thống không chỉ là một kho lưu trữ dữ liệu tĩnh mà là kết quả của một pipeline tiền xử lý nhiều bước. Mỗi bước trong pipeline này tác động trực tiếp đến chất lượng truy hồi ở giai đoạn sau. Nếu ranh giới chunk không phù hợp, mô hình embedding sẽ biểu diễn sai đơn vị kiến thức; nếu metadata không đầy đủ, tầng truy hồi sẽ khó giới hạn đúng phạm vi lớp, bộ sách và bài học; nếu chỉ mục vector không đồng bộ với dữ liệu nguồn, kết quả truy xuất có thể mất tính ổn định giữa các lần chạy thực nghiệm. Vì vậy, việc mô tả rõ quy trình xây dựng tầng tri thức là cần thiết trước khi phân tích cơ chế retrieval ở mục kế tiếp.
 
@@ -574,8 +574,6 @@ Xét về mặt hiện thực hệ thống, kiến trúc \textit{Supervisor--Spe
 
 Toàn bộ workflow được duy trì trên một \textit{workflow state} dùng chung. Trạng thái này chứa không chỉ các trường đầu vào như \texttt{task\_type}, \texttt{query}, \texttt{topic}, \texttt{grade}, \texttt{book} và tập \texttt{rag\_chunks}, mà còn lưu các artifact trung gian như \texttt{outline\_payload}, \texttt{content\_payload}, \texttt{media\_payload}, \texttt{quiz\_payload}, \texttt{quality\_review} và một \textit{artifact registry} để supervisor có thể tra cứu kết quả theo \texttt{artifact\_type}. Cấu trúc trạng thái này đóng vai trò là lớp bộ nhớ thao tác của riêng pipeline sinh nội dung, tách biệt với \textit{session state} ở tầng điều phối đã trình bày trước đó.
 
-Hình \ref{fig:method-content-multi-agent} mô tả quan hệ giữa supervisor, các specialist agent và bộ hợp nhất kết quả. Ở đỉnh sơ đồ là bộ điều phối nội dung, chịu trách nhiệm quyết định bước nào sẽ được gọi kế tiếp. Ở tầng dưới là các specialist agent tương ứng với các nhiệm vụ con: lập dàn ý, viết nội dung, gợi ý media và sinh đánh giá nhúng. Điểm cần nhấn mạnh là các agent này không giao tiếp trực tiếp với nhau; mọi yêu cầu đều đi qua supervisor. Cách tổ chức này giữ cho luồng điều khiển tập trung tại một điểm, nhờ đó dễ áp dụng các ràng buộc thứ tự như ``phải có outline trước khi viết nội dung'' hoặc ``chỉ được hậu kiểm sau khi đã hợp nhất kết quả''.
-
 Trong triển khai hiện tại, cơ chế điều phối được hiện thực bằng các \textit{tool adapter} gắn với supervisor. Chúng vừa đóng vai trò cầu nối để chuyển từ quyết định của supervisor sang một \textit{AgentTask} cụ thể, vừa đảm bảo rằng dữ liệu đầu vào cho từng specialist luôn tuân theo hợp đồng tương ứng. Chẳng hạn, bước \texttt{generate\_content} sẽ bị chặn nếu chưa có \texttt{outline\_payload}; bước \texttt{merge\_results} chỉ được phép chạy sau khi ít nhất outline và content đã sẵn sàng; còn bước \texttt{check\_quality} chỉ được kích hoạt sau khi artifact cuối đã được hợp nhất. Nhờ vậy, phần suy luận bằng mô hình ngôn ngữ được giữ trong phạm vi ``quyết định dùng tác tử nào'', còn điều kiện hợp lệ của workflow vẫn được bảo vệ bằng logic xác định.
 
 \begin{figure}[H]
@@ -594,30 +592,33 @@ Trong triển khai hiện tại, cơ chế điều phối được hiện thực
     ]
 
     \node (supervisor) [supervisor] {\textbf{Bộ điều phối nội dung}\\LangGraph lập kế hoạch / định tuyến\\{\scriptsize phân công tác vụ}};
-    \node (planner) [agent, below left=1.35cm and 4.15cm of supervisor] {Agent lập kế hoạch\\dàn ý và trình tự học};
-    \node (draft) [agent, below=1.35cm of supervisor] {Agent viết nội dung\\nội dung chi tiết};
-    \node (media) [agent, below right=1.35cm and 4.15cm of supervisor] {Agent gợi ý media\\hình ảnh và tài nguyên};
-    \node (assessment) [agent, below=1.05cm of draft] {Agent đánh giá nhúng\\câu hỏi và hoạt động};
-    \node (merge) [tool, below=1.15cm of assessment] {\textbf{Bộ hợp nhất}\\service/tool xác định\\{\scriptsize kết quả từ các agent}};
+    \node (planner) [agent, below left=1.5cm and 6.05cm of supervisor] {Agent lập kế hoạch\\dàn ý và trình tự học};
+    \node (draft) [agent, below left=1.5cm and 1.95cm of supervisor] {Agent viết nội dung\\nội dung chi tiết};
+    \node (assessment) [agent, below right=1.5cm and 1.95cm of supervisor] {Agent đánh giá nhúng\\câu hỏi và hoạt động};
+    \node (media) [agent, below right=1.5cm and 6.05cm of supervisor] {Agent gợi ý media\\hình ảnh và tài nguyên};
+    \node (merge) [tool, below=4.0cm of supervisor] {\textbf{Bộ hợp nhất}\\service/tool xác định\\{\scriptsize kết quả từ các agent}};
     \node (quality) [agent, below=1.1cm of merge] {Agent hậu kiểm\\kiểm tra chất lượng};
     \node (output) [outnode, below=1.0cm of quality] {\textbf{slide/giáo án hoàn chỉnh}};
 
-    \draw [arrow] (supervisor.south) -- ++(0,-0.35) -| (planner.north);
-    \draw [arrow] (supervisor) -- (draft);
-    \draw [arrow] (supervisor.south) -- ++(0,-0.35) -| (media.north);
-    \draw [arrow] (draft) -- (assessment);
-    \draw [arrow] (planner.south) to[out=-90,in=165] (merge.west);
-    \draw [arrow] (assessment) -- (merge);
-    \draw [arrow] (media.south) to[out=-90,in=15] (merge.east);
+    \draw [arrow] (supervisor.south) -- ++(0,-0.4) -| (planner.north);
+    \draw [arrow] (supervisor.south) -- ++(0,-0.4) -| (draft.north);
+    \draw [arrow] (supervisor.south) -- ++(0,-0.4) -| (assessment.north);
+    \draw [arrow] (supervisor.south) -- ++(0,-0.4) -| (media.north);
+    \draw [arrow] (planner.south) to[out=-90,in=170] (merge.west);
+    \draw [arrow] (draft.south) to[out=-90,in=130] (merge.north west);
+    \draw [arrow] (assessment.south) to[out=-90,in=50] (merge.north east);
+    \draw [arrow] (media.south) to[out=-90,in=10] (merge.east);
     \draw [arrow] (merge) -- (quality);
     \draw [arrow] (quality) -- (output);
-    \draw [arrow, dashed, rounded corners=12pt] (quality.west) -- ++(-4.0,0) |- (supervisor.west);
+    \draw [arrow, dashed, rounded corners=12pt] (quality.east) -- ++(6.8,0) |- (supervisor.east);
 
     \end{tikzpicture}
     }
-    \caption{Kiến trúc đa tác tử cho bài toán sinh slide và giáo án}
+\caption{Kiến trúc đa tác tử cho bài toán sinh slide và giáo án}
     \label{fig:method-content-multi-agent}
 \end{figure}
+
+Hình \ref{fig:method-content-multi-agent} mô tả quan hệ giữa supervisor, các specialist agent và bộ hợp nhất kết quả. Ở đỉnh sơ đồ là bộ điều phối nội dung, chịu trách nhiệm quyết định bước nào sẽ được gọi kế tiếp. Ở tầng dưới là các specialist agent tương ứng với các nhiệm vụ con: lập dàn ý, viết nội dung, gợi ý media và sinh đánh giá nhúng. Điểm cần nhấn mạnh là các agent này không giao tiếp trực tiếp với nhau; mọi yêu cầu đều đi qua supervisor. Cách tổ chức này giữ cho luồng điều khiển tập trung tại một điểm, nhờ đó dễ áp dụng các ràng buộc thứ tự như ``phải có outline trước khi viết nội dung'' hoặc ``chỉ được hậu kiểm sau khi đã hợp nhất kết quả''.
 
 \subsection{Các tác tử chuyên biệt trong pipeline sinh nội dung}
 
@@ -627,15 +628,13 @@ Trong pipeline hiện tại, \textit{PedagogyPlannerAgent} là tác tử đượ
 
 \textit{MediaResearchAgent} giữ vai trò bổ trợ. Tác tử này không làm thay đổi luồng kiến thức chính của bài giảng mà chỉ sinh các gợi ý media như ảnh minh họa hoặc tài nguyên trực quan phù hợp với loại slide. Kết quả của bước này được lưu dưới dạng \texttt{media\_payload}, gồm media cho trang mở đầu và media gắn với các slide nội dung. Trong trường hợp bước này thất bại, workflow vẫn có thể tiếp tục vì media được xem là thành phần tăng cường chứ không phải điều kiện bắt buộc để hoàn thành artifact.
 
-\textit{ContentAssessmentAgent} chịu trách nhiệm sinh phần đánh giá nhúng (\textit{embedded assessment}) thay vì tạo một bài kiểm tra độc lập. Đầu vào của tác tử này là chủ đề và ngữ cảnh bài học; đầu ra là \texttt{quiz\_payload} chứa tập câu hỏi có thể gắn vào slide luyện tập hoặc vào phần cuối giáo án. Cách tổ chức này phù hợp với mục tiêu sử dụng thực tế của slide bài giảng, nơi thành phần đánh giá thường chỉ là một phần nhỏ trong artifact tổng thể. Tương tự media, nếu bước này không thành công thì supervisor vẫn có thể hoàn tất workflow bằng cách bỏ qua hoặc giảm nhẹ phần đánh giá.
+\textit{ContentAssessmentAgent} chịu trách nhiệm sinh phần đánh giá nhúng (\textit{embedded assessment}) thay vì tạo một bài kiểm tra độc lập. Đầu vào của tác tử này là chủ đề và ngữ cảnh bài học; đầu ra là \texttt{quiz\_payload} chứa tập câu hỏi có thể gắn vào slide luyện tập hoặc vào phần cuối giáo án. Về mặt thiết kế, đây không phải là một năng lực tách biệt hoàn toàn khỏi nhánh quiz độc lập, mà là cơ chế tái sử dụng năng lực sinh câu hỏi đã có của hệ thống trong một ngữ cảnh artifact dài hơn. Khác biệt chủ yếu nằm ở mục tiêu sử dụng và dạng đóng gói đầu ra: ở nhánh quiz độc lập, kết quả được giữ như một workflow riêng để phục vụ làm bài, chấm đáp án và theo dõi tiến độ; còn trong nhánh slide hoặc giáo án, cùng loại đầu ra câu hỏi được rút gọn và nhúng vào artifact như một thành phần sư phạm bổ trợ. Cách tổ chức này phù hợp với mục tiêu sử dụng thực tế của slide bài giảng, nơi thành phần đánh giá thường chỉ là một phần nhỏ trong artifact tổng thể. Tương tự media, nếu bước này không thành công thì supervisor vẫn có thể hoàn tất workflow bằng cách bỏ qua hoặc giảm nhẹ phần đánh giá.
 
 \subsection{Tổng hợp kết quả, kiểm soát chất lượng và con người trong vòng lặp}
 
 Sau khi các specialist agent hoàn thành phần việc của mình, hệ thống không giao cho một mô hình ngôn ngữ khác nhiệm vụ ``viết lại toàn bộ'' artifact cuối. Thay vào đó, bước hợp nhất được thực hiện bởi một dịch vụ xác định (\textit{deterministic service}) là \textit{SlideMerger}. Dịch vụ này lấy \texttt{outline\_payload} làm khung chuẩn, sau đó lần lượt ghép nội dung chi tiết, media và câu hỏi tương ứng vào từng slide theo \texttt{slide\_id}. Cách hợp nhất này giúp bảo toàn cấu trúc đã được lập kế hoạch từ trước, đồng thời hạn chế nguy cơ một lượt gọi mô hình cuối cùng làm thay đổi ngoài ý muốn thứ tự hoặc nội dung của các phần đã được specialist tạo ra.
 
 Về mặt chất lượng, hệ thống áp dụng hai lớp kiểm soát bổ sung nhau. Lớp thứ nhất là các kiểm tra cấu trúc mang tính xác định, chẳng hạn kiểm tra sự hiện diện của các loại slide tối thiểu, kiểm tra việc thiếu tiêu đề hoặc thiếu \texttt{source\_chunk\_ids} ở các slide cần grounding. Lớp thứ hai là \textit{QualityReviewerAgent}, một tác tử hậu kiểm dùng mô hình ngôn ngữ để đánh giá artifact đầu ra theo rubric tổng quát và trả về \texttt{quality\_review}. Kết quả hậu kiểm không chỉ gồm điểm số và các vấn đề phát hiện được, mà còn chỉ ra \textit{reflection action} tương ứng, ví dụ chấp nhận, yêu cầu sửa outline, yêu cầu sửa content, yêu cầu sửa phần đánh giá hoặc chặn kết quả để cần người duyệt.
-
-Hình \ref{fig:method-generation-quality} mô tả mối quan hệ giữa nhánh sinh nội dung và cơ chế hậu kiểm. Trong nhánh slide/giáo án, bộ điều phối nội dung gọi lần lượt các specialist, chuyển kết quả sang khối hợp nhất, rồi mới đưa artifact cuối qua lớp hậu kiểm chất lượng. Mũi tên nét đứt quay ngược từ khối hậu kiểm về bộ điều phối biểu diễn \textit{reflection loop}: nếu reviewer xác định đầu ra cần chỉnh sửa, supervisor sẽ phát sinh một \texttt{revision\_instruction} và kích hoạt lại đúng bước liên quan thay vì chạy lại toàn bộ pipeline từ đầu. Giới hạn số vòng phản tư được đặt nhỏ để kiểm soát chi phí và độ trễ.
 
 Ngoài hậu kiểm tự động, pipeline còn tích hợp \textit{human-in-the-loop} tại bước outline. Sau khi \textit{PedagogyPlannerAgent} sinh dàn ý ban đầu, workflow có thể tạm dừng ở trạng thái \textit{interrupt}. Người dùng được phép duyệt nguyên trạng hoặc chỉnh sửa outline trước khi supervisor tiếp tục gọi bước viết nội dung. Điểm chèn con người tại đây là hợp lý vì outline là nơi quyết định cấu trúc sư phạm tổng thể; một chỉnh sửa sớm ở giai đoạn này thường hiệu quả hơn so với can thiệp sau khi toàn bộ slide hoặc giáo án đã được sinh xong.
 
@@ -687,11 +686,13 @@ Ngoài hậu kiểm tự động, pipeline còn tích hợp \textit{human-in-the
 \label{fig:method-generation-quality}
 \end{figure}
 
+Hình \ref{fig:method-generation-quality} mô tả mối quan hệ giữa nhánh sinh nội dung và cơ chế hậu kiểm. Trong nhánh slide/giáo án, bộ điều phối nội dung gọi lần lượt các specialist, chuyển kết quả sang khối hợp nhất, rồi mới đưa artifact cuối qua lớp hậu kiểm chất lượng. Mũi tên nét đứt quay ngược từ khối hậu kiểm về bộ điều phối biểu diễn \textit{reflection loop}: nếu reviewer xác định đầu ra cần chỉnh sửa, supervisor sẽ phát sinh một \texttt{revision\_instruction} và kích hoạt lại đúng bước liên quan thay vì chạy lại toàn bộ pipeline từ đầu. Giới hạn số vòng phản tư được đặt nhỏ để kiểm soát chi phí và độ trễ.
+
 \subsection{Tái sử dụng kiến trúc cho các tác vụ sinh nội dung}
 
 Một mục tiêu thiết kế quan trọng của tầng sinh nội dung là không xây dựng hai pipeline tách rời cho slide và giáo án. Thay vào đó, hệ thống dùng chung một kiến trúc đa tác tử, trong đó khác biệt giữa hai tác vụ được điều khiển chủ yếu bởi biến \texttt{task\_type}. Giá trị này được truyền xuyên suốt từ đầu vào của \textit{ContentPipelineInput}, vào \textit{workflow state}, rồi đến từng \textit{AgentTask}. Nhờ đó, cùng một supervisor và cùng một tập specialist có thể thích nghi đầu ra cho hai loại artifact mà không cần nhân đôi logic orchestration.
 
-Việc tái sử dụng này thể hiện ở nhiều mức. Thứ nhất, cả hai tác vụ đều dùng chung tầng truy hồi, cùng cơ chế tổng hợp ngữ cảnh và cùng giao thức \textit{AgentTask}/\textit{AgentTaskResult}. Thứ hai, các specialist dùng chung hầu hết prompt và contract dữ liệu, chỉ thay đổi một số ràng buộc theo \texttt{task\_type}, chẳng hạn slide thường yêu cầu ngắn gọn hơn và ưu tiên phần luyện tập nhúng, trong khi giáo án có thể cần cấu trúc section dài hơn. Thứ ba, bước hậu kiểm và phản tư vẫn giữ nguyên logic, chỉ thay reviewer hoặc rubric tương ứng với loại artifact cần đánh giá.
+Việc tái sử dụng này thể hiện ở nhiều mức. Thứ nhất, cả hai tác vụ đều dùng chung tầng truy hồi, cùng cơ chế tổng hợp ngữ cảnh và cùng giao thức \textit{AgentTask}/\textit{AgentTaskResult}. Thứ hai, các specialist dùng chung hầu hết prompt và contract dữ liệu, chỉ thay đổi một số ràng buộc theo \texttt{task\_type}, chẳng hạn slide thường yêu cầu ngắn gọn hơn và ưu tiên phần luyện tập nhúng, trong khi giáo án có thể cần cấu trúc section dài hơn. Thứ ba, năng lực sinh quiz không bị tách rời khỏi nhánh sinh nội dung mà được tái sử dụng dưới dạng \textit{embedded assessment}, cho phép cùng một nền sinh câu hỏi phục vụ cả workflow quiz độc lập lẫn workflow slide/giáo án. Thứ tư, bước hậu kiểm và phản tư vẫn giữ nguyên logic, chỉ thay reviewer hoặc rubric tương ứng với loại artifact cần đánh giá.
 
 Khác biệt chủ yếu nằm ở giai đoạn đóng gói đầu ra. Với \texttt{task\_type=slide}, artifact sau khi hợp nhất có thể được chuyển tiếp sang \textit{SlideExportService} để xuất tệp PPTX. Với \texttt{task\_type=lesson\_plan}, pipeline vẫn dùng chung các bước sinh nội dung và hậu kiểm, nhưng không cần qua lớp xuất bản slide. Cách tổ chức này cho phép tái sử dụng phần lớn hạ tầng sinh nội dung, đồng thời vẫn giữ đủ linh hoạt để mở rộng thêm các loại artifact mới trong tương lai mà không phải thiết kế lại toàn bộ workflow.
 
@@ -699,17 +700,65 @@ Khác biệt chủ yếu nằm ở giai đoạn đóng gói đầu ra. Với \te
 
 \subsection{Đánh giá truy hồi}
 
-Trong đồ án này, retrieval là thành phần được đánh giá định lượng chính vì đây là bước quyết định chất lượng ngữ cảnh đầu vào cho toàn bộ pipeline RAG. Phương pháp đánh giá được tổ chức dưới dạng một benchmark hỏi đáp gắn với dữ liệu SGK, trong đó mỗi câu hỏi được liên kết với một bài học đích thông qua \\textit{lesson key}. Cách tổ chức này phù hợp với đặc thù dữ liệu của đồ án: một bài học thường được chia thành nhiều chunk, nên điều cần kiểm tra trước hết là hệ thống có truy xuất đúng bài học mục tiêu hay không, thay vì yêu cầu gán nhãn relevance chi tiết cho toàn bộ chunk trong kho tri thức.
+Trong đồ án này, retrieval là thành phần được đánh giá định lượng chính vì đây là bước quyết định chất lượng ngữ cảnh đầu vào cho toàn bộ pipeline RAG. Phương pháp đánh giá được tổ chức dưới dạng một benchmark hỏi đáp gắn với dữ liệu SGK, trong đó mỗi câu hỏi được liên kết với một bài học đích thông qua \textit{lesson key}. Cách tổ chức này phù hợp với đặc thù dữ liệu của đồ án: một bài học thường được chia thành nhiều chunk, nên điều cần kiểm tra trước hết là hệ thống có truy xuất đúng bài học mục tiêu hay không, thay vì yêu cầu gán nhãn relevance chi tiết cho toàn bộ chunk trong kho tri thức. Bộ benchmark này được xây dựng từ chính kho tri thức SGK đã xử lý và được dùng thống nhất cho các cấu hình retrieval khác nhau.
 
 Với mỗi truy vấn kiểm thử, một chunk được xem là đúng nếu metadata của nó khớp với bài học vàng theo các trường phạm vi như bộ sách, lớp, chủ đề và bài học. Trên cơ sở đó, đồ án sử dụng các độ đo Hit@$k$, Recall@$k$, Precision@$k$, MRR@$k$ và nDCG@$k$ để đánh giá chất lượng retrieval tại các mức $k$ khác nhau. Các độ đo này được dùng nhằm phản ánh ba khía cạnh bổ sung nhau: khả năng tìm thấy bài học đúng trong top-$k$, vị trí xuất hiện của kết quả đúng trong danh sách xếp hạng, và mức độ tập trung của các kết quả liên quan ở các thứ hạng đầu.
 
-Để tách riêng ảnh hưởng của retriever và reranker, quy trình đánh giá retrieval được chia thành hai cấu hình. Cấu hình \\textit{no-rerank} đo trực tiếp chất lượng của khối truy xuất ban đầu sau bước hợp nhất candidate. Cấu hình \\textit{with-rerank} dùng cùng tập candidate nhưng đánh giá lại sau khi áp dụng cross-encoder reranker. Cách tách này giúp xác định rõ reranker có thực sự cải thiện thứ hạng của các chunk liên quan hay không. Các số liệu thực nghiệm tương ứng được trình bày ở Chương 4.
+Benchmark retrieval của đồ án gồm tập câu hỏi kiểm thử được sinh bám theo nội dung SGK, kèm metadata phạm vi và bài học đích để đối chiếu. Bộ benchmark này bao phủ nhiều nhóm truy vấn như \textit{definition}, \textit{fact}, \textit{list}, \textit{compare}, \textit{process} và \textit{application}, qua đó cho phép quan sát chất lượng retrieval dưới nhiều kiểu diễn đạt khác nhau của học sinh. Đồng thời, benchmark được xây dựng theo hướng bao phủ toàn bộ các seed đã chọn từ kho tri thức, nên tập truy vấn kiểm thử không chỉ tập trung vào một vài bài đơn lẻ mà trải đều trên toàn bộ hai bộ sách, ba khối lớp và các chủ đề khác nhau trong chương trình. Nhờ đó, kết quả đánh giá retrieval phản ánh được hành vi của hệ thống trên phạm vi dữ liệu đầy đủ của đồ án, thay vì chỉ trên một tập con hẹp hoặc một vài bài học tiêu biểu.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|p{0.20\textwidth}|p{0.28\textwidth}|p{0.38\textwidth}|}
+        \hline
+        \textbf{Metric} & \textbf{Ý nghĩa} & \textbf{Mục đích sử dụng} \\
+        \hline
+        Hit@$k$ & Kiểm tra xem có ít nhất một kết quả đúng xuất hiện trong top-$k$ hay không & Đo khả năng truy xuất trúng bài học mục tiêu ở các mức cắt khác nhau \\
+        \hline
+        Recall@$k$ & Tỷ lệ kết quả liên quan được thu hồi trong top-$k$ & Đánh giá độ bao phủ của retriever đối với các chunk thuộc bài học đúng \\
+        \hline
+        Precision@$k$ & Tỷ lệ kết quả đúng trong top-$k$ & Đánh giá mức độ nhiễu của danh sách truy xuất \\
+        \hline
+        MRR@$k$ & Nghịch đảo thứ hạng của kết quả đúng đầu tiên & Đo mức độ hệ thống đưa kết quả đúng lên sớm đến đâu \\
+        \hline
+        nDCG@$k$ & Độ lợi tích lũy có chuẩn hóa theo thứ hạng & Đánh giá chất lượng sắp xếp tổng thể của danh sách retrieval \\
+        \hline
+    \end{tabular}
+    \vspace{0.2cm}
+    \caption{Các độ đo dùng cho đánh giá retrieval trong đồ án}
+    \label{tab:retrieval-metrics-method}
+\end{table}
+
+Để tách riêng ảnh hưởng của retriever và reranker, quy trình đánh giá retrieval được chia thành hai cấu hình. Cấu hình \textit{no-rerank} đo trực tiếp chất lượng của khối truy xuất ban đầu sau bước hợp nhất candidate. Cấu hình \textit{with-rerank} dùng cùng tập candidate nhưng đánh giá lại sau khi áp dụng cross-encoder reranker. Cách tách này giúp xác định rõ reranker có thực sự cải thiện thứ hạng của các chunk liên quan hay không, đồng thời cho phép so sánh công bằng giữa hai giai đoạn trước và sau xếp hạng lại trên cùng một tập truy vấn kiểm thử. Các số liệu thực nghiệm tương ứng được trình bày ở Chương 4.
 
 \subsection{Đánh giá chất lượng sinh}
 
-Khác với retrieval, chất lượng generation không được đánh giá chủ yếu bằng một độ đo duy nhất ở mức chunk hay lesson, mà được xem xét theo mức độ đúng nội dung, mức độ bám nguồn và mức độ phù hợp với câu hỏi của người học. Trong đồ án, phần đánh giá này được thực hiện theo hai hướng bổ trợ nhau. Hướng thứ nhất là sử dụng kết quả đánh giá tự động đã có sẵn bằng RAGAS để quan sát các tiêu chí như \\textit{faithfulness}, \\textit{answer relevancy}, \\textit{context precision} và \\textit{context recall}. Hướng thứ hai là đọc và phân tích đầu ra theo rubric thủ công khi cần xem xét sâu hơn các trường hợp lỗi hoặc các mẫu câu trả lời đặc thù.
+Khác với retrieval, chất lượng generation không được đánh giá chủ yếu bằng một độ đo duy nhất ở mức chunk hay lesson, mà được xem xét theo mức độ đúng nội dung, mức độ bám nguồn và mức độ phù hợp với câu hỏi của người học. Trong đồ án, phần đánh giá này được thực hiện theo hai hướng bổ trợ nhau. Hướng thứ nhất là sử dụng kết quả đánh giá tự động đã có sẵn bằng RAGAS để quan sát các tiêu chí như \textit{faithfulness}, \textit{answer relevancy}, \textit{context precision} và \textit{context recall}. Hướng thứ hai là đọc và phân tích đầu ra theo rubric thủ công khi cần xem xét sâu hơn các trường hợp lỗi hoặc các mẫu câu trả lời đặc thù.
 
-Điểm cần nhấn mạnh là node \\textit{validate} hoặc \\textit{quality reviewer} xuất hiện trong pipeline runtime không được dùng như bộ chấm điểm chính cho generation trong thực nghiệm. Vai trò của chúng là kiểm soát đầu ra khi hệ thống vận hành, còn đánh giá trong luận văn vẫn phải dựa trên benchmark, tiêu chí đã xác định trước và kết quả kiểm chứng tách biệt với pipeline chạy thực tế. Nhờ đó, phần đánh giá generation giữ được ranh giới rõ giữa cơ chế kiểm soát runtime và bằng chứng thực nghiệm.
+Benchmark generation được tổ chức ở mức cặp \textit{câu hỏi -- câu trả lời tham chiếu}, kèm theo ngữ cảnh truy xuất mà hệ thống đã sử dụng để sinh đáp án. Cách tổ chức này cho phép đánh giá không chỉ chất lượng đầu ra cuối cùng mà còn cả mối quan hệ giữa chất lượng câu trả lời và mức độ phù hợp của context được đưa vào mô hình.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|p{0.28\textwidth}|p{0.25\textwidth}|p{0.33\textwidth}|}
+        \hline
+        \textbf{Metric} & \textbf{Ý nghĩa} & \textbf{Mục đích sử dụng} \\
+        \hline
+        Faithfulness & Mức độ câu trả lời bám vào ngữ cảnh đã truy xuất & Kiểm tra nguy cơ mô hình bịa thêm thông tin ngoài nguồn \\
+        \hline
+        Answer Relevancy & Mức độ câu trả lời đi đúng trọng tâm câu hỏi & Đánh giá tính phù hợp của đáp án với nhu cầu hỏi đáp của người học \\
+        \hline
+        Context Precision & Mức độ các chunk quan trọng được ưu tiên trong context & Đánh giá chất lượng ngữ cảnh từ góc nhìn hỗ trợ generation \\
+        \hline
+        Context Recall & Mức độ context bao phủ thông tin cần thiết cho đáp án & Kiểm tra xem retriever đã cung cấp đủ cơ sở để sinh câu trả lời hay chưa \\
+        \hline
+    \end{tabular}
+    \vspace{0.2cm}
+    \caption{Các độ đo dùng cho đánh giá chất lượng sinh trong đồ án}
+    \label{tab:generation-metrics-method}
+\end{table}
+
+Điểm cần nhấn mạnh là node \textit{validate} hoặc \textit{quality reviewer} xuất hiện trong pipeline runtime không được dùng như bộ chấm điểm chính cho generation trong thực nghiệm. Vai trò của chúng là kiểm soát đầu ra khi hệ thống vận hành, còn đánh giá trong luận văn vẫn phải dựa trên benchmark, tiêu chí đã xác định trước và kết quả kiểm chứng tách biệt với pipeline chạy thực tế. Nhờ đó, phần đánh giá generation giữ được ranh giới rõ giữa cơ chế kiểm soát runtime và bằng chứng thực nghiệm.
 
 \section{Kết chương}
 

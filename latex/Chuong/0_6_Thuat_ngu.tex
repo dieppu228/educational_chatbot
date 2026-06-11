@@ -4,25 +4,38 @@
 \addcontentsline{toc}{chapter}{Danh mục thuật ngữ chuyên ngành}
 \chapter*{Danh mục thuật ngữ chuyên ngành}
 
-\begin{longtable}{ p{3.5cm} p{10cm} }
+\begin{longtable}{p{3.7cm} p{9.8cm}}
 \hline
 \textbf{Thuật ngữ} & \textbf{Giải thích ý nghĩa} \\ \hline
-\textbf{Agent} & \textit{(Tác tử)} - Hệ thống tự trị có lõi là trí tuệ nhân tạo, có khả năng diễn dịch yêu cầu, lập suy luận và sử dụng công cụ để thực thi hành động. \\
-\textbf{Breadcrumb} & \textit{(Đường dẫn phân cấp)} - Chuỗi ngữ cảnh ngắn ghi lại vị trí của một chunk trong cấu trúc tài liệu (dạng chủ đề > bài > mục), được ghép vào nội dung để phân biệt các chunk có câu chữ tương tự nhưng thuộc bài khác nhau. \\
-\textbf{Chunk} & \textit{(Phân đoạn)} - Một đoạn văn bản có ý nghĩa hoàn chỉnh được cắt nhỏ từ tài liệu gốc, có kích thước vừa vặn với bộ nhớ của mô hình ngôn ngữ. \\
-\textbf{Chunking} & \textit{(Phân mảnh dữ liệu)} - Kỹ thuật chia nhỏ các tài liệu quy mô lớn thành các chunk nhằm thuận tiện cho việc lập chỉ mục và tìm kiếm thông tin. \\
-\textbf{Context Window} & \textit{(Cửa sổ ngữ cảnh)} - Giới hạn tối đa số lượng từ (hoặc token) mà một LLM có thể tiếp nhận và ghi nhớ trong một phiên xử lý duy nhất. \\
-\textbf{Embedding} & \textit{(Biểu diễn Vector/Nhúng)} - Kỹ thuật mã hóa ngôn ngữ tự nhiên thành các vector số học có độ phân giải cao, giúp máy tính có thể tính toán đo lường mức độ tương đồng ý nghĩa. \\
-\textbf{Hallucination} & \textit{(Hiện tượng Ảo giác)} - Trạng thái mà mô hình ngôn ngữ lớn đưa ra những câu trả lời có hệ thống vẻ ngoài rất tự tin nhưng hoàn toàn sai sự thật hoặc thiếu căn cứ. \\
-\textbf{Metadata} & \textit{(Siêu dữ liệu)} - Các thẻ thông tin đi kèm (như Tên bài học, Chương, Chủ đề) nhằm bổ trợ và cung cấp căn cứ nguồn gốc cho các chunk dữ liệu. \\
-\textbf{Multi-Agent} & \textit{(Đa tác tử)} - Một hệ thống phức hợp nơi nhiều tác tử (agent) hoạt động song song hoặc phối hợp nhằm giải tỏa áp lực của một tác vụ quá lớn. \\
-\textbf{Prompt} & \textit{(Chỉ thị)} - Câu lệnh hoặc ngữ cảnh đầu vào hướng dẫn mô hình ngôn ngữ lớn thực hiện trả lời, thiết lập phong cách hay xuất ra bằng định dạng nhất định. \\
-\textbf{Reranker} & \textit{(Bộ xếp hạng lại)} - Mô hình máy học nâng cao làm nhiệm vụ rà soát, tinh chỉnh thứ tự các kết quả tìm ráp ban đầu để đẩy văn bản có liên đới chặt chẽ nhất lên cực đỉnh. \\
-\textbf{Retriever} & \textit{(Bộ truy xuất)} - Thành phần thuật toán thực hiện tìm kiếm, quét qua toàn bộ cơ sở dữ liệu Vector để lấy ra cụm tài liệu thô gần khớp với truy vấn người dùng. \\
-\textbf{Token} & \textit{(Đơn vị cơ sở)} - Thành phần nhỏ nhất của một đoạn văn bản (có thể là một từ, âm tiết, hoặc cụm ký tự) mà máy tính có thể thể tách ra để xử lý. \\
-\textbf{Vector Database} & \textit{(Cơ sở dữ liệu Vector)} - Cơ sở dữ liệu chuyên dụng được thiết kế nhằm lưu giữ và truy vấn tốc độ cao đối với dữ liệu kiểu vector đa chiều. \\
-\textbf{Underthesea} & \textit{(Thư viện NLP tiếng Việt)} - Một bộ công cụ mã nguồn mở phụ vụ mạnh mẽ cho nhiều bài toán xử lý ngôn ngữ tự nhiên tiếng Việt, nổi bật là tách từ (Word Segmentation). \\
-\textbf{Word Segmentation} & \textit{(Tách từ)} - Kỹ thuật phân tách chuỗi văn bản thành hệ thống các từ vựng hợp cấu trúc, đặc biệt quan trọng với ngôn ngữ không có định danh ranh giới sẵn bằng khoảng trắng (ví dụ từ ghép tiếng Việt). \\
+\textbf{Agent} & Tác tử phần mềm có khả năng tiếp nhận mục tiêu, sử dụng ngữ cảnh và công cụ để thực hiện một nhiệm vụ xác định trong hệ thống. \\
+\textbf{Adaptive retrieval} & Cơ chế lựa chọn chiến lược truy xuất theo đặc trưng truy vấn thay vì dùng một quy trình retrieval cố định cho mọi câu hỏi. \\
+\textbf{Artifact} & Đầu ra trung gian hoặc đầu ra cuối của một bước xử lý, chẳng hạn dàn ý, nội dung chi tiết, câu hỏi đánh giá hoặc tệp trình chiếu. \\
+\textbf{Breadcrumb} & Chuỗi thông tin phân cấp ngắn mô tả vị trí của một chunk trong cấu trúc SGK, thường theo dạng chủ đề, bài học và mục. \\
+\textbf{Chunk} & Đơn vị văn bản được tách ra từ tài liệu gốc để phục vụ lập chỉ mục, truy xuất và dựng ngữ cảnh cho mô hình. \\
+\textbf{Chunking} & Quá trình chia tài liệu thành các chunk có kích thước và ranh giới phù hợp với mục tiêu retrieval và generation. \\
+\textbf{Context window} & Giới hạn số lượng token mà mô hình ngôn ngữ có thể tiếp nhận trong một lượt suy luận. \\
+\textbf{Cross-encoder reranker} & Mô hình xếp hạng lại đánh giá trực tiếp cặp truy vấn--tài liệu để sắp xếp lại danh sách candidate sau bước truy xuất ban đầu. \\
+\textbf{Embedding} & Biểu diễn vector số của văn bản trong không gian ngữ nghĩa, cho phép so sánh mức độ tương đồng giữa các câu hỏi và tài liệu. \\
+\textbf{Grounding} & Cơ chế ràng buộc đầu ra của mô hình ngôn ngữ vào tập nguồn đã truy xuất nhằm giảm nguy cơ sinh thông tin không có căn cứ. \\
+\textbf{Hallucination} & Hiện tượng mô hình ngôn ngữ sinh ra thông tin có vẻ hợp lý nhưng sai sự thật, sai ngữ cảnh hoặc không được hỗ trợ bởi nguồn dữ liệu. \\
+\textbf{Hybrid retrieval} & Cơ chế truy xuất kết hợp \textit{keyword search} và \textit{vector search} để tận dụng đồng thời tín hiệu từ khóa và tín hiệu ngữ nghĩa. \\
+\textbf{Keyword search} & Phương pháp truy xuất dựa trên mức độ trùng khớp từ khóa giữa truy vấn và tài liệu, điển hình là BM25. \\
+\textbf{Lesson key} & Định danh logic của một bài học dùng để đối chiếu trong benchmark retrieval, thường được tạo từ các trường metadata như bộ sách, lớp, chủ đề và bài học. \\
+\textbf{Metadata} & Tập thông tin mô tả đi kèm mỗi chunk, ví dụ bộ sách, lớp, chủ đề, bài học, cấp heading hoặc loại nội dung. \\
+\textbf{Multi-agent} & Kiến trúc nhiều tác tử phối hợp với nhau để giải quyết một tác vụ phức tạp thông qua phân chia vai trò. \\
+\textbf{Multi-intent} & Trường hợp một yêu cầu đầu vào đồng thời chứa nhiều ý định nghiệp vụ, chẳng hạn vừa hỏi đáp vừa yêu cầu sinh bài tập. \\
+\textbf{Multi-turn conversation} & Hội thoại nhiều lượt, trong đó mỗi lượt mới có thể phụ thuộc vào lịch sử tương tác và trạng thái đã tích lũy trước đó. \\
+\textbf{Prompt} & Chỉ thị đầu vào cung cấp cho mô hình ngôn ngữ hoặc mô hình thị giác-ngôn ngữ để điều khiển cách xử lý và định dạng đầu ra. \\
+\textbf{Query rewriting} & Bước viết lại truy vấn nhằm làm rõ ngữ cảnh, chuẩn hóa phạm vi hoặc tăng khả năng truy xuất đúng tài liệu liên quan. \\
+\textbf{Reflection loop} & Vòng phản tư trong đó đầu ra được hậu kiểm, sau đó hệ thống có thể yêu cầu sửa đổi một phần thay vì chạy lại toàn bộ pipeline. \\
+\textbf{Retriever} & Thành phần thực hiện truy xuất candidate ban đầu từ kho tri thức trước khi sang bước reranking hoặc generation. \\
+\textbf{Session state} & Trạng thái lưu theo phiên hội thoại, bao gồm lịch sử trao đổi, trạng thái quiz, trạng thái slide và các thông tin cần cho đa lượt tương tác. \\
+\textbf{Student profile} & Hồ sơ trạng thái học tập của người học, lưu các tín hiệu như kết quả làm quiz, câu sai và tiến độ theo chủ đề để hỗ trợ theo dõi hoặc cá nhân hóa. \\
+\textbf{Supervisor--Specialist} & Mô hình điều phối trong hệ đa tác tử, trong đó một supervisor phân công và hợp nhất kết quả từ các specialist agent chuyên trách từng nhiệm vụ con. \\
+\textbf{Token} & Đơn vị biểu diễn nhỏ mà mô hình dùng để mã hóa và xử lý văn bản. \\
+\textbf{Vector database} & Cơ sở dữ liệu chuyên dụng cho lưu trữ và truy vấn các vector embedding ở quy mô lớn. \\
+\textbf{Vector search} & Phương pháp truy xuất dựa trên độ tương đồng giữa embedding của truy vấn và embedding của tài liệu trong không gian vector. \\
+\textbf{Workflow state} & Trạng thái dùng chung trong một pipeline xử lý nhiều bước, đặc biệt quan trọng trong LangGraph và các workflow đa tác tử. \\
 \hline
 \end{longtable}
 

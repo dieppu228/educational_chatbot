@@ -1,33 +1,33 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Các chương trước đã trình bày nền tảng lý thuyết và kết quả triển khai của hệ thống. Chương này tập trung phân tích các giải pháp và đóng góp nổi bật của đồ án dưới góc nhìn thiết kế kỹ thuật. Trọng tâm không nằm ở việc liệt kê lại từng module, mà làm rõ các vấn đề khó đã gặp phải trong quá trình xây dựng trợ lý giáo dục dựa trên LLM và cách hệ thống giải quyết các vấn đề đó bằng kiến trúc có thể kiểm soát, dễ mở rộng và phù hợp với dữ liệu sách giáo khoa.
+Các chương trước đã trình bày nền tảng lý thuyết, phương pháp đề xuất và kết quả thực nghiệm của hệ thống. Chương này tập trung phân tích các giải pháp và đóng góp nổi bật của đồ án dưới góc nhìn thiết kế kỹ thuật. Trọng tâm không nằm ở việc mô tả lại từng module, mà làm rõ những quyết định thiết kế có ý nghĩa thực tiễn, các vấn đề khó phát sinh khi xây dựng trợ lý giáo dục dựa trên LLM và cách hệ thống giải quyết các vấn đề đó bằng một kiến trúc có thể kiểm soát, dễ mở rộng và phù hợp với dữ liệu sách giáo khoa.
 
-Các đóng góp chính gồm thiết kế điều phối request ở mức mã nguồn, cơ chế truy xuất thích nghi, nhận diện đa ý định, tách biệt pipeline quiz tương tác khỏi pipeline sinh nội dung dài, tổ chức content multi-agent cho slide và giáo án, chuẩn hóa giao tiếp nội bộ giữa các agent bằng A2A-lite, bổ sung HITL tại điểm quyết định quan trọng, và xây dựng các lớp kiểm tra chất lượng, session, trace phục vụ vận hành.
+Các đóng góp chính gồm xây dựng nền tảng tri thức cho SGK phân cấp, kết hợp hybrid retrieval với adaptive retrieval cho truy vấn giáo dục, thiết kế tầng điều phối hỗ trợ multi-intent và hội thoại đa lượt, tổ chức pipeline sinh nội dung đa tác tử có kiểm soát, và đưa ra một số quyết định thiết kế giúp hệ thống đạt được tính thực dụng trong triển khai.
 
-\section{Điều phối request bằng thin orchestrator}
+\section{Xây dựng nền tảng tri thức dựa trên chunk phân cấp và metadata}
 
 \subsection{Vấn đề cần giải quyết}
 
-Một hệ thống trợ lý giáo dục không chỉ nhận câu hỏi và gọi LLM để trả lời. Cùng một giao diện chat phải xử lý nhiều nhóm tác vụ khác nhau như hỏi đáp kiến thức, sinh câu hỏi luyện tập, chấm câu trả lời, ôn lại câu sai, tạo slide, tạo giáo án hoặc tiếp tục một pipeline đang chờ người dùng duyệt. Nếu đưa toàn bộ luồng xử lý vào một prompt lớn hoặc một agent tự quyết định mọi bước, hệ thống sẽ khó kiểm soát, khó gỡ lỗi và dễ gọi sai chức năng.
+Khác với nhiều bài toán hỏi đáp trên văn bản số hóa sẵn, dữ liệu đầu vào của đồ án là các tệp PDF sách giáo khoa. Đây không phải là nguồn văn bản sạch có thể đưa trực tiếp vào bước chunking và lập chỉ mục. Nếu quá trình chuyển đổi PDF sang text làm sai nội dung, sai heading hoặc mất cấu trúc bài học, chất lượng của toàn bộ các bước phía sau như chunking, retrieval và generation đều bị ảnh hưởng.
 
-Vấn đề phức tạp hơn khi mỗi request cần mang theo nhiều loại trạng thái. Một câu hỏi có thể phụ thuộc lịch sử hội thoại, phạm vi sách/lớp người dùng chọn, chủ đề đã học trước đó, quiz state hoặc slide state đang chờ resume. Vì vậy, hệ thống cần một lớp điều phối rõ ràng để tách phần hiểu ngôn ngữ tự nhiên khỏi phần thực thi nghiệp vụ.
+Khó khăn lớn ở bước này là đặc thù của SGK Tin học THPT. Tài liệu chứa văn bản lý thuyết, tiêu đề phân cấp, bảng, sơ đồ, câu hỏi cuối bài và nhiều đoạn mã nguồn minh họa. Trong quá trình thử nghiệm ban đầu, một số hướng OCR self-host cho tiếng Việt cho kết quả chưa ổn định: sai ký tự, sai cấu trúc heading, xử lý kém với bảng và sơ đồ, đồng thời khó chuyển các đoạn mã nguồn sang dạng văn bản phù hợp với pipeline truy xuất. Vì vậy, bài toán ở đây không chỉ là nhận dạng ký tự, mà là chuẩn hóa được một corpus có cấu trúc để phục vụ tầng tri thức.
 
 \subsection{Giải pháp}
 
-Đồ án thiết kế Orchestrator theo hướng thin controller. Orchestrator không chứa trực tiếp logic sinh câu hỏi, truy xuất tài liệu hoặc sinh slide, mà chủ yếu tạo \texttt{RequestContext}, phân tích ngữ cảnh, gọi \texttt{IntentRouter}, lập action plan và chuyển quyền thực thi cho \texttt{ExecutionDispatcher}. Cách làm này giữ Orchestrator ở vai trò điều phối, còn nghiệp vụ chi tiết được đóng gói trong các domain service hoặc handler.
+Đồ án tổ chức bước tiền xử lý dữ liệu theo hai pha. Pha thứ nhất chuyển từng trang PDF sang Markdown thô bằng một mô hình thị giác-ngôn ngữ có năng lực OCR mạnh hơn trên tiếng Việt. Trong prompt OCR, đầu ra được ràng buộc theo hướng giữ nguyên nội dung văn bản, loại bỏ ảnh và yếu tố trang trí, chuẩn hóa heading ở mức cơ bản, đồng thời thay các đoạn mã nguồn bằng mô tả chức năng ngắn gọn. Cách làm này phù hợp với định hướng của đồ án là truy xuất trên văn bản, không truy xuất trực tiếp trên ảnh.
 
-\texttt{RequestContext} là state object đi xuyên qua toàn bộ vòng đời request. Nó lưu câu hỏi gốc, truy vấn đã làm giàu, danh sách query dùng cho RAG, intent, action plan, phạm vi sách/lớp, session và debug steps. Nhờ đó, các module không cần truyền nhiều biến rời rạc hoặc phụ thuộc vào global state. Khi cần kiểm tra một lỗi, hệ thống có thể nhìn lại từng bước request đã đi qua.
+Pha thứ hai chuẩn hóa lại Markdown thô để thu được cấu trúc heading nhất quán cho toàn bộ SGK. Ở bước này, các phần như mục chính, mục con, tóm tắt bài học, luyện tập và vận dụng được đưa về các cấp heading xác định; đồng thời watermark, header/footer và các dấu vết OCR được loại bỏ. Sau khi có văn bản sạch, hệ thống mới thực hiện chunking theo tiêu đề, gắn metadata như bộ sách, lớp, chủ đề, bài học, \texttt{level}, \texttt{breadcrumb} và \texttt{lesson\_key}, rồi mới chuyển sang bước embedding và indexing.
 
-Một điểm quan trọng là \texttt{ActionPlanner} hoạt động bằng rule-based logic thay vì gọi thêm LLM. LLM chỉ được dùng ở bước cần hiểu ngôn ngữ tự nhiên, còn ánh xạ từ intent sang action được giữ bằng mã nguồn tường minh. Điều này giảm độ trễ, tránh phát sinh nhánh xử lý ngoài kiểm soát và giúp việc thêm action mới có điểm mở rộng rõ ràng.
+Việc dùng mô hình bên thứ ba ở bước OCR là một quyết định thực dụng hơn là một đóng góp thuật toán. Thành phần này mang tính black-box và không phải trọng tâm nghiên cứu của đồ án. Tuy nhiên, nó giải quyết được yêu cầu quan trọng nhất của dữ liệu đầu vào là bảo toàn đủ nội dung và cấu trúc để các bước xử lý phía sau hoạt động ổn định. Do đó, phần đóng góp của đồ án không nằm ở chính mô hình OCR, mà ở cách tổ chức pipeline chuyển đổi PDF sang corpus Markdown có thể đưa vào hệ tri thức một cách nhất quán.
 
 \subsection{Đóng góp đạt được}
 
-Thiết kế này giải quyết được mâu thuẫn giữa tính linh hoạt của giao diện hội thoại và yêu cầu kiểm soát của hệ thống giáo dục. Người dùng vẫn có thể nhập yêu cầu tự nhiên, nhưng hệ thống không giao toàn bộ quyền điều phối cho LLM. Mỗi action được dispatch đến đúng service phụ trách, giúp kiến trúc dễ mở rộng hơn khi bổ sung chức năng mới.
+Đóng góp nổi bật của phần này là biến một nguồn dữ liệu SGK ban đầu ở dạng PDF không đồng nhất thành một corpus có cấu trúc đủ tốt để phục vụ toàn bộ pipeline RAG. Việc đầu tư cho bước PDF-to-Markdown giúp giảm lỗi lan truyền xuống các tầng sau, đặc biệt là lỗi sai phạm vi bài học, sai heading và sai quan hệ giữa nội dung với metadata.
 
-Thin orchestrator cũng tạo nền tảng cho trace và debug. Mỗi request có request id, timestamp, debug steps và thông tin strategy RAG đã chọn. Đây là đóng góp thực tế quan trọng vì hệ thống LLM thường khó quan sát nếu chỉ nhìn đầu vào và đầu ra cuối cùng.
+Bên cạnh đó, cách kết hợp giữa văn bản đã chuẩn hóa, chunk phân cấp và metadata thống nhất tạo ra một nền tảng tri thức có thể mở rộng. Đây là tiền đề để cùng một cơ sở dữ liệu có thể phục vụ đồng thời retrieval cho hỏi đáp, sinh quiz, sinh slide và sinh giáo án, thay vì phải xây dựng nhiều nguồn dữ liệu tách rời cho từng chức năng.
 
-\section{Truy xuất lai và Adaptive RAG}
+\section{Kết hợp hybrid retrieval, reranking và adaptive retrieval}
 
 \subsection{Vấn đề cần giải quyết}
 
@@ -49,7 +49,7 @@ Hệ thống còn bổ sung scope fallback. Khi phạm vi sách/lớp chỉ đ�
 
 Việc QueryClassifier là heuristic cũng là một quyết định có chủ đích. Thay vì gọi LLM thêm một lượt để chọn chiến lược truy xuất, hệ thống giữ bước này nhanh, có thể kiểm thử và có thể giải thích. Đây là điểm quan trọng trong một hệ thống cần ổn định hơn là thể hiện khả năng suy luận tự do.
 
-\section{Multi-intent routing và action planning}
+\section{Thiết kế tầng điều phối cho multi-intent và multi-turn conversation}
 
 \subsection{Vấn đề cần giải quyết}
 
@@ -65,7 +65,7 @@ Việc giới hạn số intent là một quyết định thực tế. Nó đủ
 
 Cơ chế này giúp hệ thống xử lý yêu cầu tự nhiên tốt hơn mà vẫn giữ được tính quyết định của backend. LLM được dùng để hiểu câu nói của người dùng, nhưng kế hoạch thực thi cuối cùng được đưa về cấu trúc action rõ ràng. Điều này tạo ra một ranh giới cần thiết giữa năng lực ngôn ngữ của LLM và logic nghiệp vụ của phần mềm.
 
-\section{Tách quiz standalone khỏi content assessment}
+\section{Triển khai kiến trúc supervisor--specialist trong sinh nội dung}
 
 \subsection{Vấn đề cần giải quyết}
 
@@ -83,74 +83,29 @@ Trong content multi-agent pipeline, \texttt{ContentAssessmentAgent} chỉ sinh a
 
 Đây là một đóng góp kiến trúc quan trọng vì nó giữ đúng ranh giới nghiệp vụ. Quiz standalone có thể phát triển thêm các chức năng học tập cá nhân hóa mà không ảnh hưởng đến pipeline sinh slide. Ngược lại, pipeline sinh slide/giáo án có thể tối ưu cho artifact dài mà không phải mang theo toàn bộ logic chấm điểm và theo dõi attempt.
 
-\section{Content multi-agent cho slide và giáo án}
-
+\section{Đóng góp thiết kế trong việc nâng cao tính kiểm soát, khả năng mở rộng và tính thực dụng của hệ thống}
 \subsection{Vấn đề cần giải quyết}
 
-Tạo slide và giáo án là tác vụ dài hơn nhiều so với hỏi đáp hoặc sinh một bộ câu hỏi ngắn. Hệ thống phải xác định mục tiêu học tập, lập dàn ý, viết nội dung chi tiết, gợi ý media, thêm assessment, ghép kết quả và kiểm tra chất lượng. Nếu giao toàn bộ tác vụ này cho một prompt duy nhất, đầu ra dễ thiếu cấu trúc, bỏ sót phần quan trọng hoặc khó sửa khi người dùng muốn thay đổi dàn ý.
+Tạo slide và giáo án là tác vụ dài hơn nhiều so với hỏi đáp hoặc sinh một bộ câu hỏi ngắn. Hệ thống phải xác định mục tiêu học tập, lập dàn ý, viết nội dung chi tiết, gợi ý media, thêm assessment, ghép kết quả và kiểm tra chất lượng. Nếu giao toàn bộ tác vụ này cho một prompt duy nhất, đầu ra dễ thiếu cấu trúc, bỏ sót phần quan trọng hoặc khó sửa khi người dùng muốn thay đổi dàn ý. Đồng thời, nếu mọi năng lực đều được nhúng trực tiếp vào một agent trung tâm, hệ thống sẽ khó kiểm soát, khó mở rộng và khó theo dõi lỗi khi đưa vào vận hành thực tế.
 
 \subsection{Giải pháp}
 
 Đồ án dùng LangGraph cho phạm vi content pipeline của slide và giáo án. Ở cấp hệ thống, Orchestrator vẫn là controller mã nguồn; LangGraph chỉ điều phối luồng sinh nội dung dài. \texttt{ContentSupervisor} gọi các tool adapter tương ứng với các specialist agent như \texttt{PedagogyPlannerAgent}, \texttt{ContentDraftingAgent}, \texttt{MediaResearchAgent}, \texttt{ContentAssessmentAgent} và \texttt{QualityReviewerAgent}.
 
-Các agent không trao đổi tự do mà đi qua contract A2A-lite. Supervisor tạo \texttt{AgentTask}, specialist agent trả \texttt{AgentTaskResult}. Task chứa mục tiêu, đầu vào, ràng buộc, context refs và artifact mong đợi. Kết quả chứa trạng thái, artifact, confidence, warnings, used tools và latency. Contract này giúp mỗi kết quả trung gian có chủ sở hữu rõ ràng và dễ ghi debug.
+Các agent không trao đổi tự do mà đi qua contract A2A-lite. Supervisor tạo \texttt{AgentTask}, specialist agent trả \texttt{AgentTaskResult}. Task chứa mục tiêu, đầu vào, ràng buộc, context refs và artifact mong đợi. Kết quả chứa trạng thái, artifact, confidence, warnings, used tools và latency. Contract này giúp mỗi kết quả trung gian có chủ sở hữu rõ ràng và dễ ghi debug. Sau khi các artifact được tạo, \texttt{merge\_results} ghép outline, content, media và assessment thành kết quả thống nhất; kết quả sau đó được đưa qua \texttt{QualityReviewerAgent} và reflection loop để quyết định approve, revise hoặc block.
 
-Sau khi các artifact được tạo, \texttt{merge\_results} ghép outline, content, media và assessment thành kết quả thống nhất. Thành phần merge là service/tool quyết định, không phải agent. Sau đó, \texttt{QualityReviewerAgent} đánh giá kết quả cuối và \texttt{reflection\_decision\_node} quyết định approve, revise hoặc block theo số vòng reflection cho phép.
-
-\subsection{Đóng góp đạt được}
-
-Đóng góp chính của phần này là tổ chức tác vụ sinh nội dung dài thành các bước có artifact rõ ràng. Hệ thống không chỉ sinh một đoạn văn lớn, mà có dàn ý, nội dung, media metadata, assessment và review. Điều này giúp slide và giáo án dễ kiểm soát hơn, đồng thời chuẩn bị nền tảng để sau này xuất sang PPTX, PDF hoặc HTML.
-
-A2A-lite cũng là một lựa chọn phù hợp với quy mô hiện tại. Hệ thống chưa cần runtime distributed agent đầy đủ, nhưng đã có message envelope đủ rõ để quản lý task, artifact và metadata thực thi. Cách làm này giảm độ phức tạp vận hành nhưng vẫn giữ đường nâng cấp trong tương lai.
-
-\section{Human-in-the-loop tại bước duyệt dàn ý}
-
-\subsection{Vấn đề cần giải quyết}
-
-Trong sinh slide và giáo án, dàn ý là quyết định ảnh hưởng đến toàn bộ artifact phía sau. Nếu dàn ý sai trọng tâm, thiếu mục hoặc chia bài không hợp lý, các bước sinh nội dung, media và assessment sau đó đều bị ảnh hưởng. Sửa ở cuối pipeline thường tốn chi phí hơn nhiều so với sửa ngay sau khi có outline.
-
-\subsection{Giải pháp}
-
-Hệ thống đặt HITL tại bước outline review. Sau khi agent lập dàn ý, graph có thể interrupt để người dùng duyệt hoặc gửi feedback chỉnh sửa. \texttt{SlideService} lưu các thông tin resume như thread id, graph config, trạng thái interrupt và task type vào slide state. Khi người dùng xác nhận hoặc góp ý, pipeline resume từ điểm đã dừng thay vì chạy lại toàn bộ request từ đầu.
+Song song với đó, hệ thống đặt HITL tại bước duyệt dàn ý nhằm đưa người dùng vào đúng điểm quyết định có ảnh hưởng lớn nhất. Về mặt vận hành, \texttt{SessionStore}, \texttt{TraceService} và các quality path riêng cho quiz, slide, giáo án được bổ sung để lưu trạng thái đa lượt, quan sát tiến trình xử lý và hỗ trợ kiểm thử. Một điểm mở rộng quan trọng khác là khả năng theo dõi tiến trình học tập thông qua việc quản lý \texttt{student profile} như một phần của state. State của hệ thống có thể giữ các lượt làm quiz, câu trả lời sai và mức độ hoàn thành theo chủ đề cho các lượt tương tác tiếp theo. Ngoài ra, một tool layer in-process được tổ chức như điểm mở rộng có kiểm soát để tích hợp retrieval, content formatting, media search và export artifact.
 
 \subsection{Đóng góp đạt được}
 
-HITL giúp đưa quyền kiểm soát vào đúng điểm có ảnh hưởng lớn nhất. Người dùng, đặc biệt là giáo viên, có thể điều chỉnh cấu trúc bài giảng trước khi hệ thống sinh nội dung chi tiết. Cách làm này phù hợp với đặc thù giáo dục, nơi người dùng thường muốn kiểm soát mục tiêu và mạch bài học thay vì chỉ nhận một kết quả hoàn chỉnh.
+Đóng góp chính của phần này là tổ chức tác vụ sinh nội dung dài thành các bước có artifact rõ ràng, đồng thời giữ được tính kiểm soát ở nhiều mức: kiểm soát cấu trúc sinh nội dung, kiểm soát vòng đời hội thoại, kiểm soát trạng thái học tập của người dùng và kiểm soát điểm mở rộng của hệ thống. Hệ thống không chỉ sinh một đoạn văn lớn, mà có dàn ý, nội dung, media metadata, assessment và review; người dùng cũng có thể can thiệp tại bước outline thay vì chỉ nhận kết quả cuối.
 
-\section{Quality path, session và trace}
-
-\subsection{Vấn đề cần giải quyết}
-
-Một hệ thống LLM phục vụ giáo dục cần nhiều lớp kiểm soát hơn một chatbot thông thường. Câu hỏi sinh ra cần đúng format và bám ngữ cảnh. Câu trả lời cần lưu được theo phiên để người dùng hỏi tiếp. Các lỗi cần có trace để biết hệ thống đã chọn intent, action và strategy RAG nào.
-
-\subsection{Giải pháp}
-
-Đồ án xây dựng hai quality path riêng. Với quiz standalone, \texttt{QualityReviewer} kiểm tra chất lượng bộ câu hỏi và \texttt{QuestionValidator} kiểm tra từng câu hỏi trước khi lưu vào session. Nếu cần, handler có thể được gọi lại với revision instruction. Với slide và giáo án, kết quả sau merge được đưa qua \texttt{QualityReviewerAgent}; graph có thể approve, revise một phần hoặc block nếu chất lượng chưa đạt.
-
-Session được lưu bằng \texttt{SessionStore} dưới dạng JSON. Session không chỉ lưu lịch sử chat mà còn lưu quiz state và slide state, cho phép các yêu cầu nối tiếp như ``chấm câu 2'', ``ôn câu sai'' hoặc ``ok, duyệt dàn ý''. Song song với session, \texttt{TraceService} và \texttt{RequestContext.add\_debug\_step()} ghi lại các bước xử lý quan trọng để hỗ trợ kiểm thử và gỡ lỗi.
-
-\subsection{Đóng góp đạt được}
-
-Các lớp quality, session và trace làm cho hệ thống có khả năng vận hành thực tế hơn. Hệ thống không chỉ tạo được câu trả lời, mà còn quản lý được vòng đời học tập của người dùng và cung cấp dữ liệu quan sát khi kết quả chưa đạt kỳ vọng. Đây là nền tảng cần thiết để tiếp tục cải thiện chất lượng truy xuất, đánh giá và cá nhân hóa trong các phiên bản sau.
-
-\section{Tool layer như điểm mở rộng có kiểm soát}
-
-\subsection{Vấn đề cần giải quyết}
-
-Một số năng lực của hệ thống không nên được nhúng trực tiếp vào prompt hoặc agent, ví dụ truy xuất tri thức, định dạng context, tìm kiếm media, kiểm tra URL hoặc xuất artifact. Nếu mỗi nơi gọi tool theo một kiểu riêng, hệ thống sẽ khó mở rộng và khó thay thế implementation.
-
-\subsection{Giải pháp}
-
-Đồ án xây dựng một MCP-like tool layer in-process. Lớp này gồm protocol request/response, client, server và registry tool. Các tool như knowledge retrieval hoặc content formatting có thể được gọi qua interface thống nhất. Hiện tại, lớp này chủ yếu đóng vai trò chuẩn hóa tool call nội bộ và làm extension point; chưa được mô tả như một MCP phân tán hoàn chỉnh.
-
-\subsection{Đóng góp đạt được}
-
-Tool layer giúp tách phần năng lực mở rộng khỏi core orchestration. Khi cần bổ sung media search thật, URL validation, source attribution hoặc export artifact, hệ thống đã có vị trí phù hợp để tích hợp mà không làm thay đổi sâu các service hiện có. Đây là một đóng góp về khả năng mở rộng hơn là một tính năng hoàn chỉnh ở thời điểm hiện tại.
+A2A-lite, HITL, quality path, session, student profile, trace và tool layer không phải các thành phần tách rời, mà cùng tạo nên một kiến trúc có khả năng mở rộng và vận hành thực tế. Đây là điểm khác biệt quan trọng của đồ án: kiến trúc được tổ chức theo hướng có thể kiểm soát, quan sát, điều chỉnh và mở rộng khi số lượng tác vụ và độ phức tạp của workflow tăng lên. Việc theo dõi tiến trình học tập thông qua state cũng mở ra nền tảng cho các cơ chế hỗ trợ học tập cá nhân hóa ở các phiên bản tiếp theo.
 
 \section{Kết chương}
 
 Chương này đã hệ thống hóa các giải pháp và đóng góp chính của đồ án. Các đóng góp không nằm ở một thuật toán riêng lẻ, mà ở cách kết hợp LLM với các lớp điều phối, truy xuất, kiểm tra chất lượng, quản lý trạng thái và quan sát hệ thống. Thiết kế này giúp Educational Chatbot tránh phụ thuộc hoàn toàn vào khả năng sinh tự do của LLM, đồng thời giữ được tính mở rộng cho các chức năng giáo dục như quiz, slide và giáo án.
 
-Những đóng góp trên cũng cho thấy các khó khăn chính của đề tài đã được xử lý theo hướng thực dụng: truy xuất phải thích nghi với loại câu hỏi, điều phối phải kiểm soát được nhiều intent, quiz tương tác phải tách khỏi artifact generation, multi-agent phải có contract rõ ràng, và người dùng cần được đưa vào vòng duyệt ở các điểm quyết định quan trọng.
+Những đóng góp trên cho thấy các khó khăn chính của đề tài đã được xử lý theo hướng thực dụng: truy xuất thích nghi theo loại câu hỏi, điều phối kiểm soát nhiều intent, quiz tương tác tách khỏi artifact generation, multi-agent có contract rõ ràng, và người dùng được đưa vào vòng duyệt ở các điểm quyết định.
 
 \end{document}

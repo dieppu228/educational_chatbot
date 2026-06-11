@@ -1,13 +1,13 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Chương 4 trình bày cách hiện thực hóa giải pháp đã đề xuất ở Chương 3, đồng thời báo cáo các kết quả kiểm thử và thực nghiệm đã thu được. Khác với Chương 3 vốn tập trung vào phương pháp, chương này chỉ giữ lại mức chi tiết cài đặt vừa đủ để chứng minh hệ thống đã được triển khai, benchmark đã được xây dựng và quy trình đánh giá đã có thể vận hành trên dữ liệu thực. Trọng tâm của chương là pipeline xử lý tài liệu, pipeline hỏi đáp, quy trình tạo benchmark, kiểm thử chức năng và các kết quả thực nghiệm hiện có đối với retrieval và generation.
+Chương 4 trình bày cách hiện thực hóa giải pháp đã đề xuất ở Chương 3, đồng thời báo cáo quy trình kiểm thử và các kết quả thực nghiệm đã thu được. Khác với Chương 3 vốn tập trung vào phương pháp, chương này chỉ giữ lại mức chi tiết cài đặt vừa đủ để chứng minh hệ thống đã được triển khai và vận hành trên dữ liệu thực. Trọng tâm của chương đặt vào hai node lõi của pipeline là \textit{retrieve node} và \textit{generate node}: cách hai node này được cài đặt, cách xây dựng hai bộ dữ liệu kiểm thử tương ứng, và kết quả đánh giá định lượng của từng node. Một phần được trình bày kỹ là quy trình tạo bộ dữ liệu kiểm thử, bởi tính tin cậy của mọi số liệu trong chương phụ thuộc trực tiếp vào việc bộ dữ liệu được sinh ra một cách có kiểm soát, truy vết được và không bịa.
 
-\section{Môi trường và dữ liệu thực nghiệm}
+\section{Môi trường và cấu hình thực nghiệm}
 
 Hệ thống được cài đặt chủ yếu bằng Python. Tầng điều phối nội dung cho tác vụ sinh slide và giáo án được xây dựng trên LangGraph, trong khi các thành phần còn lại như xử lý ngữ cảnh, định tuyến ý định, lập kế hoạch hành động, truy xuất tri thức và ghi vết thực thi được hiện thực bằng logic xác định trong mã nguồn. Cách tổ chức này giúp giữ chi phí suy luận ở mức hợp lý và tạo điều kiện thuận lợi cho việc phân tích lỗi theo từng bước của pipeline.
 
-Về mô hình và hạ tầng tri thức, hệ thống sử dụng Google Gemini làm mô hình sinh ngôn ngữ, mô hình embedding tiếng Việt \texttt{dangvantuan/vietnamese-document-embedding} để biểu diễn chunk, mô hình reranker \texttt{AITeamVN/Vietnamese\_Reranker} cho bước xếp hạng lại và Qdrant làm vector database. Bên cạnh \textit{vector search}, hệ thống còn duy trì một kênh \textit{keyword search} dựa trên BM25 tự cài đặt, sau đó hợp nhất hai danh sách kết quả bằng Reciprocal Rank Fusion. Các thành phần cài đặt chính của môi trường thực nghiệm được tóm tắt trong Bảng \ref{tab:exp-environment}.
+Về mô hình và hạ tầng tri thức, hệ thống sử dụng Google Gemini làm mô hình sinh ngôn ngữ, mô hình embedding tiếng Việt \texttt{dangvantuan/vietnamese-document-embedding} để biểu diễn chunk, mô hình reranker \texttt{AITeamVN/Vietnamese\_Reranker} cho bước xếp hạng lại và Qdrant làm vector database. Bên cạnh \textit{vector search}, hệ thống còn duy trì một kênh \textit{keyword search} dựa trên BM25 tự cài đặt, sau đó hợp nhất hai danh sách kết quả bằng Reciprocal Rank Fusion. Các thành phần cài đặt chính của môi trường thực nghiệm được liệt kê trong Bảng \ref{tab:exp-environment}.
 
 \begin{table}[H]
     \centering
@@ -34,47 +34,114 @@ Về mô hình và hạ tầng tri thức, hệ thống sử dụng Google Gemin
         \hline
     \end{tabular}
     \vspace{0.2cm}
-    \caption{Môi trường phần mềm và các thành phần cốt lõi của hệ thống thực nghiệm}
+\caption{Môi trường phần mềm và các thành phần cốt lõi của hệ thống thực nghiệm}
     \label{tab:exp-environment}
 \end{table}
 
+Bảng \ref{tab:exp-environment} cho thấy môi trường thực nghiệm được tổ chức nhất quán với kiến trúc đã mô tả ở Chương 3: lớp biểu diễn tri thức dùng embedding tiếng Việt và Qdrant, lớp truy xuất dùng đồng thời BM25 và dense retrieval, còn lớp sinh nội dung dựa trên Gemini. Cấu hình này cho phép tách riêng vai trò của từng thành phần khi phân tích kết quả thực nghiệm ở các mục sau.
+
+Để các thí nghiệm có thể tái lập, các tham số chạy chính được dùng thống nhất trong toàn bộ chương được trình bày trong Bảng \ref{tab:exp-params}.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|p{0.46\textwidth}|>{\centering\arraybackslash}p{0.28\textwidth}|}
+        \hline
+        \textbf{Tham số} & \textbf{Giá trị} \\
+        \hline
+        Kích thước search pool & 50 candidate \\
+        \hline
+        Số candidate sau hợp nhất & 25 candidate \\
+        \hline
+        Các mức $k$ khi tính độ đo & $\{1, 3, 5, 10\}$ \\
+        \hline
+        Temperature của mô hình sinh & 0,1 \\
+        \hline
+        Temperature của mô hình chấm RAGAS & 0 \\
+        \hline
+    \end{tabular}
+    \vspace{0.2cm}
+\caption{Các tham số chạy chính dùng cho thực nghiệm retrieval và generation}
+    \label{tab:exp-params}
+\end{table}
+
+Bảng \ref{tab:exp-params} cho thấy bước truy xuất lấy một \textit{search pool} gồm 50 candidate từ hai kênh lexical và dense rồi hợp nhất còn 25 candidate; các độ đo retrieval được tính ở các mức $k \in \{1,3,5,10\}$. Ở bước sinh câu trả lời, \textit{temperature} được đặt thấp để ưu tiên tính ổn định và bám nguồn. Ở bước đánh giá generation bằng mô hình chấm, \textit{temperature} được đặt bằng 0 để kết quả chấm nhất quán giữa các lần chạy.
+
 Nguồn dữ liệu của đồ án gồm SGK Tin học lớp 10, 11 và 12 thuộc hai bộ sách Cánh Diều và Kết Nối Tri Thức. Sau bước tiền xử lý và chunking, kho tri thức thu được 2348 chunk, mỗi chunk mang metadata về bộ sách, lớp, chủ đề, bài học, loại nội dung và cấp phân cấp. Chính cấu trúc này cho phép hệ thống vừa truy xuất ở mức cục bộ cho câu hỏi ngắn, vừa hỗ trợ các tác vụ cần bao phủ một bài học hoàn chỉnh như sinh slide hoặc soạn giáo án.
 
-\section{Cấu trúc cài đặt hệ thống}
+\section{Cài đặt hệ thống và pipeline}
 
-Tại mức cài đặt, hệ thống được chia thành bốn nhóm module chính. Nhóm thứ nhất là lớp tiếp nhận và điều phối yêu cầu, bao gồm các thành phần tạo \textit{RequestContext}, phân tích ngữ cảnh hội thoại, định tuyến ý định, lập kế hoạch hành động và quản lý vòng đời session. Nhóm thứ hai là lớp dịch vụ nghiệp vụ, nơi triển khai các chức năng hỏi đáp, quiz, sinh slide và sinh giáo án. Nhóm thứ ba là lớp tri thức, phụ trách ingestion, chunking, embedding, indexing, retrieval, reranking và dựng ngữ cảnh đầu vào cho LLM. Nhóm cuối cùng là lớp thực nghiệm và đánh giá, gồm benchmark retrieval, kết quả generation theo RAGAS và các file raw output phục vụ phân tích lỗi.
+Tại mức cài đặt, hệ thống được chia thành bốn nhóm module chính. Nhóm thứ nhất là lớp tiếp nhận và điều phối yêu cầu, bao gồm các thành phần tạo \textit{RequestContext}, phân tích ngữ cảnh hội thoại, định tuyến ý định, lập kế hoạch hành động và quản lý vòng đời session. Nhóm thứ hai là lớp dịch vụ nghiệp vụ, nơi triển khai các chức năng hỏi đáp, quiz, sinh slide và sinh giáo án. Nhóm thứ ba là lớp tri thức, phụ trách ingestion, chunking, embedding, indexing, retrieval, reranking và dựng ngữ cảnh đầu vào cho LLM. Nhóm cuối cùng là lớp thực nghiệm và đánh giá, gồm pipeline tạo benchmark retrieval, pipeline đánh giá generation theo RAGAS và các file raw output phục vụ phân tích lỗi.
 
-Cách chia này nhằm giữ ranh giới rõ giữa phần điều phối hệ thống và phần nghiên cứu chính. Các module điều phối giúp hệ thống vận hành trên nhiều loại yêu cầu, nhưng phần đóng góp kỹ thuật được kiểm chứng trong chương này vẫn tập trung vào retrieval và generation. Do đó, Chương 4 không đi vào liệt kê toàn bộ package hay từng file cài đặt, mà chỉ trình bày đủ để người đọc hiểu dữ liệu đi qua những khối nào trước khi trở thành câu trả lời hoặc artifact cuối.
+Cách chia này nhằm giữ ranh giới rõ giữa phần điều phối hệ thống và phần nghiên cứu chính. Các module điều phối giúp hệ thống vận hành trên nhiều loại yêu cầu, nhưng phần đóng góp kỹ thuật được kiểm chứng trong chương này vẫn tập trung vào retrieve node và generate node. Do đó, Chương 4 không đi vào liệt kê toàn bộ package hay từng file cài đặt, mà chỉ trình bày đủ để người đọc hiểu dữ liệu đi qua những khối nào trước khi trở thành câu trả lời hoặc artifact cuối.
 
-\section{Cài đặt pipeline xử lý tài liệu}
+\textbf{Pipeline xử lý tài liệu.}
 
 Pipeline xử lý tài liệu bắt đầu từ tập văn bản SGK đã được chuẩn hóa. Ở bước đầu, nội dung được làm sạch để loại bỏ nhiễu trình bày, sau đó được tách theo cấu trúc heading của từng bài học. Mỗi đoạn nội dung sau khi tách được gắn \textit{breadcrumb}, \textit{level} và metadata bài học tương ứng. Cách cài đặt này giúp chunk vẫn giữ được mối liên hệ với ngữ cảnh sư phạm của SGK, thay vì chỉ là các đoạn văn bản rời rạc.
 
 Sau khi chunking, hệ thống sinh embedding trên trường \texttt{full\_content} và nạp vector vào Qdrant. Song song với đó, các trường văn bản cần thiết cũng được lưu để phục vụ BM25 và để hiển thị nguồn khi phân tích kết quả retrieval. Việc lưu đồng thời cả metadata phân cấp lẫn vector embedding cho phép hệ thống lọc trước theo \textit{scope} rồi mới thực hiện truy xuất, từ đó giảm rủi ro nhầm lẫn giữa các bài học có thuật ngữ gần nhau nhưng khác bộ sách hoặc khác khối lớp.
 
-Dữ liệu tạo benchmark retrieval cũng được sinh trực tiếp từ kho chunk này. Mỗi seed được gắn với một bài học đích, từ đó sinh các câu hỏi có \textit{gold key} tương ứng để phục vụ đánh giá \textit{single-gold}. Nhờ vậy, cùng một nền dữ liệu vừa đóng vai trò kho tri thức cho hệ thống, vừa là nguồn chuẩn để tạo bộ câu hỏi kiểm thử nhất quán với phạm vi dữ liệu của đồ án.
+Điểm cần nhấn mạnh là chính kho chunk này về sau cũng là nguồn để sinh bộ benchmark retrieval. Mỗi câu hỏi kiểm thử được sinh từ một đoạn chunk cụ thể và được gắn với bài học chứa đoạn đó, nên bộ câu hỏi đánh giá luôn nằm trong đúng phạm vi dữ liệu mà hệ thống thực sự lập chỉ mục. Quan hệ này được trình bày chi tiết ở Mục 4.3.
 
-\section{Cài đặt pipeline hỏi đáp}
+\textbf{Pipeline hỏi đáp.}
 
 Khi người dùng gửi câu hỏi, hệ thống trước hết tạo một \textit{RequestContext} để gom câu hỏi hiện tại, thông tin bộ sách hoặc lớp được chọn, lịch sử hội thoại gần và các trường debug cần thiết. Từ đây, \textit{ContextAnalyzer} kiểm tra xem câu hỏi có phụ thuộc vào turn trước hay không; nếu có, hệ thống trích một phần ngữ cảnh hội thoại để làm giàu truy vấn. \textit{IntentRouter} sau đó xác định loại yêu cầu, chẳng hạn hỏi đáp kiến thức, sinh quiz, sinh slide hoặc soạn giáo án.
 
-Với các intent cần tri thức từ SGK, \textit{ActionPlanner} tạo hành động tương ứng và chuyển cho \textit{ExecutionDispatcher}. Ở nhánh hỏi đáp, dispatcher gọi \textit{RAGService} để truy xuất ngữ cảnh, gửi ngữ cảnh này vào prompt sinh câu trả lời và ghi lại trace của toàn bộ phiên xử lý. Với các tác vụ dài như slide hoặc giáo án, dispatcher không sinh đầu ra trực tiếp mà chuyển tiếp cho pipeline đa tác tử đã mô tả ở Chương 3. Nhờ vậy, phần thực thi vẫn thống nhất ở tầng orchestration, trong khi logic chuyên biệt của từng tác vụ được cô lập ở các service tương ứng.
+Với các intent cần tri thức từ SGK, \textit{ActionPlanner} tạo hành động tương ứng và chuyển cho \textit{ExecutionDispatcher}. Ở nhánh hỏi đáp, dispatcher gọi \textit{RAGService} để truy xuất ngữ cảnh (retrieve node), gửi ngữ cảnh này vào prompt sinh câu trả lời (generate node) và ghi lại trace của toàn bộ phiên xử lý. Với các tác vụ dài như slide hoặc giáo án, dispatcher không sinh đầu ra trực tiếp mà chuyển tiếp cho pipeline đa tác tử đã mô tả ở Chương 3. Nhờ vậy, phần thực thi vẫn thống nhất ở tầng orchestration, trong khi logic chuyên biệt của từng tác vụ được cô lập ở các service tương ứng.
 
 Điểm quan trọng trong cài đặt hiện tại là hệ thống không xem mọi yêu cầu như một lời gọi LLM đơn lẻ. Thay vào đó, truy vấn được biến đổi có kiểm soát qua các bước phân tích ngữ cảnh, định tuyến, retrieval, rồi mới tới generation. Cách tổ chức này làm rõ hơn quan hệ nhân quả giữa lỗi retrieval và lỗi answer, vốn là điều cần thiết cho các thí nghiệm báo cáo ở phần sau của chương.
 
-\section{Cài đặt retrieval, reranking và generation}
+\textbf{Retrieve node và reranking.}
 
-Trong cấu hình retrieval dùng cho thực nghiệm hiện tại, hệ thống lấy \textit{search pool} 50 candidate từ hai kênh lexical và dense, sau đó hợp nhất bằng RRF để thu được danh sách 25 candidate cuối cho bước đánh giá no-rerank. Ở cấu hình có rerank, cùng tập candidate này sẽ được chuyển qua cross-encoder để chấm lại mức độ liên quan trước khi chọn ra top-$N$ cuối cùng. Cơ chế lọc theo \textit{scope} được áp dụng trước truy xuất khi câu hỏi hoặc session đã xác định được \textit{book}, \textit{grade} hoặc \textit{topic}.
+Trong cấu hình retrieval dùng cho thực nghiệm, retrieve node lấy một \textit{search pool} gồm 50 candidate từ hai kênh lexical và dense, sau đó hợp nhất bằng RRF để thu được danh sách 25 candidate. Đây là đầu vào cho cấu hình đánh giá \textit{no-rerank}. Ở cấu hình \textit{with-rerank}, cùng tập candidate này được chuyển qua cross-encoder để chấm lại mức độ liên quan trước khi chọn ra top-$N$ cuối cùng. Cơ chế lọc theo \textit{scope} được áp dụng trước truy xuất khi câu hỏi hoặc session đã xác định được \textit{book}, \textit{grade} hoặc \textit{topic}.
 
-Ở phía generation, prompt đầu vào luôn gồm hai thành phần: câu hỏi của người dùng và tập ngữ cảnh đã truy xuất. Hệ thống yêu cầu mô hình trả lời theo ngôn ngữ phù hợp với học sinh THPT, đồng thời ưu tiên bám sát thông tin xuất hiện trong context hơn là suy luận mở rộng từ tri thức tham số. Khi ngữ cảnh không đủ hoặc không truy xuất được tài liệu phù hợp, hệ thống được thiết kế để trả lời theo hướng nêu rõ giới hạn thay vì tiếp tục sinh nội dung không có căn cứ.
+Một kết quả retrieval trả về cho mỗi candidate gồm phần nội dung chunk, điểm số liên quan, metadata bài học và thông tin nguồn. Bộ thông tin này vừa được dùng làm ngữ cảnh cho generate node, vừa được lưu lại trong raw output để phục vụ phân tích lỗi. Việc tách riêng bước retrieval và bước rerank trong cài đặt cho phép đo lường đóng góp của reranker một cách độc lập, thay vì gộp chung vào một điểm số duy nhất.
 
-Việc tách riêng retrieval, reranking và generation trong cài đặt cho phép đánh giá từng bước một cách độc lập. Đây là tiền đề để phần kết quả retrieval ở Mục 4.8 và phần generation ở Mục 4.9 có thể được diễn giải như hai lớp bằng chứng khác nhau cho hiệu quả của hệ thống, thay vì trộn lẫn chúng trong một điểm số tổng hợp duy nhất.
+\textbf{Generate node.}
 
-\section{Cài đặt benchmark và quy trình đánh giá}
+Ở generate node, prompt đầu vào luôn gồm hai thành phần: câu hỏi của người dùng và tập ngữ cảnh đã truy xuất. Các chunk được nối lại bằng dấu phân tách rõ ràng trước khi đưa vào prompt, kèm chỉ dẫn để mô hình trả lời theo ngôn ngữ phù hợp với học sinh THPT và ưu tiên bám sát thông tin xuất hiện trong context hơn là suy luận mở rộng từ tri thức tham số. Khi ngữ cảnh không đủ hoặc không truy xuất được tài liệu phù hợp, mô hình được yêu cầu nêu rõ giới hạn thay vì tiếp tục sinh nội dung không có căn cứ.
 
-Bộ benchmark retrieval hiện tại được xây dựng theo hướng \textit{single-gold}. Mỗi câu hỏi được gắn với một \textit{lesson key} đích, gồm bộ sách, lớp, chủ đề, bài và tên bài học. Thay vì yêu cầu gán nhãn relevance chi tiết cho từng chunk, đồ án dùng lesson key làm chuẩn so khớp chính, nhờ đó việc tạo benchmark có thể mở rộng trên toàn bộ kho SGK mà vẫn giữ được tính nhất quán. Quá trình sinh benchmark bắt đầu từ 300 seed, cho ra 600 câu hỏi thô và bao phủ toàn bộ 185 bài học trong tập dữ liệu.
+Việc tách riêng retrieve node và generate node trong cài đặt là tiền đề để hai node được đánh giá bằng hai phương pháp khác nhau ở phần sau: retrieve node được đánh giá định lượng bằng benchmark \textit{single-gold}, còn generate node được đánh giá bằng bộ độ đo RAGAS. Nhờ vậy, mỗi lớp bằng chứng phản ánh đúng khía cạnh mà nó đo, thay vì bị trộn lẫn trong một con số tổng hợp.
 
-Sau bước sinh câu hỏi, benchmark được lọc bằng các tiêu chí xác định như khử trùng lặp, loại bỏ các câu mang tính template và kiểm tra rò rỉ tiêu đề ở mức n-gram. Kết quả lọc hiện tại không loại bỏ thêm mẫu nào, tức toàn bộ 600 câu đều đạt yêu cầu tối thiểu để đi tiếp vào pipeline đánh giá. Phân bố của bộ benchmark theo nhóm sách và khối lớp được trình bày trong Bảng \ref{tab:benchmark-distribution}; phân bố câu hỏi theo loại và độ khó cho thấy bộ câu hỏi thiên về các truy vấn định nghĩa, factual và application, phù hợp với hành vi hỏi đáp thực tế của học sinh.
+\section{Xây dựng benchmark cho retrieve node}
+\label{sec:benchmark-retrieve}
+
+Phần này trình bày cách xây dựng benchmark retrieval dùng để đánh giá retrieve node. Vì độ tin cậy của toàn bộ kết quả thực nghiệm phụ thuộc trực tiếp vào chất lượng của bộ benchmark này, phần trình bày tập trung vào quy trình sinh, cơ chế kiểm soát chất lượng và khả năng truy vết nguồn gốc.
+
+\textbf{Bối cảnh và lý do xây dựng lại.} Phiên bản benchmark đầu tiên được sinh bằng một bộ khuôn câu hỏi tất định: hệ thống nhét cụm từ khóa vào một số mẫu câu cố định mà không dùng mô hình ngôn ngữ. Khi đánh giá, khoảng 95\% câu hỏi rơi vào dạng template rỗng nghĩa, kéo Hit@1 xuống chỉ còn khoảng 0,43. Tuy nhiên, nhóm nhỏ các câu không thuộc template lại đạt Hit@10 bằng 1,00, cho thấy vấn đề nằm ở chất lượng câu hỏi chứ không phải ở khả năng truy xuất. Phát hiện này dẫn tới quyết định loại bỏ hoàn toàn bộ sinh template và xây dựng lại benchmark bằng một mô hình ngôn ngữ thật, với ràng buộc rằng mỗi câu hỏi phải \textit{phân biệt được bài học} mà nó hỏi tới.
+
+\textbf{Quy trình sinh có đặc tả từng bước.} Toàn bộ quy trình tạo benchmark được đặc tả thành một tài liệu chỉ dẫn từng bước trước khi cài đặt, bao gồm: nguyên tắc tái sử dụng phần chọn seed, hợp đồng đầu ra dạng JSON, tập điều kiện ràng buộc câu hỏi, các luật kiểm tra tự động, lược đồ bản ghi và tiêu chí nghiệm thu. Việc có đặc tả rõ ràng giúp quy trình lặp lại được và không phụ thuộc vào thao tác thủ công ngẫu hứng. Quy trình gồm ba bước, trong đó phân định rõ phần được thực hiện bằng mã nguồn xác định và phần do mô hình ngôn ngữ đảm nhận.
+
+\textit{Bước 1 --- sinh câu hỏi bằng mô hình ngôn ngữ, có kiểm soát.} Trước hết, một thủ tục chọn seed bằng mã nguồn xác định lựa chọn các đoạn chunk đại diện sao cho phủ đủ các bài học và cân bằng giữa các nhóm bộ sách và khối lớp. Với mỗi seed, mô hình Gemini đọc trực tiếp nội dung của đoạn và sinh hai câu hỏi, trả về dưới dạng JSON theo hợp đồng định sẵn. Mỗi câu hỏi bắt buộc tuân thủ các điều kiện: trả lời được chỉ bằng nội dung đoạn và không bịa thông tin ngoài đoạn; chứa ít nhất một thuật ngữ, cú pháp hoặc tên riêng đặc trưng của bài để không bài khác trả lời được; tự chứa về ngữ nghĩa, không tham chiếu mơ hồ như ``đoạn trên'' hay ``bài này''; diễn đạt tự nhiên và không lặp lại các khuôn template đã bị loại; đa dạng về loại câu hỏi. Ngay sau khi mô hình trả về, một bước kiểm tra tự động xác định sẽ loại câu nếu không kết thúc bằng dấu hỏi, quá ngắn, khớp khuôn template, chứa từ mơ hồ, có từ khóa đặc trưng không xuất hiện trong nội dung đoạn, hoặc phần đáp án kỳ vọng trùng lặp với nội dung đoạn dưới ngưỡng quy định. Kết quả của mô hình được lưu cache theo định danh đoạn và phiên bản prompt, nên chạy lại cho kết quả như cũ mà không tốn thêm lời gọi mô hình.
+
+\textit{Bước 2 --- lọc bằng mã nguồn xác định.} Tập câu hỏi thô được đưa qua bước lọc gồm khử trùng lặp và phát hiện rò rỉ tiêu đề. Phép kiểm tra rò rỉ tiêu đề loại bỏ những câu lặp lại tên bài hoặc breadcrumb ở mức n-gram, nhằm tránh trường hợp câu hỏi ``ăn gian'' bằng cách nhắc lại đúng tên bài học.
+
+\textit{Bước 3 --- kiểm tra cuối và lấy mẫu phân tầng bằng mã nguồn xác định.} Bước cuối kiểm tra lại từng câu theo các tiêu chí: tự chứa về ngữ nghĩa, từ khóa đặc trưng nằm trong nội dung đoạn gốc, và phần đáp án kỳ vọng có độ trùng từ với nội dung đoạn không thấp hơn ngưỡng. Các câu đạt sau đó được lấy mẫu phân tầng theo nhóm bộ sách, bài học và loại câu hỏi để giữ độ phủ. Cần nói rõ rằng bước này hoàn toàn dựa trên luật xác định và không gọi mô hình ngôn ngữ; do đó yêu cầu ``phân biệt được bài học'' được bảo đảm ngay từ Bước 1 thông qua ràng buộc khi sinh và bước kiểm tra đi kèm, chứ không phải bằng một lớp mô hình kiểm tra lại ở Bước 3.
+
+\textbf{Khả năng truy vết và chứng thực nguồn gốc.} Mỗi câu hỏi trong benchmark được gắn các trường cho phép truy ngược về nguồn: định danh đoạn chunk gốc đã sinh ra câu hỏi, khóa bài học vàng gồm bộ sách, lớp, chủ đề, bài và tên bài, cùng thông tin về bộ sinh và phiên bản prompt. Trong bản ghi gốc còn lưu toàn văn nội dung đoạn và một mã băm nội dung của đoạn đó. Bộ ba gồm định danh đoạn, mã băm nội dung và thông tin bộ sinh cho phép kiểm chứng độc lập: người đánh giá có thể mở đúng đoạn chunk, đối chiếu mã băm để xác nhận nội dung không bị sửa, rồi đọc đoạn để xác nhận câu hỏi thực sự trả lời được bằng đoạn đó. Đây là cơ sở để khẳng định bộ dữ liệu được sinh từ chính kho tri thức của hệ thống, có thể kiểm chứng, chứ không phải được bịa ra. Lược đồ một câu hỏi trong benchmark được minh họa ở Hình \ref{fig:benchmark-schema}.
+
+\begin{figure}[H]
+\centering
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize, frame=single, breaklines=true]
+{
+  "query_id": "V3A-0001",
+  "query": "Sau khi mo IDLE (Python 3.9 64-bit), cua so Shell
+            cho phep nguoi hoc thuc hien thao tac gi ...?",
+  "question_type": "fact",          // fact|definition|process|list|application|compare
+  "difficulty": "easy",             // easy|medium|hard
+  "anchor": "IDLE (Python 3.9 64-bit)",   // cum tu khoa, phai co trong doan goc
+  "seed_chunk_id": "59e9899d-...",        // dinh danh doan SGK goc
+  "gold_lesson_key": {                    // nhan vang muc bai hoc
+    "book": "CD", "grade": "10",
+    "topic_name": "...", "lesson": "Bai 1", "lesson_name": "..."
+  }
+}
+\end{lstlisting}
+\caption{Lược đồ một câu hỏi trong benchmark retrieval và các trường phục vụ truy vết nguồn gốc}
+\label{fig:benchmark-schema}
+\end{figure}
+
+\textbf{Quy mô và phân bố.} Quá trình sinh bắt đầu từ 300 seed, cho ra 600 câu hỏi và bao phủ toàn bộ 185 bài học trong tập dữ liệu. Bộ câu hỏi được cân bằng tuyệt đối theo nhóm bộ sách và khối lớp, mỗi nhóm đúng 100 câu. Bước lọc xác định ở Bước 2 không loại bỏ thêm mẫu nào, tức toàn bộ 600 câu đều đạt yêu cầu tối thiểu nhờ chất lượng đã được kiểm soát từ Bước 1. Phân bố theo nhóm và phân bố theo loại câu hỏi, độ khó được trình bày lần lượt trong Bảng \ref{tab:benchmark-distribution} và Bảng \ref{tab:benchmark-type}.
 
 \begin{table}[H]
     \centering
@@ -99,20 +166,57 @@ Sau bước sinh câu hỏi, benchmark được lọc bằng các tiêu chí xá
         \hline
     \end{tabular}
     \vspace{0.2cm}
-    \caption{Phân bố bộ benchmark retrieval theo bộ sách và khối lớp}
+\caption{Phân bố bộ benchmark retrieval theo bộ sách và khối lớp}
     \label{tab:benchmark-distribution}
 \end{table}
 
-Đối với generation, đồ án tận dụng kết quả đánh giá RAGAS đã có sẵn trên 246 mẫu. Cách làm này phù hợp với điều kiện chi phí thực nghiệm: retrieval được đánh giá lại trực tiếp trên benchmark 600 câu hỏi mới, còn generation sử dụng lại tập đánh giá đã được chạy đầy đủ từ trước. Tại thời điểm viết báo cáo, luồng đánh giá with-rerank cho benchmark 600 câu hỏi vẫn chưa hoàn tất, vì vậy số liệu ở phần retrieval mới chỉ phản ánh cấu hình no-rerank. Phần còn thiếu này được giữ mở để cập nhật sau mà không làm thay đổi cấu trúc chung của chương.
-
-\section{Kiểm thử chức năng}
-
-Ngoài đánh giá định lượng, hệ thống còn được kiểm thử ở mức chức năng để bảo đảm các bước cài đặt cơ sở vận hành đúng trước khi chạy benchmark. Các ca kiểm thử được chọn theo các điểm nút quan trọng của pipeline, từ ingestion dữ liệu, chunking, indexing đến scope filtering, retrieval, generation và trace logging. Bảng \ref{tab:functional-tests} tóm tắt các ca kiểm thử chính đã được sử dụng trong quá trình phát triển.
+Bảng \ref{tab:benchmark-distribution} cho thấy bộ benchmark được cân bằng tuyệt đối theo sáu nhóm bộ sách -- khối lớp, mỗi nhóm gồm đúng 100 câu hỏi. Đồng thời, 600 câu hỏi này bao phủ được 185 bài học, cho thấy tập kiểm thử không chỉ tập trung vào một số bài tiêu biểu mà trải rộng gần như toàn bộ kho tri thức dùng trong thực nghiệm.
 
 \begin{table}[H]
     \centering
-    \renewcommand{\arraystretch}{1.2}
-    \begin{tabular}{|p{0.10\textwidth}|p{0.22\textwidth}|p{0.33\textwidth}|p{0.18\textwidth}|}
+    \renewcommand{\arraystretch}{1.25}
+    \begin{tabular}{|p{0.30\textwidth}|>{\centering\arraybackslash}p{0.18\textwidth}||p{0.20\textwidth}|>{\centering\arraybackslash}p{0.14\textwidth}|}
+        \hline
+        \textbf{Loại câu hỏi} & \textbf{Số lượng} & \textbf{Độ khó} & \textbf{Số lượng} \\
+        \hline
+        Định nghĩa (definition) & 153 & Dễ (easy) & 326 \\
+        \hline
+        Sự kiện (fact) & 150 & Trung bình (medium) & 274 \\
+        \hline
+        Vận dụng (application) & 141 & & \\
+        \cline{1-2}
+        So sánh (compare) & 81 & & \\
+        \cline{1-2}
+        Liệt kê (list) & 42 & & \\
+        \cline{1-2}
+        Quy trình (process) & 33 & & \\
+        \hline
+    \end{tabular}
+    \vspace{0.2cm}
+\caption{Phân bố bộ benchmark retrieval theo loại câu hỏi và độ khó}
+    \label{tab:benchmark-type}
+\end{table}
+
+Bảng \ref{tab:benchmark-type} cho thấy benchmark nghiêng về các dạng câu hỏi định nghĩa, sự kiện và vận dụng, tức là những dạng gần với hành vi hỏi đáp thực tế của học sinh. Về độ khó, tập dữ liệu chỉ gồm hai mức dễ và trung bình, phản ánh chủ đích ưu tiên các câu hỏi có thể trả lời trực tiếp từ nội dung SGK thay vì các câu suy luận nhiều bước ngoài phạm vi tài liệu.
+
+\textbf{Định nghĩa độ liên quan.} Bộ benchmark dùng chuẩn \textit{single-gold} ở mức bài học: mỗi câu hỏi gắn với đúng một bài học vàng. Một chunk được tính là đúng nếu có cùng bộ sách, lớp, chủ đề và tên bài với khóa bài học vàng. Việc dùng khóa bài học làm chuẩn so khớp, thay vì gán nhãn relevance chi tiết cho từng chunk, cho phép mở rộng benchmark trên toàn bộ kho SGK mà vẫn giữ được tính nhất quán. Hệ quả của lựa chọn này là các độ đo dạng phủ như Recall và nDCG sẽ thấp về giá trị tuyệt đối, vì trong cùng một bài có nhiều chunk đều được tính đúng; do đó các độ đo phản ánh đúng nhất chất lượng của retrieve node là Hit@$k$ và MRR.
+
+\section{Xây dựng dữ liệu cho generate node}
+\label{sec:data-generate}
+
+Để đánh giá generate node, đồ án sử dụng một tập mẫu hỏi đáp gồm 246 mẫu. Mỗi mẫu gồm bốn thành phần: câu hỏi của người dùng, tập ngữ cảnh mà retrieve node thực sự trả về, câu trả lời do generate node sinh ra, và một đáp án tham chiếu đi kèm câu hỏi. Quy trình tạo bộ dữ liệu này gồm các bước nối tiếp: với mỗi câu hỏi, hệ thống thực hiện truy xuất và rerank để lấy ngữ cảnh, đưa ngữ cảnh và câu hỏi vào generate node để sinh câu trả lời, rồi ghi lại đồng thời câu hỏi, ngữ cảnh, câu trả lời, đáp án tham chiếu và thời gian xử lý từng bước. Tập mẫu thu được sau đó là đầu vào trực tiếp cho bước tính độ đo RAGAS ở Mục 4.10.
+
+Cần phân biệt rõ bộ dữ liệu này với benchmark retrieval ở mục trước. Benchmark retrieval đo khả năng xếp đúng bài học vào top đầu và dùng khóa bài học làm chuẩn, trong khi tập mẫu hỏi đáp đo chất lượng của câu trả lời sinh ra và dùng đáp án tham chiếu làm cơ sở cho các độ đo dựa trên tham chiếu. Hai bộ phục vụ hai mục tiêu khác nhau và được báo cáo độc lập.
+
+\section{Kiểm thử chức năng}
+
+Ngoài đánh giá định lượng, hệ thống còn được kiểm thử ở mức chức năng để bảo đảm các bước cài đặt cơ sở vận hành đúng trước khi chạy benchmark. Các ca kiểm thử được chọn theo các điểm nút quan trọng của pipeline, từ ingestion dữ liệu, chunking, indexing đến scope filtering, retrieval, generation và trace logging. Các ca kiểm thử chính được liệt kê trong Bảng \ref{tab:functional-tests}.
+
+\begin{table}[H]
+    \centering
+    \small
+    \renewcommand{\arraystretch}{1.12}
+    \begin{tabular}{|p{0.095\textwidth}|p{0.215\textwidth}|p{0.32\textwidth}|p{0.17\textwidth}|}
         \hline
         \textbf{Mã} & \textbf{Chức năng} & \textbf{Kết quả mong đợi} & \textbf{Kết quả} \\
         \hline
@@ -126,83 +230,189 @@ Ngoài đánh giá định lượng, hệ thống còn được kiểm thử ở
         \hline
         TC05 & Retrieval & Top-$k$ chứa ngữ cảnh liên quan cho câu hỏi kiến thức & Đạt \\
         \hline
-        TC06 & Generation & Câu trả lời bám tài liệu và có thể ghi lại context debug & Đạt \\
+        TC06 & Reranking & Chunk đúng được đưa lên thứ hạng cao hơn sau rerank & Đạt \\
         \hline
-        TC07 & Out-of-scope handling & Hệ thống ưu tiên báo thiếu thông tin thay vì bịa nội dung & Đạt \\
+        TC07 & Generation & Câu trả lời bám tài liệu và có thể ghi lại context debug & Đạt \\
         \hline
-        TC08 & Multi-intent routing & Yêu cầu phức hợp được tách thành nhiều action hợp lệ & Đạt \\
+        TC08 & Out-of-scope handling & Hệ thống ưu tiên báo thiếu thông tin thay vì bịa nội dung & Đạt \\
         \hline
-        TC09 & Logging và trace & Mỗi request có debug step phục vụ phân tích lỗi & Đạt \\
+        TC09 & Multi-intent routing & Yêu cầu phức hợp được tách thành nhiều action hợp lệ & Đạt \\
+        \hline
+        TC10 & Logging và trace & Mỗi request có debug step phục vụ phân tích lỗi & Đạt \\
         \hline
     \end{tabular}
-    \vspace{0.2cm}
     \caption{Các ca kiểm thử chức năng chính của hệ thống trước khi chạy thực nghiệm}
     \label{tab:functional-tests}
 \end{table}
 
 Kết quả ở Bảng \ref{tab:functional-tests} cho thấy các khối nền tảng của hệ thống đã vận hành ổn định trước khi bước vào thực nghiệm. Đây là điều kiện cần để các số liệu retrieval và generation ở các mục tiếp theo có thể được diễn giải như kết quả của phương pháp, thay vì chỉ phản ánh lỗi cài đặt cơ bản của phần mềm.
 
-\section{Kết quả đánh giá retrieval}
+\section{Phương pháp tiến hành thí nghiệm}
 
-Thực nghiệm retrieval hiện đã được chạy đầy đủ trên 600 câu hỏi của benchmark \textit{single-gold} trong cấu hình no-rerank. Mỗi câu hỏi được chấm tại các mức $k \in \{1,3,5,10\}$ với các độ đo Hit@$k$, Recall@$k$, Precision@$k$, MRR@$k$ và nDCG@$k$. Vì benchmark sử dụng lesson key làm chuẩn đúng, các độ đo này phản ánh trực tiếp khả năng của retriever trong việc đưa đúng bài học mục tiêu vào top-$k$ đầu tiên.
+Phần này trình bày cách tổ chức thí nghiệm trước khi đi vào kết quả, gồm các cấu hình được so sánh, lý do lựa chọn, số lần chạy và căn cứ chọn tham số.
 
-Bảng \ref{tab:retrieval-overall} cho thấy kết quả tổng thể của cấu hình no-rerank. Có thể thấy retriever đạt Hit@1 bằng 0,7617 và tăng lên 0,9817 ở Hit@10. MRR@10 đạt 0,8484 cho thấy ở phần lớn trường hợp, bài học đúng đã xuất hiện rất sớm trong danh sách kết quả. nDCG@10 đạt 0,4267 thấp hơn các độ đo Hit và MRR, điều này phù hợp với bản chất \textit{single-gold}: mặc dù bài học đúng thường được truy xuất thành công, số lượng chunk liên quan trong cùng bài vẫn lớn nên việc phân bố thứ hạng bên trong lesson còn chưa tối ưu hoàn toàn.
+\textbf{Các cấu hình so sánh và lý do chọn.} Đồ án tiến hành ba thí nghiệm, tập trung vào hai node lõi. Thí nghiệm thứ nhất đánh giá retrieve node ở cấu hình cơ sở \textit{no-rerank}, trong đó hệ thống chỉ dùng truy xuất lai (BM25 kết hợp dense, hợp nhất bằng RRF) mà không qua bước xếp hạng lại. Thí nghiệm thứ hai đánh giá retrieve node ở cấu hình \textit{with-rerank}, bổ sung cross-encoder để xếp hạng lại cùng tập candidate. Thí nghiệm thứ ba đánh giá generate node bằng RAGAS. Cấu hình \textit{no-rerank} được chọn làm \textit{baseline} một cách có chủ đích: vì hai cấu hình retrieval dùng chung tập candidate đầu vào và chỉ khác nhau ở bước rerank, nên chênh lệch kết quả giữa chúng cô lập được đúng phần đóng góp của reranker. Đây là thiết kế so sánh kiểu \textit{ablation}, phù hợp để trả lời câu hỏi nghiên cứu về giá trị thực tế của reranker, thay vì so với một hệ thống ngoài vốn khác biệt ở quá nhiều yếu tố và không thể quy kết nguyên nhân.
+
+\textbf{Số lần chạy.} Mỗi cấu hình retrieval được chạy một lần trên toàn bộ 600 câu hỏi của benchmark, và thí nghiệm generation được chạy một lần trên 246 mẫu. Việc chạy một lần là hợp lý vì pipeline ở các thí nghiệm này về cơ bản mang tính tất định: bước truy xuất và xếp hạng lại cho kết quả ổn định với cùng đầu vào, còn mô hình chấm RAGAS được đặt ở nhiệt độ bằng 0 để loại bỏ phần lớn dao động ngẫu nhiên giữa các lần chấm. Do đó, lặp lại nhiều lần để lấy trung bình không làm thay đổi đáng kể kết luận, trong khi vẫn giữ được chi phí thực nghiệm ở mức hợp lý.
+
+\textbf{Căn cứ chọn tham số.} Các tham số ở Bảng \ref{tab:exp-params} được chọn theo các căn cứ sau. Các mức $k \in \{1,3,5,10\}$ được dùng để vừa quan sát chất lượng ở thứ hạng cao nhất (Hit@1) vừa quan sát độ phủ trong một cửa sổ kết quả thực tế mà người dùng có thể xem (top-10). Kích thước \textit{search pool} 50 candidate đủ rộng để bước rerank có không gian lựa chọn nhưng không làm chi phí cross-encoder tăng quá mức. Nhiệt độ sinh câu trả lời được đặt thấp ở mức 0,1 để ưu tiên tính ổn định và bám nguồn, phù hợp với ngữ cảnh giáo dục cần độ chính xác. Nhiệt độ mô hình chấm được đặt bằng 0 để kết quả đánh giá nhất quán giữa các lần chạy. Chuẩn so khớp \textit{single-gold} ở mức bài học được chọn vì cho phép mở rộng benchmark trên toàn bộ kho SGK với chi phí gán nhãn thấp, như đã phân tích ở Mục 4.7.
+
+\textbf{Cách xử lý dữ liệu và môi trường.} Toàn bộ thí nghiệm chạy trên cùng kho tri thức 2348 chunk và cùng cấu hình mô hình ở Bảng \ref{tab:exp-environment}. Dữ liệu kiểm thử của hai node được xây dựng theo quy trình ở Mục 4.7, và kết quả raw của mỗi thí nghiệm được lưu lại theo từng truy vấn để phục vụ phân tích lỗi ở Mục 4.11.
+
+\section{Kết quả đánh giá retrieve node}
+\label{sec:result-retrieve}
+
+Thực nghiệm retrieve node được chạy đầy đủ trên 600 câu hỏi của benchmark \textit{single-gold} ở cả hai cấu hình: không có reranker (\textit{no-rerank}) và có reranker (\textit{with-rerank}). Mỗi câu hỏi được chấm tại các mức $k \in \{1,3,5,10\}$ với các độ đo Hit@$k$, Recall@$k$, Precision@$k$, MRR@$k$ và nDCG@$k$. Vì benchmark dùng khóa bài học làm chuẩn đúng, các độ đo này phản ánh trực tiếp khả năng của retrieve node trong việc đưa đúng bài học mục tiêu lên các vị trí đầu của danh sách kết quả.
+
+\textbf{So sánh tổng thể giữa hai cấu hình.} Kết quả tổng thể của hai cấu hình được trình bày trong Bảng \ref{tab:retrieval-overall}.
 
 \begin{table}[H]
     \centering
     \renewcommand{\arraystretch}{1.25}
-    \begin{tabular}{|p{0.22\textwidth}|>{\centering\arraybackslash}p{0.14\textwidth}|>{\centering\arraybackslash}p{0.14\textwidth}|>{\centering\arraybackslash}p{0.14\textwidth}|>{\centering\arraybackslash}p{0.14\textwidth}|}
+    \begin{tabular}{|p{0.26\textwidth}|>{\centering\arraybackslash}p{0.18\textwidth}|>{\centering\arraybackslash}p{0.18\textwidth}|>{\centering\arraybackslash}p{0.12\textwidth}|}
         \hline
-        \textbf{Chỉ số} & \textbf{@1} & \textbf{@3} & \textbf{@5} & \textbf{@10} \\
+        \textbf{Chỉ số} & \textbf{No-rerank} & \textbf{With-rerank} & \textbf{$\Delta$} \\
         \hline
-        Hit@$k$ & 0,7617 & 0,9367 & 0,9683 & 0,9817 \\
+        Hit@1 & 0,7617 & 0,8183 & $+0,0566$ \\
         \hline
-        Recall@$k$ & 0,0684 & 0,1396 & 0,1879 & 0,2856 \\
+        Hit@3 & 0,9367 & 0,9500 & $+0,0133$ \\
         \hline
-        Precision@$k$ & 0,7617 & 0,5300 & 0,4350 & 0,3372 \\
+        Hit@5 & 0,9683 & 0,9750 & $+0,0067$ \\
         \hline
-        MRR@$k$ & 0,7617 & 0,8394 & 0,8467 & 0,8484 \\
+        Hit@10 & 0,9817 & 0,9833 & $+0,0016$ \\
         \hline
-        nDCG@$k$ & 0,7617 & 0,5790 & 0,5013 & 0,4267 \\
+        MRR@10 & 0,8484 & 0,8856 & $+0,0372$ \\
+        \hline
+        nDCG@10 & 0,4267 & 0,4169 & $-0,0098$ \\
+        \hline
+        Precision@10 & 0,3372 & 0,3133 & $-0,0239$ \\
+        \hline
+        Thời gian (600 câu, giây) & 59,7 & 1895,5 & $\times 31,8$ \\
         \hline
     \end{tabular}
     \vspace{0.2cm}
-    \caption{Kết quả retrieval tổng thể trên 600 câu hỏi benchmark ở cấu hình no-rerank}
+\caption{So sánh kết quả retrieval tổng thể giữa cấu hình no-rerank và with-rerank trên 600 câu hỏi}
     \label{tab:retrieval-overall}
 \end{table}
 
-Để quan sát độ ổn định của retriever theo từng nhóm dữ liệu, Bảng \ref{tab:retrieval-book-grade} báo cáo ba độ đo đại diện là Hit@1, Hit@10 và MRR@10 theo từng cặp bộ sách -- khối lớp. Kết quả cho thấy nhóm CD-11 đạt tốt nhất với Hit@1 bằng 0,90 và MRR@10 bằng 0,9367, trong khi CD-10 và KNTT-11 là hai nhóm khó hơn ở mức xếp hạng đầu. Dù vậy, tất cả các nhóm đều đạt Hit@10 từ 0,97 trở lên, cho thấy vấn đề chính không nằm ở việc bỏ sót hoàn toàn bài học đúng mà chủ yếu ở việc đẩy bài học đó lên đủ cao ở top đầu.
+Bảng \ref{tab:retrieval-overall} cho thấy reranker cải thiện rõ rệt ở nhóm thứ hạng đầu: Hit@1 tăng từ 0,7617 lên 0,8183 và MRR@10 tăng từ 0,8484 lên 0,8856. Mức cải thiện thu hẹp dần khi $k$ tăng, và tới Hit@10 hai cấu hình gần như tương đương (0,9817 so với 0,9833). Điều này cho thấy reranker chủ yếu \textit{sắp xếp lại} thứ hạng để đưa bài học đúng lên cao hơn, chứ không mở rộng độ phủ, bởi bài học đúng vốn đã nằm trong top-10 của retriever.
+
+Hai độ đo nDCG@10 và Precision@10 giảm nhẹ khi bật reranker. Hiện tượng này là hệ quả trực tiếp của chuẩn \textit{single-gold} ở mức bài học. Vì mọi chunk cùng bài đều được tính đúng, một retriever thô thường đưa nhiều chunk của cùng một bài vào top-10, khiến Precision@10 và nDCG@10 cao một cách hình thức. Khi reranker đưa chunk phù hợp nhất lên vị trí đầu nhưng đẩy bớt các chunk cùng bài xuống dưới, hai độ đo theo độ phủ này giảm, dù chất lượng ở thứ hạng đầu lại tăng. Vì vậy, với thiết kế benchmark hiện tại, Hit@1 và MRR là các độ đo phản ánh đúng nhất hiệu quả của reranker, còn nDCG@10 và Precision@10 không phải là độ đo phù hợp để kết luận.
+
+Hình \ref{fig:hitk-curve} biểu diễn Hit@$k$ của hai cấu hình khi $k$ tăng. Khoảng cách giữa hai đường rõ nhất tại $k=1$ rồi thu hẹp dần và gần như khép lại tại $k=10$, minh họa trực quan cho nhận định rằng reranker cải thiện thứ hạng đầu chứ không mở rộng độ phủ.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+    \begin{axis}[
+        width=0.86\textwidth,
+        height=6.2cm,
+        xlabel={$k$},
+        ylabel={Hit@$k$},
+        xtick={1,3,5,10},
+        ymin=0.7, ymax=1.0,
+        legend style={at={(0.5,-0.20)}, anchor=north, legend columns=-1},
+        grid=major,
+        mark size=2.2pt,
+    ]
+    \addplot coordinates {(1,0.7617) (3,0.9367) (5,0.9683) (10,0.9817)};
+    \addplot coordinates {(1,0.8183) (3,0.9500) (5,0.9750) (10,0.9833)};
+    \legend{No-rerank, With-rerank}
+    \end{axis}
+    \end{tikzpicture}
+    \caption{Hit@$k$ theo $k$ của hai cấu hình trên toàn bộ 600 câu hỏi}
+    \label{fig:hitk-curve}
+\end{figure}
+
+\textbf{Kết quả theo từng nhóm bộ sách và khối lớp.} Kết quả theo từng cặp bộ sách --- khối lớp được trình bày trong Bảng \ref{tab:retrieval-book-grade}.
 
 \begin{table}[H]
     \centering
     \renewcommand{\arraystretch}{1.25}
-    \begin{tabular}{|p{0.22\textwidth}|>{\centering\arraybackslash}p{0.16\textwidth}|>{\centering\arraybackslash}p{0.16\textwidth}|>{\centering\arraybackslash}p{0.16\textwidth}|}
+    \begin{tabular}{|p{0.20\textwidth}|>{\centering\arraybackslash}p{0.16\textwidth}|>{\centering\arraybackslash}p{0.16\textwidth}|>{\centering\arraybackslash}p{0.16\textwidth}|>{\centering\arraybackslash}p{0.16\textwidth}|}
         \hline
-        \textbf{Nhóm dữ liệu} & \textbf{Hit@1} & \textbf{Hit@10} & \textbf{MRR@10} \\
+        \multirow{2}{*}{\textbf{Nhóm}} & \multicolumn{2}{c|}{\textbf{Hit@1}} & \multicolumn{2}{c|}{\textbf{MRR@10}} \\
+        \cline{2-5}
+         & No-rerank & With-rerank & No-rerank & With-rerank \\
         \hline
-        CD-10 & 0,7000 & 0,9700 & 0,8086 \\
+        CD-10 & 0,7000 & 0,8000 & 0,8086 & 0,8817 \\
         \hline
-        CD-11 & 0,9000 & 0,9900 & 0,9367 \\
+        CD-11 & 0,9000 & 0,9100 & 0,9367 & 0,9464 \\
         \hline
-        CD-12 & 0,7700 & 0,9800 & 0,8427 \\
+        CD-12 & 0,7700 & 0,8000 & 0,8427 & 0,8598 \\
         \hline
-        KNTT-10 & 0,7400 & 0,9800 & 0,8417 \\
+        KNTT-10 & 0,7400 & 0,7900 & 0,8417 & 0,8690 \\
         \hline
-        KNTT-11 & 0,7000 & 1,0000 & 0,8132 \\
+        KNTT-11 & 0,7000 & 0,8200 & 0,8132 & 0,8821 \\
         \hline
-        KNTT-12 & 0,7600 & 0,9700 & 0,8479 \\
+        KNTT-12 & 0,7600 & 0,7900 & 0,8479 & 0,8745 \\
         \hline
     \end{tabular}
     \vspace{0.2cm}
-    \caption{Kết quả retrieval no-rerank theo từng nhóm bộ sách và khối lớp}
+\caption{So sánh Hit@1 và MRR@10 theo từng nhóm bộ sách và khối lớp}
     \label{tab:retrieval-book-grade}
 \end{table}
 
-Về thời gian xử lý, toàn bộ 600 câu hỏi được đánh giá trong khoảng 59,7 giây ở cấu hình no-rerank, tương đương trung bình xấp xỉ 0,10 giây cho mỗi truy vấn retrieval trong điều kiện chạy benchmark cục bộ. Con số này cho thấy cấu hình retriever hiện tại đủ nhẹ để mở rộng cho các thí nghiệm tiếp theo. Riêng cấu hình with-rerank vẫn chưa có số liệu hoàn chỉnh tại thời điểm viết báo cáo, do đó phần so sánh trước/sau rerank sẽ được cập nhật sau khi quá trình chạy đầy đủ trên toàn bộ benchmark hoàn tất.
+Bảng \ref{tab:retrieval-book-grade} cho thấy reranker mang lại lợi ích lớn nhất ở chính những nhóm vốn yếu ở thứ hạng đầu: KNTT-11 tăng Hit@1 từ 0,70 lên 0,82 và CD-10 tăng từ 0,70 lên 0,80. Ngược lại, nhóm vốn đã mạnh như CD-11 gần như đã bão hòa nên mức tăng nhỏ. Xu hướng này cho thấy reranker đặc biệt hữu ích trong việc bù đắp cho các trường hợp mà retriever thô chưa đưa được bài học đúng lên đầu. Hình \ref{fig:hit1-book-grade} trực quan hóa sự chênh lệch này theo từng nhóm.
 
-\section{Kết quả đánh giá generation và thảo luận}
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+    \begin{axis}[
+        ybar,
+        width=0.92\textwidth,
+        height=6.4cm,
+        bar width=9pt,
+        enlarge x limits=0.12,
+        ymin=0.6, ymax=1.0,
+        ylabel={Hit@1},
+        symbolic x coords={CD-10, CD-11, CD-12, KNTT-10, KNTT-11, KNTT-12},
+        xtick=data,
+        legend style={at={(0.5,-0.18)}, anchor=north, legend columns=-1},
+        nodes near coords,
+        nodes near coords style={font=\scriptsize, /pgf/number format/fixed, /pgf/number format/precision=2},
+        every node near coord/.append style={rotate=90, anchor=west},
+    ]
+    \addplot coordinates {(CD-10,0.70) (CD-11,0.90) (CD-12,0.77) (KNTT-10,0.74) (KNTT-11,0.70) (KNTT-12,0.76)};
+    \addplot coordinates {(CD-10,0.80) (CD-11,0.91) (CD-12,0.80) (KNTT-10,0.79) (KNTT-11,0.82) (KNTT-12,0.79)};
+    \legend{No-rerank, With-rerank}
+    \end{axis}
+    \end{tikzpicture}
+    \caption{So sánh Hit@1 giữa hai cấu hình theo từng nhóm bộ sách và khối lớp}
+    \label{fig:hit1-book-grade}
+\end{figure}
 
-Đối với generation, đồ án sử dụng lại kết quả RAGAS đã được chạy trên 246 mẫu hỏi đáp. Các độ đo trung bình thu được gồm Faithfulness bằng 0,9757, Answer Relevancy bằng 0,8571, Context Precision bằng 0,8555 và Context Recall bằng 0,9593. Đồng thời, thời gian phản hồi trung bình của retriever là 4,579 giây, của bước sinh câu trả lời là 1,979 giây và của toàn bộ pipeline là 6,558 giây. Các số liệu này được tóm tắt trong Bảng \ref{tab:generation-ragas}.
+\textbf{Chi phí tính toán.} Lợi ích về độ chính xác ở thứ hạng đầu đi kèm một chi phí đáng kể về thời gian. Toàn bộ 600 câu hỏi được đánh giá trong khoảng 59,7 giây ở cấu hình no-rerank, tương đương xấp xỉ 0,10 giây mỗi truy vấn, nhưng tăng lên khoảng 1895,5 giây ở cấu hình with-rerank, tức gấp khoảng 31,8 lần. Phần lớn chi phí tăng thêm đến từ việc cross-encoder phải chấm lại từng cặp truy vấn --- candidate. Đây là một đánh đổi cần cân nhắc khi triển khai thực tế: reranker đáng dùng cho mục tiêu nâng độ chính xác top-1, nhưng nên được áp dụng có chọn lọc, chẳng hạn xử lý theo lô, lưu đệm kết quả, hoặc chỉ kích hoạt khi cơ chế truy hồi thích ứng xác định truy vấn thực sự cần.
+
+\section{Kết quả đánh giá generate node theo RAGAS}
+\label{sec:result-generate}
+
+Generate node được đánh giá định lượng bằng RAGAS, một khung đánh giá tự động theo hướng dùng mô hình ngôn ngữ làm giám khảo (\textit{LLM-as-judge}) phổ biến cho các hệ thống RAG. Trong cấu hình của đồ án, mô hình giám khảo là Google Gemini chạy ở nhiệt độ bằng 0 để bảo đảm tính nhất quán, kết hợp với mô hình embedding tiếng Việt cho các độ đo cần đối chiếu ngữ nghĩa. Bốn độ đo được sử dụng, mỗi độ đo nhắm vào một khía cạnh khác nhau của chất lượng câu trả lời, được liệt kê trong Bảng \ref{tab:ragas-metrics}.
+
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{|p{0.26\textwidth}|p{0.62\textwidth}|}
+        \hline
+        \textbf{Độ đo} & \textbf{Ý nghĩa} \\
+        \hline
+        Faithfulness & Mức độ câu trả lời bám vào ngữ cảnh được cung cấp, dùng để phát hiện thông tin bịa ngoài tài liệu. \\
+        \hline
+        Answer Relevancy & Mức độ câu trả lời đi đúng trọng tâm câu hỏi, không lan man hay thừa thông tin. \\
+        \hline
+        Context Precision & Mức độ các chunk giá trị nhất được xếp ở vị trí ưu tiên trong ngữ cảnh, đối chiếu với đáp án tham chiếu. \\
+        \hline
+        Context Recall & Mức độ ngữ cảnh truy xuất bao phủ được thông tin cần thiết so với đáp án tham chiếu. \\
+        \hline
+    \end{tabular}
+    \vspace{0.2cm}
+\caption{Bốn độ đo RAGAS dùng để đánh giá generate node}
+    \label{tab:ragas-metrics}
+\end{table}
+
+Bảng \ref{tab:ragas-metrics} cho thấy bốn độ đo được chọn bao phủ cả hai mặt của generate node: chất lượng câu trả lời cuối cùng và chất lượng ngữ cảnh mà câu trả lời dựa vào. Trong đó, Faithfulness và Answer Relevancy phản ánh trực tiếp hành vi sinh câu trả lời, còn Context Precision và Context Recall phản ánh mức độ hỗ trợ của ngữ cảnh truy xuất đối với bước sinh.
+
+\textbf{Kết quả.} Kết quả đánh giá trên 246 mẫu hỏi đáp được trình bày trong Bảng \ref{tab:generation-ragas}.
 
 \begin{table}[H]
     \centering
@@ -227,14 +437,27 @@ Về thời gian xử lý, toàn bộ 600 câu hỏi được đánh giá trong 
         \hline
     \end{tabular}
     \vspace{0.2cm}
-    \caption{Kết quả đánh giá generation theo RAGAS trên 246 mẫu}
+\caption{Kết quả đánh giá generate node theo RAGAS trên 246 mẫu}
     \label{tab:generation-ragas}
 \end{table}
 
-Kết quả ở Bảng \ref{tab:generation-ragas} cho thấy hai điểm đáng chú ý. Thứ nhất, \textit{faithfulness} và \textit{context recall} đều ở mức cao, cho thấy khi retriever cung cấp được ngữ cảnh phù hợp, mô hình có xu hướng bám tốt vào nguồn và ít bịa thông tin ngoài tài liệu. Thứ hai, \textit{answer relevancy} và \textit{context precision} thấp hơn một bậc, phản ánh rằng chất lượng câu trả lời vẫn còn phụ thuộc mạnh vào việc sắp xếp đúng các chunk giá trị nhất ở đầu danh sách context. Nhận xét này cũng phù hợp với kết quả retrieval no-rerank ở Mục 4.8: bài học đúng thường đã được tìm thấy, nhưng thứ hạng giữa các chunk trong cùng lesson vẫn còn dư địa để cải thiện.
+Bảng \ref{tab:generation-ragas} cho thấy Faithfulness đạt 0,9757 và Context Recall đạt 0,9593, trong khi Answer Relevancy đạt 0,8571 và Context Precision đạt 0,8555. Về thời gian, trung bình mỗi mẫu mất 4,579 giây cho bước truy xuất, 1,979 giây cho bước sinh câu trả lời và 6,558 giây cho toàn bộ pipeline.
 
-Từ hai nhóm kết quả trên, có thể rút ra rằng cấu hình hiện tại đã chứng minh được tính khả thi của hướng tiếp cận RAG trên dữ liệu SGK Tin học THPT. Retrieval ở mức lesson key hoạt động tốt ngay cả khi chưa áp dụng rerank đầy đủ trên benchmark 600 câu hỏi, trong khi generation đạt mức trung thực cao trên tập RAGAS đã có. Hạn chế lớn nhất tại thời điểm này là phần đối chứng with-rerank vẫn chưa hoàn tất, nên chưa thể kết luận định lượng mức cải thiện thực tế của cross-encoder trên benchmark mới. Đây cũng là hạng mục cần được bổ sung đầu tiên khi cập nhật lại chương thực nghiệm trong các bản sau.
+Kết quả ở Bảng \ref{tab:generation-ragas} cho thấy hai điểm đáng chú ý. Thứ nhất, Faithfulness và Context Recall đều ở mức cao, cho thấy khi retrieve node cung cấp được ngữ cảnh phù hợp, generate node có xu hướng bám tốt vào nguồn và ít bịa thông tin ngoài tài liệu --- đúng với mục tiêu giữ tính bám nguồn đã đặt ra ở Chương 3. Thứ hai, Answer Relevancy và Context Precision thấp hơn một bậc, phản ánh rằng câu trả lời đôi khi còn thừa thông tin và chất lượng câu trả lời vẫn phụ thuộc vào việc sắp xếp đúng các chunk giá trị nhất ở đầu danh sách ngữ cảnh. Nhận xét này nhất quán với kết quả ở Mục 4.9: bài học đúng thường đã được tìm thấy, nhưng thứ hạng giữa các chunk trong cùng bài vẫn còn dư địa cải thiện, và đây chính là phần mà reranker đóng góp.
 
-Tóm lại, Chương 4 đã trình bày việc hiện thực hóa hệ thống từ dữ liệu SGK đến pipeline hỏi đáp hoàn chỉnh, đồng thời mô tả cách xây dựng benchmark và cách tổ chức đánh giá riêng cho retrieval và generation. Các kết quả hiện có cho thấy hệ thống đạt hiệu quả tốt ở cả khả năng truy xuất bài học đúng lẫn khả năng sinh câu trả lời bám nguồn. Phần kết quả với rerank chưa hoàn tất được giữ mở có chủ đích, nhằm bảo đảm rằng các kết luận trong chương chỉ dựa trên những số liệu đã thực sự được chạy và kiểm chứng.
+\section{Phân tích lỗi}
+\label{sec:error-analysis}
+
+Để hiểu rõ giới hạn của hệ thống, các lỗi quan sát được trong quá trình thực nghiệm được phân theo từng lớp của pipeline. Ở lớp dữ liệu và chunking, một số bài học có nội dung gần nhau về thuật ngữ nhưng khác bộ sách hoặc khác khối lớp, dễ gây nhầm lẫn cho retriever khi không có bộ lọc scope; ngoài ra, việc cắt chunk theo heading đôi khi tách rời một ý trải dài qua nhiều đoạn. Ở lớp retrieval, các truy vấn ngắn hoặc dùng từ chung chung khó được phân biệt đúng bài, dẫn tới việc bài học đúng không được đưa lên vị trí đầu; đây cũng là nhóm trường hợp mà reranker giúp cải thiện rõ nhất theo kết quả ở Mục 4.9. Ở lớp reranking, vẫn tồn tại những trường hợp cross-encoder đánh giá sai mức liên quan và đẩy chunk đúng xuống thấp, dù trên tổng thể reranker cải thiện thứ hạng đầu.
+
+Ở lớp generation, các lỗi chính gồm câu trả lời thừa thông tin làm giảm Answer Relevancy, và một số ít trường hợp suy luận mở rộng ngoài ngữ cảnh khi tài liệu không đủ. Cuối cùng, ở lớp đánh giá, chuẩn \textit{single-gold} ở mức bài học khiến các độ đo theo độ phủ như nDCG@10 và Precision@10 không phản ánh đúng chất lượng thứ hạng đầu, như đã phân tích ở Mục 4.9; tương tự, các độ đo RAGAS dựa trên đáp án tham chiếu sẽ chịu ảnh hưởng bởi chất lượng của đáp án tham chiếu. Các mẫu cụ thể có điểm số thấp được lưu trong raw output của cả hai luồng đánh giá, cho phép truy lại từng trường hợp để phân tích sâu hơn khi cần.
+
+\section{Nhận xét tổng hợp kết quả thực nghiệm}
+
+Từ các kết quả trên, có thể rút ra một số nhận xét chính. Thứ nhất, hướng tiếp cận RAG trên dữ liệu SGK Tin học THPT đã chứng minh được tính khả thi: retrieve node đạt Hit@1 bằng 0,8183 và MRR@10 bằng 0,8856 ở cấu hình tốt nhất, trong khi generate node đạt Faithfulness bằng 0,9757 trên tập đánh giá RAGAS. Thứ hai, reranker bằng cross-encoder đóng góp rõ rệt vào chất lượng thứ hạng đầu, cải thiện Hit@1 thêm khoảng 5,7 điểm phần trăm và mang lại lợi ích lớn nhất ở các nhóm bộ sách vốn yếu, tuy phải trả giá bằng chi phí thời gian tăng khoảng 31,8 lần. Thứ ba, kết quả của hai node nhất quán với nhau: việc retrieve node đưa đúng bài học vào ngữ cảnh là nền tảng để generate node đạt độ trung thực cao, và phần thứ hạng còn cải thiện được ở retrieval cũng chính là phần ảnh hưởng tới Answer Relevancy và Context Precision của generation.
+
+Bên cạnh các kết quả đạt được, chương cũng chỉ ra những giới hạn cần lưu ý khi diễn giải số liệu. Benchmark retrieval sử dụng chuẩn \textit{single-gold} ở mức bài học, nên các độ đo theo độ phủ không nên được dùng làm kết luận chính; chi phí của reranker còn cao và cần được tối ưu khi triển khai; và việc đánh giá generation dựa trên đáp án tham chiếu phụ thuộc vào chất lượng của đáp án đó. Những giới hạn này là cơ sở cho các hướng cải thiện sẽ được trình bày ở Chương 5 và Chương 6.
+
+Tóm lại, Chương 4 đã trình bày việc hiện thực hóa hệ thống từ dữ liệu SGK đến pipeline hỏi đáp hoàn chỉnh, mô tả chi tiết cách xây dựng và chứng thực hai bộ dữ liệu kiểm thử, đồng thời báo cáo kết quả đánh giá riêng cho retrieve node và generate node. Các kết luận trong chương đều dựa trên những số liệu đã thực sự được chạy và kiểm chứng, và mỗi bộ dữ liệu kiểm thử đều có thể truy ngược về nguồn để kiểm tra độc lập.
 
 \end{document}
