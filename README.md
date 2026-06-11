@@ -23,6 +23,42 @@ The current codebase is still a thesis prototype. It already includes API, retri
 
 The implementation is centered around four layers.
 
+### End-to-end workflow
+
+```text
+User request
+   |
+   v
+RequestContext
+   |
+   v
+Context analysis + intent routing
+   |
+   v
+Session resolution + action planning
+   |
+   +------------------------------+
+   |                              |
+   v                              v
+QA / quiz path               Slide / lesson-plan path
+   |                              |
+   v                              v
+Adaptive retrieval           Content supervisor
+(BM25 + dense + RRF          + specialist agents
+ + optional rerank)               |
+   |                              |
+   v                              v
+Grounded generation          Merge + quality review
+   |                              |
+   +--------------+---------------+
+                  |
+                  v
+         Final response / export
+                  |
+                  v
+         Trace + session persistence
+```
+
 ### 1. Orchestration layer
 
 The orchestration layer receives the user request, analyzes conversation context, detects intent, resolves session state, and dispatches the request to the correct service.
