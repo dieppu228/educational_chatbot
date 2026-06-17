@@ -10,20 +10,9 @@ from google import genai
 from google.genai.types import GenerateContentConfig
 
 from src.config.config import settings
+from src.llm.prompts import EVALUATION_ANSWER_PROMPT
 
 logger = logging.getLogger("evaluation.collector")
-
-
-# Prompt để LLM trả lời câu hỏi dựa trên context (giống runtime pipeline)
-ANSWER_PROMPT = """Bạn là trợ lý học tập Tin học THPT. Dựa vào tài liệu được cung cấp, 
-hãy trả lời câu hỏi sau một cách chính xác, rõ ràng.
-
-Tài liệu tham khảo:
-{context}
-
-Câu hỏi: {question}
-
-Hãy trả lời dựa trên tài liệu. Nếu tài liệu không chứa đủ thông tin, nói rõ."""
 
 
 class DataCollector:
@@ -70,7 +59,7 @@ class DataCollector:
     
     def _generate_answer(self, question: str, contexts: List[str]) -> str:
         context_text = "\n\n---\n\n".join(contexts)
-        prompt = ANSWER_PROMPT.format(context=context_text, question=question)
+        prompt = EVALUATION_ANSWER_PROMPT.format(context=context_text, question=question)
         
         try:
             response = self.client.models.generate_content(
