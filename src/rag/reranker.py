@@ -62,7 +62,11 @@ class Reranker:
 
     @trace_node("Reranker.rerank_multi_query")
     def rerank_multi_query(
-        self, queries: List[str], results: List[Dict], top_n: int = 10
+        self,
+        queries: List[str],
+        results: List[Dict],
+        top_n: int = 10,
+        query_weights: Optional[List[float]] = None,
     ) -> List[Dict]:
         # Score each chunk against every sub-query, keep the max — so a chunk
         # retrieved for query #2 is judged against query #2, not just query #1.
@@ -77,6 +81,9 @@ class Reranker:
             pairs = [[q, doc] for q in queries for doc in docs]
             scores = np.asarray(self._model.predict(pairs), dtype=np.float32)
             scores = scores.reshape(len(queries), len(results))
+            if query_weights and len(query_weights) == len(queries):
+                weights = np.asarray(query_weights, dtype=np.float32).reshape(len(queries), 1)
+                scores = scores * weights
             max_scores = scores.max(axis=0)
 
             for i, score in enumerate(max_scores):

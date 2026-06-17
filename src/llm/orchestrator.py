@@ -201,6 +201,7 @@ class Orchestrator:
         # ⑥ Book Resolution
         ctx.resolve_book()
         ctx.resolve_grade()
+        self._normalize_intents_for_scope(ctx)
         logger.info(f"Book: ui={ui_book}, llm={ctx.intent_result.book if ctx.intent_result else None}, "
                      f"session={ctx.session.book} -> effective={ctx.effective_book}")
         logger.info(f"Grade: ui={ui_grade} -> effective={ctx.effective_grade}")
@@ -230,6 +231,7 @@ class Orchestrator:
                 ctx.intent_result = ctx.intent_results[i]
                 ctx.resolve_book()
                 ctx.resolve_grade()
+                self._normalize_intents_for_scope(ctx)
 
             # DECIDE: Check if this action can proceed
             if plan.action in self.ACTIONS_REQUIRING_BOOK and not ctx.effective_book:
@@ -281,6 +283,41 @@ class Orchestrator:
             "Mình sẽ dùng " + ", ".join(overrides) +
             " theo nội dung câu hỏi của bạn.\n\n"
         )
+
+    def _normalize_intents_for_scope(self, ctx: RequestContext) -> None:
+        before = [
+            {
+                "topic": intent.topic,
+                "lesson_reference": intent.lesson_reference,
+                "book": intent.book,
+            }
+            for intent in ctx.intent_results
+        ]
+        self.intent_router.normalize_intents_for_scope(
+            ctx.intent_results,
+            book_hint=ctx.effective_book,
+            grade_hint=ctx.effective_grade,
+        )
+        after = [
+            {
+                "topic": intent.topic,
+                "lesson_reference": intent.lesson_reference,
+                "book": intent.book,
+            }
+            for intent in ctx.intent_results
+        ]
+        if ctx.intent_results:
+            ctx.intent_result = ctx.intent_results[0]
+        if ctx.session and ctx.intent_result and ctx.intent_result.topic:
+            ctx.session.topic = ctx.intent_result.topic
+        if before != after:
+            ctx.add_debug_step(
+                "CatalogResolver",
+                effective_book=ctx.effective_book,
+                effective_grade=ctx.effective_grade,
+                before=before,
+                after=after,
+            )
 
     @staticmethod
     def _book_label(book: str) -> str:

@@ -1,37 +1,7 @@
 from typing import List, Dict, Optional, Any
 import json
 from src.llm.handlers.base_handler import BaseHandler
-from src.llm.prompts import PromptTemplate
-
-KNOWLEDGE_RELATION_PROMPT = """Bạn là chuyên gia xây dựng bản đồ kiến thức Tin học THPT.
-
-=== NỘI DUNG BÀI HỌC HIỆN TẠI ===
-{context}
-
-=== NHIỆM VỤ ===
-Xác định các kiến thức liên quan hoặc kiến thức tiên quyết (prerequisites) cần có để hiểu bài này.
-
-YÊU CẦU:
-1. Tìm các khái niệm/thuật ngữ quan trọng trong bài.
-2. Liên hệ với các bài học khác trong chương trình Tin học THPT (nếu có thể).
-3. Đưa ra gợi ý "Nếu bạn chưa biết về X, hãy xem lại bài Y".
-
-ĐỊNH DẠNG JSON:
-{{
-  "related_topics": [
-    {{
-      "topic": "Tên chủ đề",
-      "relation": "prerequisite | related | extension",
-      "reason": "Giải thích ngắn gọn mối liên hệ"
-    }}
-  ]
-}}
-
-VALIDATION:
-- Trả về tối đa 3-5 chủ đề quan trọng nhất.
-- CHỈ trả về JSON thuần túy.
-
-=== BẮT ĐẦU PHÂN TÍCH ==="""
+from src.llm.prompts import KNOWLEDGE_RELATION_PROMPT
 
 class KnowledgeMap(BaseHandler):
     
@@ -103,47 +73,94 @@ class KnowledgeMap(BaseHandler):
                 })
         return lessons
 
-    def lookup_semantic_topic(self, book_hint: Optional[str], lesson_reference: str) -> Optional[str]:
+    def lookup_semantic_topic(
+        self,
+        book_hint: Optional[str],
+        lesson_reference: str,
+        grade_hint: Optional[str] = None,
+    ) -> Optional[str]:
+        lesson = self._lookup_lesson(book_hint, lesson_reference, grade_hint)
+        if not lesson:
+            return None
+        if self._extract_lesson_num(lesson_reference):
+            return f"{lesson['topic_name']} - {lesson['lesson_name']}"
+        return lesson["topic_name"]
+
+    def lookup_lesson_context(
+        self,
+        book_hint: Optional[str],
+        lesson_reference: str,
+        grade_hint: Optional[str] = None,
+    ) -> Optional[Dict[str, str]]:
+        lesson = self._lookup_lesson(book_hint, lesson_reference, grade_hint)
+        if not lesson:
+            return None
+        return {
+            "book": lesson["book"],
+            "grade": lesson["grade"],
+            "topic_ref": lesson["topic_ref"],
+            "topic_name": lesson["topic_name"],
+            "lesson_num": lesson["lesson_num"],
+            "lesson_name": lesson["lesson_name"],
+            "query_context": (
+                f"{lesson['book']} lớp {lesson['grade']} "
+                f"chủ đề {lesson['topic_ref']} {lesson['topic_name']} "
+                f"bài {lesson['lesson_num']} {lesson['lesson_name']}"
+            ),
+        }
+
+    def _lookup_lesson(
+        self,
+        book_hint: Optional[str],
+        lesson_reference: str,
+        grade_hint: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         if not lesson_reference:
             return None
-            
+
         import re
         topic_ref = None
         lesson_num = None
-        
-        m_topic = re.search(r'chủ đề\s*([a-zA-Z0-9]+)', lesson_reference, re.IGNORECASE)
+
+        m_topic = re.search(r'(?:chủ đề|chu de|chương|chuong)\s*([a-zA-Z0-9]+)', lesson_reference, re.IGNORECASE)
         if m_topic:
-            topic_ref = m_topic.group(1).upper()
-            
-        m_lesson = re.search(r'bài\s*(\d+)', lesson_reference, re.IGNORECASE)
-        if m_lesson:
-            lesson_num = m_lesson.group(1)
-            
-        # Nhan dien rieng re
+            topic_ref = self._normalize_topic_ref(book_hint, m_topic.group(1).upper())
+
+        lesson_num = self._extract_lesson_num(lesson_reference)
+
         if not topic_ref and not lesson_num:
             return None
-            
-        matches = []
-        for l in self.lessons:
-            if book_hint and l["book"] != book_hint:
+
+        for lesson in self.lessons:
+            if book_hint and lesson["book"] != book_hint:
                 continue
-            
-            match = True
-            if topic_ref and l["topic_ref"] != topic_ref:
-                match = False
-            if lesson_num and l["lesson_num"] != lesson_num:
-                match = False
-                
-            if match:
-                matches.append(l)
-                
-        if not matches:
-            return None
-            
-        best = matches[0]
-        # Return Semantic Topic (Topic Name + Lesson Name)
-        return f"{best['topic_name']} - {best['lesson_name']}"
+            if grade_hint and lesson["grade"] != grade_hint:
+                continue
+            if topic_ref and lesson["topic_ref"] != topic_ref:
+                continue
+            if lesson_num and lesson["lesson_num"] != lesson_num:
+                continue
+            return lesson
+        return None
+
+    @staticmethod
+    def _extract_lesson_num(lesson_reference: str) -> Optional[str]:
+        import re
+        m_lesson = re.search(r'bài\s*(\d+)', lesson_reference, re.IGNORECASE)
+        return m_lesson.group(1) if m_lesson else None
+
+    @staticmethod
+    def _normalize_topic_ref(book_hint: Optional[str], topic_ref: str) -> str:
+        chapter_map = {
+            "1": "A", "2": "B", "3": "C", "4": "D",
+            "5": "E", "6": "F", "7": "G", "8": "H",
+        }
+        reverse_map = {value: key for key, value in chapter_map.items()}
+        if book_hint == "CD" and topic_ref in chapter_map:
+            return chapter_map[topic_ref]
+        if book_hint == "KNTT" and topic_ref in reverse_map:
+            return reverse_map[topic_ref]
+        return topic_ref
 
     def handle(self, query: str, **kwargs):
         pass
-

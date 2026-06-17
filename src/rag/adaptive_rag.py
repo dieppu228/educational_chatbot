@@ -476,11 +476,28 @@ class AdaptiveRAGAgent:
         if normalized_hint and normalized_hint in normalized_haystack:
             return True
 
+        if " - " in topic_hint:
+            topic_part, lesson_part = topic_hint.split(" - ", 1)
+            return (
+                self._token_overlap_ratio(topic_part, haystack) >= 0.75
+                and self._token_overlap_ratio(lesson_part, haystack) >= 0.75
+            )
+
         hint_tokens = self._meaningful_tokens(topic_hint)
-        if not hint_tokens or len(hint_tokens) > 2:
+        if not hint_tokens:
             return False
         haystack_tokens = set(self._meaningful_tokens(haystack))
+        if len(hint_tokens) > 2:
+            return self._token_overlap_ratio(topic_hint, haystack) >= 0.75
         return all(token in haystack_tokens for token in hint_tokens)
+
+    @classmethod
+    def _token_overlap_ratio(cls, needle: str, haystack: str) -> float:
+        needle_tokens = set(cls._meaningful_tokens(needle))
+        if not needle_tokens:
+            return 0.0
+        haystack_tokens = set(cls._meaningful_tokens(haystack))
+        return len(needle_tokens.intersection(haystack_tokens)) / len(needle_tokens)
 
     @staticmethod
     def _normalize_text(text: str) -> str:

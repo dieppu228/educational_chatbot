@@ -1,4 +1,3 @@
-import asyncio
 import json
 import re
 import os
@@ -104,14 +103,7 @@ class IntentRouter:
                     if intent.primary_intent not in self.VALID_INTENTS:
                         continue
                     
-                    # Mapping lesson_reference to exact Topic
-                    if intent.lesson_reference:
-                        semantic_topic = self.k_map.lookup_semantic_topic(intent.book, intent.lesson_reference)
-                        if semantic_topic:
-                            if intent.topic:
-                                intent.topic = f"{intent.topic} ({semantic_topic})"
-                            else:
-                                intent.topic = semantic_topic
+                    self.normalize_intent_for_scope(intent, intent.book)
                                 
                     # Agent loại bỏ intent kém tin cậy
                     # (confidence được parse từ LLM response, default 0.9)
@@ -155,8 +147,7 @@ class IntentRouter:
         for attempt in range(max_retries):
             try:
                 # ① ACT — Call LLM (non-blocking)
-                response = await asyncio.to_thread(
-                    self.client.models.generate_content,
+                response = await self.client.aio.models.generate_content(
                     model=self.model_name,
                     contents=prompt,
                     config=GenerateContentConfig(
@@ -178,14 +169,7 @@ class IntentRouter:
                     if intent.primary_intent not in self.VALID_INTENTS:
                         continue
                     
-                    # Mapping lesson_reference to exact Topic
-                    if intent.lesson_reference:
-                        semantic_topic = self.k_map.lookup_semantic_topic(intent.book, intent.lesson_reference)
-                        if semantic_topic:
-                            if intent.topic:
-                                intent.topic = f"{intent.topic} ({semantic_topic})"
-                            else:
-                                intent.topic = semantic_topic
+                    self.normalize_intent_for_scope(intent, intent.book)
                                 
                     # Agent loại bỏ intent kém tin cậy
                     validated.append(intent)
@@ -216,6 +200,31 @@ class IntentRouter:
                 f"is_new_topic = false NEU van lien quan den \"{current_topic}\"."
             )
         return "Khong co session truoc do. is_new_topic = true neu co topic moi."
+
+    def normalize_intents_for_scope(
+        self,
+        intents: List[IntentResult],
+        book_hint: Optional[str] = None,
+        grade_hint: Optional[str] = None,
+    ) -> None:
+        for intent in intents:
+            self.normalize_intent_for_scope(intent, book_hint or intent.book, grade_hint)
+
+    def normalize_intent_for_scope(
+        self,
+        intent: IntentResult,
+        book_hint: Optional[str] = None,
+        grade_hint: Optional[str] = None,
+    ) -> None:
+        if not intent.lesson_reference:
+            return
+        semantic_topic = self.k_map.lookup_semantic_topic(
+            book_hint,
+            intent.lesson_reference,
+            grade_hint=grade_hint,
+        )
+        if semantic_topic:
+            intent.topic = semantic_topic
 
     def _format_session_context(self, messages: Optional[List[dict]]) -> str:
         if not messages:

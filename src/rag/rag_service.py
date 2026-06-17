@@ -1,9 +1,12 @@
 import re
 import asyncio
-from typing import Optional, List, Dict, AsyncGenerator
+import time
+from concurrent.futures import ThreadPoolExecutor
+from typing import Optional, List, Dict, AsyncGenerator, Tuple
 
 from src.config.config import settings
 from src.schemas.context import RequestContext
+from src.llm.knowledge_map import KnowledgeMap
 from src.rag.adaptive_rag import AdaptiveRAGAgent
 from src.utils.trace_decorator import trace_node
 
@@ -17,6 +20,7 @@ class RAGService:
             settings=settings,
         )
         self.reranker = reranker
+        self.knowledge_map = KnowledgeMap()
 
     @trace_node("RAGService.get_context")
     def get_context(
@@ -105,10 +109,11 @@ class RAGService:
         task_type: Optional[str],
         debug_node: str,
     ) -> List[Dict]:
-        if len(queries) <= 1:
-            query = queries[0] if queries else ctx.query
+        weighted_queries = self._build_weighted_queries(ctx, queries, book, grade_hint)
+        if len(weighted_queries) <= 1:
+            query = weighted_queries[0] if weighted_queries else (ctx.query, 1.0)
             result = self.rag_agent.retrieve(
-                query,
+                query[0],
                 intent_hint=intent_hint,
                 topic_hint=topic_hint,
                 grade_hint=grade_hint,
@@ -116,18 +121,19 @@ class RAGService:
             )
             ctx.add_debug_step(
                 debug_node,
-                queries_used=queries,
+                queries_used=[query[0]],
+                query_weights=[query[1]],
                 strategy=result.strategy_used.value,
                 chunks_returned=len(result.chunks),
                 time_s=result.total_time_s,
                 filter=result.metadata_filter,
                 reason=result.reason,
             )
-            return self._rerank_and_filter(query, result.chunks, task_type)
+            return self._rerank_and_filter(query[0], result.chunks, task_type)
 
         return self._retrieve_multi_query(
             ctx=ctx,
-            queries=queries,
+            weighted_queries=weighted_queries,
             intent_hint=intent_hint,
             topic_hint=topic_hint,
             grade_hint=grade_hint,
@@ -139,7 +145,7 @@ class RAGService:
     def _retrieve_multi_query(
         self,
         ctx: RequestContext,
-        queries: List[str],
+        weighted_queries: List[Tuple[str, float]],
         intent_hint: Optional[str],
         topic_hint: Optional[str],
         grade_hint: Optional[str],
@@ -148,44 +154,63 @@ class RAGService:
         debug_node: str,
     ) -> List[Dict]:
         # ── Multi-query: loop → gom → deduplicate ──
+        t0 = time.time()
         all_chunks = []
         seen_doc_ids = set()
         strategies = []
-        total_time = 0.0
+        query_time_sum = 0.0
 
-        for q in queries:
-            result = self.rag_agent.retrieve(
+        def retrieve_one(item: Tuple[str, float]):
+            q, weight = item
+            return q, weight, self.rag_agent.retrieve(
                 q,
                 intent_hint=intent_hint,
                 topic_hint=topic_hint,
                 grade_hint=grade_hint,
                 book=book,
             )
+
+        max_workers = min(len(weighted_queries), 4)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(retrieve_one, item) for item in weighted_queries]
+            results = [future.result() for future in futures]
+
+        for q, weight, result in results:
             strategies.append(result.strategy_used.value)
-            total_time += result.total_time_s
+            query_time_sum += result.total_time_s
 
             for chunk in result.chunks:
                 if chunk["doc_id"] not in seen_doc_ids:
+                    chunk["score"] = float(chunk.get("score", 0.0)) * weight
+                    chunk["query_weight"] = weight
                     all_chunks.append(chunk)
                     seen_doc_ids.add(chunk["doc_id"])
 
         ctx.add_debug_step(
             debug_node,
-            queries_used=queries,
+            queries_used=[q for q, _ in weighted_queries],
+            query_weights=[weight for _, weight in weighted_queries],
             multi_query=True,
             strategies=strategies,
             chunks_returned=len(all_chunks),
-            time_s=round(total_time, 2),
+            time_s=round(time.time() - t0, 2),
+            query_time_sum_s=round(query_time_sum, 2),
             filter={"grade": grade_hint, "topic": topic_hint, "book": book},
-            reason=f"Multi-query search ({len(queries)} queries)",
+            reason=f"Multi-query search ({len(weighted_queries)} queries)",
         )
-        return self._rerank_and_filter(queries, all_chunks, task_type)
+        return self._rerank_and_filter(
+            [q for q, _ in weighted_queries],
+            all_chunks,
+            task_type,
+            query_weights=[weight for _, weight in weighted_queries],
+        )
 
     def _rerank_and_filter(
         self,
         queries,
         chunks: List[Dict],
         task_type: Optional[str],
+        query_weights: Optional[List[float]] = None,
     ) -> List[Dict]:
         if not chunks:
             return []
@@ -198,7 +223,7 @@ class RAGService:
         rerank_top_n = self._get_rerank_top_n(task_type)
         if len(queries) > 1:
             result_chunks = self.reranker.rerank_multi_query(
-                queries, chunks, top_n=rerank_top_n,
+                queries, chunks, top_n=rerank_top_n, query_weights=query_weights,
             )
         else:
             result_chunks = self.reranker.rerank(
@@ -212,6 +237,34 @@ class RAGService:
         if not filtered and result_chunks:
             filtered = result_chunks[:3]
         return filtered
+
+    def _build_weighted_queries(
+        self,
+        ctx: RequestContext,
+        queries: List[str],
+        book: Optional[str],
+        grade: Optional[str],
+    ) -> List[Tuple[str, float]]:
+        base_queries = queries or [ctx.query]
+        weighted = [(q, 1.0) for q in base_queries if q]
+        lesson_reference = ctx.intent_result.lesson_reference if ctx.intent_result else None
+        if not (book and grade and lesson_reference and weighted):
+            return weighted
+
+        lesson_context = self.knowledge_map.lookup_lesson_context(
+            book,
+            lesson_reference,
+            grade_hint=grade,
+        )
+        if not lesson_context:
+            return weighted
+
+        contextual_query = (
+            f"{weighted[0][0]} {lesson_context['query_context']}"
+        )
+        if contextual_query not in {q for q, _ in weighted}:
+            weighted.append((contextual_query, 0.75))
+        return weighted
 
     @staticmethod
     def _should_fallback_scope(
