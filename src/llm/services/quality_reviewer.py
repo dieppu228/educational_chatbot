@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import re
@@ -57,7 +56,30 @@ class BaseQualityReviewer:
             )
 
     async def review_async(self, query: str, context: str, output: Any) -> QualityReviewResult:
-        return await asyncio.to_thread(self.review, query, context, output)
+        if not self.client:
+            return QualityReviewResult.fallback_fail(
+                reason="FORMAT_INVALID",
+                message="Quality reviewer client is not initialized.",
+            )
+
+        prompt = self._build_prompt(query, context, output)
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=GenerateContentConfig(
+                    temperature=0.1,
+                    response_mime_type="application/json",
+                ),
+            )
+            text = self._extract_text(response)
+            data = json.loads(self._strip_fences(text))
+            return QualityReviewResult(**data)
+        except Exception as exc:
+            return QualityReviewResult.fallback_fail(
+                reason="FORMAT_INVALID",
+                message=f"Quality reviewer failed: {str(exc)[:200]}",
+            )
 
     def _build_prompt(self, query: str, context: str, output: Any) -> str:
         output_text = (
@@ -76,7 +98,9 @@ class BaseQualityReviewer:
             return response.text.strip()
         candidates = getattr(response, "candidates", None) or []
         if candidates:
-            for part in candidates[0].content.parts:
+            content = getattr(candidates[0], "content", None)
+            parts = getattr(content, "parts", None) or []
+            for part in parts:
                 if hasattr(part, "text") and part.text:
                     return part.text.strip()
         return ""

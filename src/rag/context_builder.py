@@ -1,5 +1,4 @@
 
-import asyncio
 import time
 from typing import List, Dict, Optional
 
@@ -78,8 +77,7 @@ class ContextBuilder:
         )
 
         try:
-            response = await asyncio.to_thread(
-                self.client.models.generate_content,
+            response = await self.client.aio.models.generate_content(
                 model=settings.LLM_MODEL,
                 contents=prompt,
                 config={

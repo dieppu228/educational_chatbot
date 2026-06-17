@@ -1,5 +1,4 @@
 
-import asyncio
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 from src.config.config import settings
@@ -86,8 +85,7 @@ class BaseHandler(ABC):
                 'top_p': kwargs.get('top_p', 0.95),
             }
             
-            response = await asyncio.to_thread(
-                self.client.models.generate_content,
+            response = await self.client.aio.models.generate_content(
                 model=self.model,
                 contents=full_prompt,
                 config=config

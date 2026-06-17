@@ -1,4 +1,3 @@
-import asyncio
 import json
 import re
 import os
@@ -62,8 +61,7 @@ class QueryRewriter:
                 context=history_context or "",
             )
 
-            response = await asyncio.to_thread(
-                self.client.models.generate_content,
+            response = await self.client.aio.models.generate_content(
                 model=self.model_name,
                 contents=prompt,
                 config=GenerateContentConfig(
