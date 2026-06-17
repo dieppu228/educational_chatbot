@@ -2,6 +2,7 @@ import json
 import logging
 import numpy as np
 import torch
+import threading
 from pathlib import Path
 from typing import List, Optional
 from sentence_transformers import SentenceTransformer
@@ -14,6 +15,10 @@ logger = logging.getLogger("chatbot")
 # ============================================================
 
 class EmbeddingModel:
+    _MODEL_CACHE = {}
+    _LOAD_FAILED = set()
+    _CACHE_LOCK = threading.RLock()
+    _ENCODE_LOCK = threading.RLock()
     
     def __init__(
         self, 
@@ -27,21 +32,54 @@ class EmbeddingModel:
         self.model = None  # Lazy load
         self.load_failed = False
     
+    def _cache_key(self):
+        return (self.model_name, self.device)
+
     def _load_model(self):
-        if self.load_failed:
-            raise RuntimeError(f"Embedding model unavailable: {self.model_name}")
-        if self.model is None:
+        key = self._cache_key()
+        with self._CACHE_LOCK:
+            if self.load_failed or key in self._LOAD_FAILED:
+                raise RuntimeError(f"Embedding model unavailable: {self.model_name}")
+
+            cached = self._MODEL_CACHE.get(key)
+            if cached is not None:
+                self.model = cached
+                return
+
             try:
-                print(f"Loading embedding model: {self.model_name}...")
-                self.model = SentenceTransformer(
+                logger.info(
+                    "Loading embedding model | model=%s device=%s",
                     self.model_name,
-                    trust_remote_code=True,
-                    device=self.device
+                    self.device,
                 )
+                try:
+                    self.model = SentenceTransformer(
+                        self.model_name,
+                        trust_remote_code=True,
+                        device=self.device,
+                        local_files_only=True,
+                    )
+                except Exception as local_error:
+                    logger.info(
+                        "Local embedding model load failed, trying online load | model=%s error=%s",
+                        self.model_name,
+                        str(local_error)[:200],
+                    )
+                    self.model = SentenceTransformer(
+                        self.model_name,
+                        trust_remote_code=True,
+                        device=self.device
+                    )
                 self._repair_position_ids()
-                print(f"Model loaded on {self.device}")
+                self._MODEL_CACHE[key] = self.model
+                logger.info(
+                    "Embedding model loaded | model=%s device=%s",
+                    self.model_name,
+                    self.device,
+                )
             except Exception:
                 self.load_failed = True
+                self._LOAD_FAILED.add(key)
                 raise
 
     def _repair_position_ids(self):
@@ -90,13 +128,14 @@ class EmbeddingModel:
     def encode(self, texts: List[str], show_progress: bool = True) -> np.ndarray:
         self._load_model()
 
-        embeddings = self.model.encode(
-            texts,
-            batch_size=self.batch_size,
-            convert_to_numpy=True,
-            normalize_embeddings=False,  # Normalize safely below for cosine similarity
-            show_progress_bar=show_progress
-        )
+        with self._ENCODE_LOCK:
+            embeddings = self.model.encode(
+                texts,
+                batch_size=self.batch_size,
+                convert_to_numpy=True,
+                normalize_embeddings=False,  # Normalize safely below for cosine similarity
+                show_progress_bar=show_progress
+            )
 
         embeddings = np.array(embeddings, dtype=np.float32)
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
@@ -117,19 +156,20 @@ class EmbeddingModel:
         rows = []
         for idx, text in enumerate(texts):
             row = None
-            for attempt in range(2):
-                if attempt > 0:
-                    self.model = None
-                    self.load_failed = False
-                    self._load_model()
+            try:
+                with self._ENCODE_LOCK:
+                    candidate = self.model.encode(
+                        [text],
+                        batch_size=1,
+                        convert_to_numpy=True,
+                        normalize_embeddings=False,
+                        show_progress_bar=False,
+                    )
+            except Exception:
+                logger.exception("Embedding single-text retry failed at index %s", idx)
+                candidate = None
 
-                candidate = self.model.encode(
-                    [text],
-                    batch_size=1,
-                    convert_to_numpy=True,
-                    normalize_embeddings=False,
-                    show_progress_bar=False,
-                )
+            if candidate is not None:
                 candidate = np.array(candidate, dtype=np.float32)
                 norm = np.linalg.norm(candidate, axis=1, keepdims=True)
                 norm_value = float(norm[0, 0])
@@ -142,7 +182,6 @@ class EmbeddingModel:
                 candidate = candidate / norm_value
                 if np.isfinite(candidate).all():
                     row = candidate[0]
-                    break
 
             if row is None:
                 self._record_bad_text(idx, text)
