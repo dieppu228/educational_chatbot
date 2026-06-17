@@ -284,29 +284,67 @@ class ContentFormatterOutput(BaseModel):
 
 
 # ============================================================
-# WEB SEARCH TOOL — Placeholder (chưa implement)
+# WEB SEARCH TOOL — Tavily-backed (text + media)
 # ============================================================
 
 class WebSearchInput(BaseModel):
-    """Input cho WebSearchTool (placeholder)."""
+    """Input cho WebSearchTool."""
     query: str = Field(..., description="Từ khoá tìm kiếm")
-    top_k: int = Field(5, ge=1, le=20, description="Số kết quả trả về")
+    top_k: int = Field(5, ge=1, le=20, description="Số kết quả text trả về")
+
+    # ── Search mode ──
+    search_mode: str = Field(
+        "mixed",
+        description=(
+            "Chế độ tìm kiếm: 'text' (chỉ text), "
+            "'media' (chỉ ảnh/GIF/animation), 'mixed' (cả hai)"
+        ),
+    )
+
+    # ── Educational context hints ──
+    topic: Optional[str] = Field(None, description="Tên chủ đề/bài học để refine query")
+    grade: Optional[str] = Field(None, description="Lớp: 10, 11, 12")
+    book: Optional[str] = Field(None, description="Bộ sách: CD hoặc KNTT")
+    media_types: Optional[List[str]] = Field(
+        None,
+        description="Loại media mong muốn: ['image','gif','animation','diagram','infographic']",
+    )
+    language: str = Field("vi", description="Ngôn ngữ ưu tiên: 'vi' hoặc 'en'")
+
+
+class MediaItem(BaseModel):
+    """Một media item (ảnh, GIF, animation) từ web search."""
+    url: str = Field(..., description="URL trực tiếp tới media")
+    description: str = Field("", description="Mô tả nội dung media")
+    source_url: str = Field("", description="URL trang nguồn chứa media")
+    source_title: str = Field("", description="Tiêu đề trang nguồn")
+    media_type: str = Field(
+        "image",
+        description="Loại: 'image' | 'gif' | 'animation' | 'diagram' | 'infographic'",
+    )
+    relevance_score: Optional[float] = Field(None, description="Điểm liên quan (0-1)")
 
 
 class WebSearchResult(BaseModel):
-    """Một kết quả tìm kiếm web."""
+    """Một kết quả tìm kiếm web (text)."""
     title: str = Field("", description="Tiêu đề trang")
-    link: str = Field("", description="URL")
-    snippet: str = Field("", description="Đoạn trích")
+    url: str = Field("", description="URL trang")
+    snippet: str = Field("", description="Đoạn trích nội dung")
+    score: Optional[float] = Field(None, description="Relevance score từ Tavily")
 
 
 class WebSearchOutput(BaseModel):
-    """Output của WebSearchTool (placeholder)."""
+    """Output đầy đủ của WebSearchTool."""
     results: List[WebSearchResult] = Field(
-        default_factory=list,
-        description="Danh sách kết quả tìm kiếm"
+        default_factory=list, description="Kết quả text"
     )
-    total_results: int = Field(0, description="Tổng số kết quả")
+    media_items: List[MediaItem] = Field(
+        default_factory=list, description="Media tìm được"
+    )
+    total_results: int = Field(0, description="Tổng số kết quả text")
+    total_media: int = Field(0, description="Tổng số media items")
+    query_used: str = Field("", description="Query thực tế đã gửi Tavily (sau refine)")
+    search_mode: str = Field("mixed", description="Mode đã dùng")
 
 
 __all__ = [
@@ -321,4 +359,5 @@ __all__ = [
     "WebSearchInput",
     "WebSearchOutput",
     "WebSearchResult",
+    "MediaItem",
 ]

@@ -82,5 +82,15 @@ class MCPToolClient:
             params["action"] = action
         return self.call_tool("content_formatter", params)
 
+    def search_web(self, query: str, **kwargs) -> ToolCallResponse:
+        """Shortcut: gọi web_search tool (mode mặc định 'mixed')."""
+        params = {"query": query, **kwargs}
+        return self.call_tool("web_search", params)
+
+    def search_media(self, query: str, **kwargs) -> ToolCallResponse:
+        """Shortcut: gọi web_search ở mode 'media'."""
+        params = {"query": query, "search_mode": "media", **kwargs}
+        return self.call_tool("web_search", params)
+
 
 __all__ = ["MCPToolClient"]

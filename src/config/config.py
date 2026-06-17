@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     # RAG Strategy
     RAG_BROAD_MAX_CHUNKS: int = 30  # Gioi han BROAD strategy
 
+    # ===== Web Search (Tavily) =====
+    TAVILY_API_KEY: str = Field(default="", env="TAVILY_API_KEY")
+    # Base URL mock tạm — sẽ thay bằng endpoint thật sau
+    TAVILY_BASE_URL: str = "https://api.tavily.com"
+    TAVILY_SEARCH_DEPTH: str = "advanced"      # basic | advanced
+    TAVILY_MAX_RESULTS: int = 5
+    TAVILY_INCLUDE_IMAGES: bool = True
+    TAVILY_INCLUDE_IMAGE_DESCRIPTIONS: bool = True
+    TAVILY_TIMEOUT_SECONDS: int = 15
+
 
     class Config:
         env_file = ".env"
