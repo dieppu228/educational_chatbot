@@ -1,0 +1,1 @@
+Outline đã được duyệt. Bây giờ hãy tiếp tục workflow: 1) Gọi generate_content() để viết nội dung chi tiết, 2) Gọi generate_media() và generate_quiz() nếu cần, 3) Gọi merge_results() để ghép slides, 4) Gọi check_quality() để kiểm tra. KHÔNG trả lời text — hãy gọi generate_content() NGAY.

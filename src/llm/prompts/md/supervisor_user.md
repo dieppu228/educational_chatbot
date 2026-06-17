@@ -1,0 +1,1 @@
+Hãy tạo {task_description} cho chủ đề '{topic}', lớp {grade}, bộ sách {book}. Bắt đầu bằng cách gọi generate_outline().

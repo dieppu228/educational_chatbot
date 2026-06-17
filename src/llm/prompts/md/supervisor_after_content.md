@@ -1,0 +1,1 @@
+Content đã sẵn sàng. Hãy gọi merge_results() để ghép outline + content thành slides hoàn chỉnh. KHÔNG trả lời text — hãy gọi merge_results() NGAY.
