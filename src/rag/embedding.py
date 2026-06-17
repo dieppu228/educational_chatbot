@@ -70,7 +70,7 @@ class EmbeddingModel:
                         trust_remote_code=True,
                         device=self.device
                     )
-                self._repair_position_ids()
+                self._repair_position_ids(self.model)
                 self._MODEL_CACHE[key] = self.model
                 logger.info(
                     "Embedding model loaded | model=%s device=%s",
@@ -82,8 +82,46 @@ class EmbeddingModel:
                 self._LOAD_FAILED.add(key)
                 raise
 
-    def _repair_position_ids(self):
-        transformer = self.model._modules.get("0") if hasattr(self.model, "_modules") else None
+    def _load_cpu_fallback_model(self):
+        if self.device == "cpu":
+            return None
+
+        key = (self.model_name, "cpu")
+        with self._CACHE_LOCK:
+            cached = self._MODEL_CACHE.get(key)
+            if cached is not None:
+                return cached
+            if key in self._LOAD_FAILED:
+                return None
+
+            try:
+                logger.warning(
+                    "Loading CPU fallback embedding model | model=%s",
+                    self.model_name,
+                )
+                try:
+                    model = SentenceTransformer(
+                        self.model_name,
+                        trust_remote_code=True,
+                        device="cpu",
+                        local_files_only=True,
+                    )
+                except Exception:
+                    model = SentenceTransformer(
+                        self.model_name,
+                        trust_remote_code=True,
+                        device="cpu",
+                    )
+                self._repair_position_ids(model)
+                self._MODEL_CACHE[key] = model
+                return model
+            except Exception:
+                self._LOAD_FAILED.add(key)
+                logger.exception("Failed to load CPU fallback embedding model")
+                return None
+
+    def _repair_position_ids(self, model):
+        transformer = model._modules.get("0") if hasattr(model, "_modules") else None
         auto_model = getattr(transformer, "auto_model", None)
         embeddings = getattr(auto_model, "embeddings", None)
         position_ids = getattr(embeddings, "position_ids", None)
@@ -114,6 +152,29 @@ class EmbeddingModel:
             max_positions,
         )
 
+    def _encode_with_model(self, model, texts: List[str], batch_size: int, show_progress: bool) -> np.ndarray:
+        with self._ENCODE_LOCK:
+            embeddings = model.encode(
+                texts,
+                batch_size=batch_size,
+                convert_to_numpy=True,
+                normalize_embeddings=False,  # Normalize safely below for cosine similarity
+                show_progress_bar=show_progress
+            )
+        return np.array(embeddings, dtype=np.float32)
+
+    @staticmethod
+    def _normalize_embeddings(embeddings: np.ndarray) -> np.ndarray:
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        small_norms = norms < 1e-12
+        if np.any(small_norms):
+            logger.warning(
+                "Embedding batch returned near-zero vectors; skipping normalization for %s rows",
+                int(np.sum(small_norms)),
+            )
+            norms[small_norms] = 1.0
+        return embeddings / norms
+
     def _record_bad_text(self, idx: int, text: str) -> None:
         try:
             log_path = Path(__file__).resolve().parents[2] / "logs" / "embedding_failures.txt"
@@ -124,29 +185,17 @@ class EmbeddingModel:
                 f.write("\n" + "-" * 40 + "\n")
         except Exception:
             logger.exception("Failed to record bad embedding text")
-    
+
     def encode(self, texts: List[str], show_progress: bool = True) -> np.ndarray:
         self._load_model()
 
-        with self._ENCODE_LOCK:
-            embeddings = self.model.encode(
-                texts,
-                batch_size=self.batch_size,
-                convert_to_numpy=True,
-                normalize_embeddings=False,  # Normalize safely below for cosine similarity
-                show_progress_bar=show_progress
-            )
-
-        embeddings = np.array(embeddings, dtype=np.float32)
-        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-        small_norms = norms < 1e-12
-        if np.any(small_norms):
-            logger.warning(
-                "Embedding batch returned near-zero vectors; skipping normalization for %s rows",
-                int(np.sum(small_norms)),
-            )
-            norms[small_norms] = 1.0
-        embeddings = embeddings / norms
+        embeddings = self._encode_with_model(
+            self.model,
+            texts,
+            batch_size=self.batch_size,
+            show_progress=show_progress,
+        )
+        embeddings = self._normalize_embeddings(embeddings)
         if np.isfinite(embeddings).all():
             return embeddings
 
@@ -157,31 +206,40 @@ class EmbeddingModel:
         for idx, text in enumerate(texts):
             row = None
             try:
-                with self._ENCODE_LOCK:
-                    candidate = self.model.encode(
-                        [text],
-                        batch_size=1,
-                        convert_to_numpy=True,
-                        normalize_embeddings=False,
-                        show_progress_bar=False,
-                    )
+                candidate = self._encode_with_model(
+                    self.model,
+                    [text],
+                    batch_size=1,
+                    show_progress=False,
+                )
             except Exception:
                 logger.exception("Embedding single-text retry failed at index %s", idx)
                 candidate = None
 
             if candidate is not None:
-                candidate = np.array(candidate, dtype=np.float32)
-                norm = np.linalg.norm(candidate, axis=1, keepdims=True)
-                norm_value = float(norm[0, 0])
-                if norm_value < 1e-12:
-                    logger.warning(
-                        "Embedding produced near-zero norm at text index %s; skipping normalization",
-                        idx,
-                    )
-                    norm_value = 1.0
-                candidate = candidate / norm_value
+                candidate = self._normalize_embeddings(candidate)
                 if np.isfinite(candidate).all():
                     row = candidate[0]
+
+            if row is None:
+                fallback_model = self._load_cpu_fallback_model()
+                if fallback_model is not None:
+                    try:
+                        candidate = self._encode_with_model(
+                            fallback_model,
+                            [text],
+                            batch_size=1,
+                            show_progress=False,
+                        )
+                        candidate = self._normalize_embeddings(candidate)
+                        if np.isfinite(candidate).all():
+                            logger.warning(
+                                "Embedding recovered with CPU fallback at text index %s",
+                                idx,
+                            )
+                            row = candidate[0]
+                    except Exception:
+                        logger.exception("CPU fallback embedding failed at index %s", idx)
 
             if row is None:
                 self._record_bad_text(idx, text)
