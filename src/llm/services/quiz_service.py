@@ -13,6 +13,7 @@ from src.llm.handlers.explain_handler import ExplainHandler
 from src.llm.services.quality_reviewer import get_quality_reviewer
 from src.llm.student_tracker import StudentTracker
 from src.llm.utils import extract_num_questions
+from src.llm.prompts import QUIZ_REVISION_QUERY_PROMPT
 from src.rag.context_builder import ContextBuilder
 from src.rag.rag_service import RAGService
 from src.utils.error_handling import safe_execute
@@ -112,11 +113,11 @@ class QuizService:
 
                 if quality_review.reflection_action == "revise_quiz":
                     reflection_attempts = 1
-                    revised_query = (
-                        f"{query}\n\n"
-                        "Quality reviewer yêu cầu sửa bộ câu hỏi trước khi trả cho học sinh:\n"
-                        f"{quality_review.revision_instruction or quality_review.summary}\n"
-                        "Giữ đúng số lượng câu hỏi, chỉ sửa các lỗi được nêu."
+                    revised_query = QUIZ_REVISION_QUERY_PROMPT.format(
+                        query=query,
+                        revision_instruction=(
+                            quality_review.revision_instruction or quality_review.summary
+                        ),
                     )
                     raw_questions = handler.handle(revised_query, context_text, num_questions=num_q)
                     if raw_questions is None:
@@ -247,6 +248,16 @@ class QuizService:
             return
 
         yield "Đang chấm điểm..."
+
+        direct_msg = self._try_grade_direct_mcq_answers(
+            session=session,
+            questions=all_questions,
+            original_query=original_query,
+            ctx=ctx,
+        )
+        if direct_msg:
+            yield direct_msg
+            return
 
         task_items = [q.to_task_item() for q in all_questions]
 
@@ -507,21 +518,32 @@ class QuizService:
                     yield "Lỗi khi sinh câu hỏi. Đang thử lại..."
                     continue
 
+                yield "Đang kiểm duyệt chất lượng..."
                 quality_reviewer = get_quality_reviewer(f"quiz:{task_type}")
-                quality_review = await quality_reviewer.review_async(
-                    query=query,
-                    context=context_text,
-                    output=raw_questions.model_dump(),
+                questions_json = json.dumps(raw_questions.model_dump())
+                t2 = time.time()
+                quality_review, validation_result = await asyncio.gather(
+                    quality_reviewer.review_async(
+                        query=query,
+                        context=context_text,
+                        output=raw_questions.model_dump(),
+                    ),
+                    self.validator.validate_async(
+                        question_type=task_type,
+                        context=context_text,
+                        questions_json=questions_json,
+                    ),
                 )
+                val_time = time.time() - t2
                 reflection_attempts = 0
 
                 if quality_review.reflection_action == "revise_quiz":
                     reflection_attempts = 1
-                    revised_query = (
-                        f"{query}\n\n"
-                        "Quality reviewer yêu cầu sửa bộ câu hỏi trước khi trả cho học sinh:\n"
-                        f"{quality_review.revision_instruction or quality_review.summary}\n"
-                        "Giữ đúng số lượng câu hỏi, chỉ sửa các lỗi được nêu."
+                    revised_query = QUIZ_REVISION_QUERY_PROMPT.format(
+                        query=query,
+                        revision_instruction=(
+                            quality_review.revision_instruction or quality_review.summary
+                        ),
                     )
                     raw_questions = await handler.handle_async(
                         revised_query,
@@ -536,6 +558,13 @@ class QuizService:
                         context=context_text,
                         output=raw_questions.model_dump(),
                     )
+                    t2 = time.time()
+                    validation_result = await self.validator.validate_async(
+                        question_type=task_type,
+                        context=context_text,
+                        questions_json=json.dumps(raw_questions.model_dump()),
+                    )
+                    val_time += time.time() - t2
 
                 ctx.add_debug_step(
                     "QualityReviewer",
@@ -559,15 +588,6 @@ class QuizService:
                         yield "Câu hỏi chưa đạt chất lượng. Bạn thử hỏi cụ thể hơn hoặc cung cấp thêm tài liệu nguồn nhé."
                     continue
 
-                # Validate (async)
-                yield "Đang kiểm duyệt chất lượng..."
-                t2 = time.time()
-                validation_result = await self.validator.validate_async(
-                    question_type=task_type,
-                    context=context_text,
-                    questions_json=json.dumps(raw_questions.model_dump()),
-                )
-                val_time = time.time() - t2
                 logger.info(
                     f"Validator: all_valid={validation_result.all_valid}, "
                     f"approved={len(validation_result.approved_questions)} ({val_time:.2f}s)"
@@ -656,10 +676,36 @@ class QuizService:
 
         yield "Đang chấm điểm..."
 
+        direct_msg = self._try_grade_direct_mcq_answers(
+            session=session,
+            questions=all_questions,
+            original_query=original_query,
+            ctx=ctx,
+        )
+        if direct_msg:
+            yield direct_msg
+            return
+
         task_items = [q.to_task_item() for q in all_questions]
 
         t0 = time.time()
-        result = await self.scorer.handle_async(original_query, task_items)
+        timeout_s = getattr(self.scorer, "timeout_seconds", 20)
+        try:
+            result = await asyncio.wait_for(
+                self.scorer.handle_async(original_query, task_items),
+                timeout=timeout_s,
+            )
+        except asyncio.TimeoutError:
+            score_time = time.time() - t0
+            logger.warning("Scorer timed out after %.2fs", score_time)
+            ctx.add_debug_step(
+                "Handler",
+                action="check_answer",
+                status="scorer_timeout",
+                scorer_time_s=round(score_time, 2),
+            )
+            yield "\nKhông chấm được câu trả lời vì scorer quá thời gian. Bạn thử gửi lại đáp án theo mẫu: câu 1 A, câu 2 B."
+            return
         score_time = time.time() - t0
         logger.info(
             f"Scorer: status={result.status}, correct={result.is_correct}, "
@@ -713,6 +759,181 @@ class QuizService:
                 scorer_time_s=round(score_time, 2),
             )
             yield f"\nKhông thể xác định câu trả lời. {result.explanation or 'Vui lòng nói rõ hơn.'}"
+
+    def _try_grade_direct_mcq_answers(
+        self,
+        session: Session,
+        questions: List[QuestionRecord],
+        original_query: str,
+        ctx: RequestContext,
+    ) -> Optional[str]:
+        answers = self._extract_direct_mcq_answers(
+            original_query,
+            total_questions=len(questions),
+        )
+        if not answers:
+            return None
+
+        graded = []
+        skipped = []
+        for display_index, user_answer in answers:
+            question_index = display_index - 1
+            if question_index < 0 or question_index >= len(questions):
+                skipped.append({
+                    "question_display_index": display_index,
+                    "user_answer": user_answer,
+                    "reason": "question_index_out_of_range",
+                })
+                continue
+
+            record = questions[question_index]
+            if record.question_type != "mcq":
+                skipped.append({
+                    "question_display_index": display_index,
+                    "question_id": record.question_id,
+                    "question_type": record.question_type,
+                    "user_answer": user_answer,
+                    "reason": "not_mcq",
+                })
+                continue
+
+            correct_answer = str(record.content.get("correct_answer", "")).strip().upper()
+            if correct_answer not in {"A", "B", "C", "D"}:
+                skipped.append({
+                    "question_display_index": display_index,
+                    "question_id": record.question_id,
+                    "user_answer": user_answer,
+                    "correct_answer": correct_answer,
+                    "reason": "invalid_correct_answer",
+                })
+                continue
+
+            is_correct = user_answer == correct_answer
+            record.record_attempt(
+                user_answer=user_answer,
+                is_correct=is_correct,
+                score=1.0 if is_correct else 0.0,
+            )
+            self.student_tracker.record_attempt(
+                user_id=session.user_id,
+                topic=session.topic or "Chung",
+                score=1.0 if is_correct else 0.0,
+            )
+            graded.append((display_index, user_answer, correct_answer, is_correct))
+
+        if not graded:
+            ctx.add_debug_step(
+                "DirectMCQAnswerParser",
+                status="parsed_but_not_graded",
+                raw_query=original_query,
+                parsed_answers=[
+                    {"question_display_index": idx, "user_answer": ans}
+                    for idx, ans in answers
+                ],
+                skipped=skipped,
+            )
+            return None
+
+        correct_count = sum(1 for _, _, _, is_correct in graded if is_correct)
+        lines = [f"\n\nĐã chấm {len(graded)} câu: {correct_count}/{len(graded)} đúng."]
+        for display_index, user_answer, correct_answer, is_correct in graded:
+            status = "Đúng" if is_correct else "Sai"
+            lines.append(
+                f"Câu {display_index}: {status} - bạn chọn {user_answer}, đáp án đúng {correct_answer}."
+            )
+
+        msg = "\n".join(lines)
+        session.add_message("assistant", msg)
+        ctx.add_debug_step(
+            "DirectMCQAnswerParser",
+            status="graded",
+            raw_query=original_query,
+            parsed_answers=[
+                {"question_display_index": idx, "user_answer": ans}
+                for idx, ans in answers
+            ],
+            graded_answers=[
+                {
+                    "question_display_index": display_index,
+                    "question_record_index": display_index - 1,
+                    "user_answer": user_answer,
+                    "correct_answer": correct_answer,
+                    "is_correct": is_correct,
+                }
+                for display_index, user_answer, correct_answer, is_correct in graded
+            ],
+            skipped=skipped,
+        )
+        ctx.add_debug_step(
+            "Handler",
+            action="check_answer",
+            status="direct_mcq",
+            answers_detected=len(answers),
+            answers_graded=len(graded),
+            correct=correct_count,
+        )
+        return msg
+
+    @classmethod
+    def _extract_direct_mcq_answers(
+        cls,
+        text: str,
+        total_questions: Optional[int] = None,
+    ) -> List[tuple[int, str]]:
+        raw = text or ""
+        max_index = total_questions or 99
+
+        explicit = cls._extract_indexed_answers(
+            raw,
+            patterns=[
+                r"(?:câu|cau|question|ques|q)\s*(\d{1,2})\s*[:.)-]?\s*(?:đáp\s*án|dap\s*an|chọn|chon|là|la|=)?\s*([ABCD])\b",
+                r"\b(\d{1,2})\s*[:.)-]\s*(?:đáp\s*án|dap\s*an|chọn|chon|là|la|=)?\s*([ABCD])\b",
+                r"\b(\d{1,2})\s*([ABCD])\b",
+            ],
+            max_index=max_index,
+        )
+        if explicit:
+            return explicit
+
+        sequential = cls._extract_sequential_answers(raw, max_index=max_index)
+        if sequential:
+            return sequential
+        return []
+
+    @staticmethod
+    def _extract_indexed_answers(
+        text: str,
+        patterns: List[str],
+        max_index: int,
+    ) -> List[tuple[int, str]]:
+        answers_by_index: Dict[int, str] = {}
+        for pattern in patterns:
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                display_index = int(match.group(1))
+                if display_index < 1 or display_index > max_index:
+                    continue
+                answers_by_index[display_index] = match.group(2).upper()
+
+        return sorted(answers_by_index.items())
+
+    @staticmethod
+    def _extract_sequential_answers(text: str, max_index: int) -> List[tuple[int, str]]:
+        cleaned = re.sub(
+            r"\b(?:đáp\s*án|dap\s*an|answer|answers|em\s*chọn|em\s*chon|chọn|chon|là|la)\b",
+            " ",
+            text or "",
+            flags=re.IGNORECASE,
+        )
+        tokens = re.findall(r"\b[ABCD]\b", cleaned.upper())
+        if not tokens or len(tokens) > max_index:
+            return []
+
+        non_answer_text = re.sub(r"\b[ABCD]\b", " ", cleaned.upper())
+        non_answer_text = re.sub(r"[\s,;:.()\\/_|+-]+", " ", non_answer_text).strip()
+        if non_answer_text:
+            return []
+
+        return [(idx + 1, answer) for idx, answer in enumerate(tokens)]
 
     def _should_block_generation_for_irrelevant_context(
         self,
