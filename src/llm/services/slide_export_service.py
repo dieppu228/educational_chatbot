@@ -66,7 +66,11 @@ class SlideExportService:
 
     def _render_content_slide(self, slide, slide_data: Dict[str, Any], index: int) -> None:
         self._add_slide_title(slide, slide_data, index)
-        bullets = self._display_bullets(slide_data)
+        bullets = (
+            self._lesson_plan_display_lines(slide_data)
+            if slide_data.get("content_detail")
+            else self._display_bullets(slide_data)
+        )
         has_media = bool(slide_data.get("media"))
         bullet_width = Inches(7.3 if has_media else 11.2)
         self._add_bullet_box(slide, bullets, Inches(0.7), Inches(1.45), bullet_width, Inches(4.7))
@@ -133,6 +137,9 @@ class SlideExportService:
         notes = []
         if slide_data.get("notes"):
             notes.append(str(slide_data["notes"]))
+        lesson_plan_notes = self._lesson_plan_notes(slide_data)
+        if lesson_plan_notes:
+            notes.append(lesson_plan_notes)
         overflow = self._overflow_notes(slide_data)
         if overflow:
             notes.append(overflow)
@@ -145,6 +152,65 @@ class SlideExportService:
     def _display_bullets(self, slide_data: Dict[str, Any]) -> List[str]:
         bullets = slide_data.get("bullets") or slide_data.get("key_points") or []
         return [str(item) for item in bullets[:6]]
+
+    def _lesson_plan_display_lines(self, slide_data: Dict[str, Any]) -> List[str]:
+        lines = []
+        if slide_data.get("duration_minutes"):
+            lines.append(f"Thời lượng: {slide_data['duration_minutes']} phút")
+        for item in slide_data.get("objectives") or []:
+            lines.append(f"Mục tiêu: {item}")
+        for detail in slide_data.get("content_detail") or []:
+            detail = self._as_dict(detail)
+            heading = detail.get("heading")
+            explanation = detail.get("explanation")
+            if heading:
+                lines.append(heading)
+            if explanation:
+                lines.append(explanation)
+        for item in slide_data.get("assessment") or []:
+            lines.append(f"Đánh giá: {item}")
+        return lines or self._display_bullets(slide_data)
+
+    def _lesson_plan_notes(self, slide_data: Dict[str, Any]) -> str:
+        parts = []
+        if slide_data.get("teacher_activities"):
+            parts.append("Hoạt động GV:\n" + "\n".join(f"- {item}" for item in slide_data["teacher_activities"]))
+        if slide_data.get("student_activities"):
+            parts.append("Hoạt động HS:\n" + "\n".join(f"- {item}" for item in slide_data["student_activities"]))
+        detail_parts = []
+        for detail in slide_data.get("content_detail") or []:
+            detail = self._as_dict(detail)
+            lines = [str(detail.get("heading") or "Đề mục")]
+            field_labels = [
+                ("explanation", "Nội dung"),
+                ("example", "Ví dụ"),
+                ("teacher_prompt", "Câu hỏi GV"),
+                ("expected_student_response", "Dự kiến HS"),
+                ("common_mistake", "Sai lầm thường gặp"),
+                ("wrap_up", "Chốt"),
+            ]
+            for key, label in field_labels:
+                if detail.get(key):
+                    lines.append(f"{label}: {detail[key]}")
+            sources = detail.get("source_chunk_ids") or []
+            if sources:
+                lines.append("Nguồn: " + ", ".join(str(item) for item in sources))
+            detail_parts.append("\n".join(lines))
+        if detail_parts:
+            parts.append("Nội dung chi tiết:\n" + "\n\n".join(detail_parts))
+        if slide_data.get("assessment"):
+            parts.append("Đánh giá:\n" + "\n".join(f"- {item}" for item in slide_data["assessment"]))
+        if slide_data.get("transition"):
+            parts.append(f"Chuyển ý: {slide_data['transition']}")
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _as_dict(value: Any) -> Dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if hasattr(value, "model_dump"):
+            return value.model_dump()
+        return {}
 
     def _overflow_notes(self, slide_data: Dict[str, Any]) -> str:
         bullets = slide_data.get("bullets") or slide_data.get("key_points") or []

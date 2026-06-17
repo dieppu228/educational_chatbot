@@ -1,7 +1,11 @@
 
 import logging
 from src.llm.handlers.content.slide_agents.base_slide_agent import BaseSlideAgent
-from src.llm.prompts import SLIDE_OUTLINE_TEMPLATE, LESSON_PLAN_OUTLINE_TEMPLATE
+from src.llm.prompts import (
+    LESSON_PLAN_OUTLINE_TEMPLATE,
+    QUALITY_REVISION_INSTRUCTION_PROMPT,
+    SLIDE_OUTLINE_TEMPLATE,
+)
 
 logger = logging.getLogger("chatbot.slide_agent.outline")
 
@@ -30,10 +34,8 @@ class OutlineAgent(BaseSlideAgent):
             context_map=context_map,
         )
         if revision_instruction:
-            prompt += (
-                "\n\n=== QUALITY REVIEW REVISION INSTRUCTION ===\n"
-                f"{revision_instruction}\n"
-                "Chỉ sửa các phần bị nêu trong instruction, giữ nguyên các phần đã đạt."
+            prompt += QUALITY_REVISION_INSTRUCTION_PROMPT.format(
+                revision_instruction=revision_instruction,
             )
 
         response = self._call_llm(prompt, temperature=0.3)

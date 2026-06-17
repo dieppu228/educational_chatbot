@@ -163,7 +163,8 @@ def generate_content(
             "task_type": task_type,
         },
         constraints={
-            "max_bullets_per_slide": 6,
+            "max_bullets_per_slide": 6 if task_type != "lesson_plan" else None,
+            "lesson_plan_requires_detailed_sections": task_type == "lesson_plan",
             "must_use_source_chunks": True,
             "language": "vi",
         },

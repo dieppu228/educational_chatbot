@@ -8,7 +8,7 @@ from src.schemas.slide_schemas import (
     ContentPayload, ContentSlide,
     MediaPayload, MediaItem,
     QuizPayload, SlideQuizItem,
-    MergedSlide,
+    ContentDetailItem, MergedSlide,
 )
 
 logger = logging.getLogger("chatbot.slide_merger")
@@ -105,12 +105,31 @@ class SlideMerger:
             title=outline_slide.title,
             bullets=outline_slide.key_points,  # fallback
             source_chunk_ids=outline_slide.source_chunk_ids,
+            duration_minutes=outline_slide.duration_minutes,
+            objectives=[outline_slide.teaching_goal] if outline_slide.teaching_goal else [],
+            content_detail=[
+                ContentDetailItem(
+                    heading=unit,
+                    explanation="",
+                    source_chunk_ids=outline_slide.source_chunk_ids,
+                )
+                for unit in outline_slide.knowledge_units
+            ],
         )
 
         # Override với content (nếu có)
         if content_data:
             slide.bullets = content_data.get("bullets", slide.bullets)
             slide.notes = content_data.get("notes")
+            slide.duration_minutes = content_data.get("duration_minutes", slide.duration_minutes)
+            slide.objectives = content_data.get("objectives", slide.objectives) or []
+            slide.teacher_activities = content_data.get("teacher_activities", []) or []
+            slide.student_activities = content_data.get("student_activities", []) or []
+            slide.content_detail = self._parse_content_detail(
+                content_data.get("content_detail", slide.content_detail)
+            )
+            slide.assessment = content_data.get("assessment", []) or []
+            slide.transition = content_data.get("transition")
             # Merge source_chunk_ids
             content_sources = content_data.get("source_chunk_ids", [])
             if content_sources:
@@ -127,6 +146,16 @@ class SlideMerger:
             slide.bullets = ["Trả lời các câu hỏi trắc nghiệm sau"]
 
         return slide
+
+    @staticmethod
+    def _parse_content_detail(items) -> List[ContentDetailItem]:
+        parsed = []
+        for item in items or []:
+            if isinstance(item, ContentDetailItem):
+                parsed.append(item)
+            elif isinstance(item, dict) and item.get("heading"):
+                parsed.append(ContentDetailItem(**item))
+        return parsed
 
     def _match_media(
         self, slide: MergedSlide, media_payload: MediaPayload
@@ -161,7 +190,7 @@ class SlideQualityGate:
         for slide in slides:
             if not slide.title:
                 issues.append(f"STRUCTURAL: Slide {slide.slide_id} thiếu title")
-            if not slide.bullets and slide.slide_type not in ("title", "image"):
+            if not slide.bullets and not slide.content_detail and slide.slide_type not in ("title", "image"):
                 issues.append(f"STRUCTURAL: Slide {slide.slide_id} thiếu bullets")
 
         # 2. Coverage

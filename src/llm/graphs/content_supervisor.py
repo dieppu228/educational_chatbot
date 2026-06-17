@@ -10,56 +10,23 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from src.llm.graphs.state import ContentSupervisorState
 from src.llm.graphs.tools import ALL_TOOLS, TOOL_STATE_MAPPING
+from src.llm.agents import QualityReviewerAgent
+from src.llm.prompts import (
+    SUPERVISOR_AFTER_CONTENT_PROMPT,
+    SUPERVISOR_AFTER_OUTLINE_PROMPT,
+    SUPERVISOR_REVISION_REQUEST_PROMPT,
+    SUPERVISOR_SYSTEM_PROMPT,
+    SUPERVISOR_USER_PROMPT,
+)
+from src.llm.services.slide_merger import SlideMerger
+from src.schemas.agent_protocol import AgentTask
+from src.schemas.slide_schemas import AgentResult
 from src.schemas.agent_protocol import is_agent_task_result
 
 # ── Config ──
 RECURSION_LIMIT = 25
-MAX_REFLECTION_ATTEMPTS = 1
+MAX_REFLECTION_ATTEMPTS = 2
 REVISION_ACTIONS = {"revise_outline", "revise_content", "revise_quiz"}
-
-
-# ════════════════════════════════════════════════════════
-# SYSTEM PROMPT cho Supervisor
-# ════════════════════════════════════════════════════════
-
-SUPERVISOR_SYSTEM_PROMPT = """Bạn là Content Supervisor — điều phối viên tạo nội dung giáo dục.
-
-NHIỆM VỤ: Điều phối các specialist agent để tạo {task_description}.
-Bạn KHÔNG tự viết nội dung. Bạn CHỈ quyết định delegate task nào, cho agent nào, theo thứ tự nào.
-Các tool được bind dưới đây là adapter để gửi AgentTask và nhận AgentTaskResult từ specialist agents.
-
-THÔNG TIN BÀI HỌC:
-- Chủ đề: {topic}
-- Lớp: {grade}
-- Bộ sách: {book}
-
-=== BỐI CẢNH KIẾN THỨC (để bạn hiểu phạm vi bài học, KHÔNG dùng để tự sinh nội dung) ===
-{synthesized_context}
-
-AGENT ADAPTERS CÓ SẴN:
-1. generate_outline — Delegate cho PedagogyPlannerAgent thiết kế dàn ý (GỌI ĐẦU TIÊN, bắt buộc).
-2. generate_content — Delegate cho ContentDraftingAgent viết nội dung chi tiết cho slide/section giáo án (cần outline trước).
-3. generate_media — Delegate cho MediaResearchAgent gợi ý media minh họa (tùy chọn).
-4. generate_quiz — Delegate cho ContentAssessmentAgent sinh đánh giá nhúng trong slide/giáo án (tùy chọn, KHÔNG phải quiz standalone).
-5. merge_results — Deterministic service ghép tất cả artifacts thành slides hoàn chỉnh (sau khi có outline + content).
-6. check_quality — Delegate cho QualityReviewerAgent kiểm tra chất lượng cuối (sau merge).
-
-QUY TẮC NGHIÊM NGẶT:
-- LUÔN gọi generate_outline TRƯỚC TIÊN
-- generate_content CHỈ được gọi SAU KHI outline đã có
-- merge_results CHỈ được gọi SAU KHI có outline + content
-- check_quality CHỈ được gọi SAU merge_results
-- Nếu một agent trả về lỗi, KHÔNG retry quá 1 lần
-- Sau check_quality thành công, KHÔNG gọi thêm tool nào nữa — trả lời tóm tắt kết quả
-
-THỨ TỰ KHUYẾN NGHỊ:
-1. generate_outline(topic, grade, book)
-2. generate_content()
-3. generate_media(topic, grade, book) + generate_quiz(topic) [tùy chọn]
-4. merge_results()
-5. check_quality()
-6. Trả lời: "Đã tạo xong [N] slides cho bài [tên bài]."
-"""
 
 
 # ════════════════════════════════════════════════════════
@@ -129,10 +96,11 @@ def preprocess_node(state: ContentSupervisorState) -> dict:
         synthesized_context=synthesized,
     )
 
-    user_msg = (
-        f"Hãy tạo {task_desc} cho chủ đề '{state.get('topic', '')}', "
-        f"lớp {state.get('grade', '')}, bộ sách {state.get('book', '')}. "
-        f"Bắt đầu bằng cách gọi generate_outline()."
+    user_msg = SUPERVISOR_USER_PROMPT.format(
+        task_description=task_desc,
+        topic=state.get("topic", ""),
+        grade=state.get("grade", ""),
+        book=state.get("book", ""),
     )
 
     return {
@@ -165,24 +133,9 @@ def supervisor_node(state: ContentSupervisorState) -> dict:
     has_merged = state.get("merged_slides") is not None
 
     if has_outline and not has_content:
-        messages.append(HumanMessage(
-            content=(
-                "Outline đã được duyệt. Bây giờ hãy tiếp tục workflow: "
-                "1) Gọi generate_content() để viết nội dung chi tiết, "
-                "2) Gọi generate_media() và generate_quiz() nếu cần, "
-                "3) Gọi merge_results() để ghép slides, "
-                "4) Gọi check_quality() để kiểm tra. "
-                "KHÔNG trả lời text — hãy gọi generate_content() NGAY."
-            )
-        ))
+        messages.append(HumanMessage(content=SUPERVISOR_AFTER_OUTLINE_PROMPT))
     elif has_content and not has_merged:
-        messages.append(HumanMessage(
-            content=(
-                "Content đã sẵn sàng. Hãy gọi merge_results() để ghép "
-                "outline + content thành slides hoàn chỉnh. "
-                "KHÔNG trả lời text — hãy gọi merge_results() NGAY."
-            )
-        ))
+        messages.append(HumanMessage(content=SUPERVISOR_AFTER_CONTENT_PROMPT))
 
     response = llm_with_tools.invoke(messages)
 
@@ -290,11 +243,9 @@ def reflection_decision_node(state: ContentSupervisorState) -> dict:
             "reflection_attempts": attempts + 1,
             "revision_instruction": instruction,
             "quality_blocked": False,
-            "messages": [HumanMessage(content=(
-                "Quality reviewer yêu cầu sửa output trước khi trả cho user.\n"
-                f"Action: {action}\n"
-                f"Instruction: {instruction}\n"
-                "Hãy gọi tool phù hợp để regenerate phần bị lỗi, sau đó merge_results và check_quality lại."
+            "messages": [HumanMessage(content=SUPERVISOR_REVISION_REQUEST_PROMPT.format(
+                action=action,
+                instruction=instruction,
             ))],
         }
         if action == "revise_outline":
@@ -345,7 +296,96 @@ def route_after_post_tool(state: ContentSupervisorState) -> str:
     latest_tool = _latest_tool_name(state)
     if latest_tool == "check_quality":
         return "reflection_decision"
+    if state.get("content_payload") is not None and state.get("merged_slides") is None:
+        return "merge_direct"
+    if state.get("merged_slides") is not None and state.get("quality_review") is None:
+        return "quality_direct"
     return "supervisor"
+
+
+def merge_direct_node(state: ContentSupervisorState) -> dict:
+    outline_payload = state.get("outline_payload") or {}
+    content_payload = state.get("content_payload") or {}
+    media_payload = state.get("media_payload") or {}
+    quiz_payload = state.get("quiz_payload") or {}
+    if not outline_payload or not content_payload:
+        return {
+            "status": "failed",
+            "error_message": "Thiếu outline hoặc content để merge.",
+        }
+
+    merged = SlideMerger().merge(
+        outline_result=AgentResult(agent="outline", status="success", payload=outline_payload, latency_ms=0),
+        content_result=AgentResult(agent="content", status="success", payload=content_payload, latency_ms=0),
+        media_result=AgentResult(
+            agent="media",
+            status="success" if media_payload else "failed",
+            payload=media_payload or {},
+            latency_ms=0,
+        ),
+        quiz_result=AgentResult(
+            agent="quiz",
+            status="success" if quiz_payload else "failed",
+            payload=quiz_payload or {},
+            latency_ms=0,
+        ),
+    )
+    merged_dicts = [slide.model_dump() for slide in merged]
+    artifact = {"slides": merged_dicts, "total": len(merged_dicts), "status": "success"}
+    artifacts = dict(state.get("artifacts", {}))
+    artifacts["merged_slides"] = artifact
+    return {
+        "merged_slides": artifact,
+        "artifacts": artifacts,
+    }
+
+
+def quality_direct_node(state: ContentSupervisorState) -> dict:
+    merged_data = state.get("merged_slides")
+    if not merged_data:
+        return {
+            "quality_review": {
+                "passed": False,
+                "score": 0,
+                "reason_fail": "FORMAT_INVALID",
+                "summary": "Chưa có output để kiểm tra.",
+                "issues": [],
+                "reflection_action": "block",
+                "revision_instruction": "Cần chạy lại merge_results trước khi quality check.",
+                "requires_human_review": True,
+            }
+        }
+
+    task = AgentTask(
+        task_id=f"{state.get('request_id') or 'request'}:quality",
+        from_agent="content_supervisor",
+        to_agent="quality_reviewer_agent",
+        task_type="review_content_quality",
+        objective="Kiểm tra chất lượng factuality, coverage, pedagogy và format của output.",
+        inputs={
+            "task_type": state.get("task_type", "slide"),
+            "query": state.get("query", ""),
+            "context": state.get("synthesized_context") or state.get("context_map", ""),
+            "output": merged_data,
+        },
+        constraints={
+            "must_block_unsafe_or_ungrounded_output": True,
+            "language": "vi",
+        },
+        expected_artifact="quality_review",
+    )
+    result = QualityReviewerAgent().run_task(task)
+    result_dict = result.to_dict()
+    review = result_dict.get("artifact") or {}
+    agent_results = list(state.get("agent_results", []))
+    agent_results.append(result_dict)
+    artifacts = dict(state.get("artifacts", {}))
+    artifacts["quality_review"] = review
+    return {
+        "quality_review": review,
+        "agent_results": agent_results,
+        "artifacts": artifacts,
+    }
 
 
 def route_after_reflection(state: ContentSupervisorState) -> str:
@@ -382,6 +422,8 @@ def build_content_supervisor(checkpointer=None):
     builder.add_node("supervisor", supervisor_node)
     builder.add_node("tools", tool_node)
     builder.add_node("post_tool", post_tool_processor)
+    builder.add_node("merge_direct", merge_direct_node)
+    builder.add_node("quality_direct", quality_direct_node)
     builder.add_node("reflection_decision", reflection_decision_node)
 
     # Edges
@@ -403,8 +445,12 @@ def build_content_supervisor(checkpointer=None):
         {
             "reflection_decision": "reflection_decision",
             "supervisor": "supervisor",
+            "merge_direct": "merge_direct",
+            "quality_direct": "quality_direct",
         },
     )
+    builder.add_edge("merge_direct", "quality_direct")
+    builder.add_edge("quality_direct", "reflection_decision")
     builder.add_conditional_edges(
         "reflection_decision",
         route_after_reflection,

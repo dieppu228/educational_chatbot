@@ -1,7 +1,7 @@
 
 import re
 from dataclasses import dataclass, field
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any, Literal
 
 
@@ -132,6 +132,35 @@ class OutlineSlide(BaseModel):
     objective: Optional[str] = None
     key_points: List[str] = Field(default_factory=list)
     source_chunk_ids: List[str] = Field(default_factory=list)
+    duration_minutes: Optional[int] = None
+    teaching_goal: Optional[str] = None
+    knowledge_units: List[str] = Field(default_factory=list)
+    activity_type: Optional[str] = None
+
+    @field_validator("key_points", "knowledge_units", mode="before")
+    @classmethod
+    def normalize_text_items(cls, value):
+        if not value:
+            return []
+        if not isinstance(value, list):
+            value = [value]
+        normalized = []
+        for item in value:
+            if isinstance(item, str):
+                normalized.append(item)
+            elif isinstance(item, dict):
+                normalized.append(
+                    str(
+                        item.get("heading")
+                        or item.get("sub_title")
+                        or item.get("title")
+                        or item.get("name")
+                        or item
+                    )
+                )
+            else:
+                normalized.append(str(item))
+        return normalized
 
 
 class OutlinePayload(BaseModel):
@@ -143,12 +172,30 @@ class OutlinePayload(BaseModel):
 # AGENT 3 — CONTENT WRITER (critical)
 # ============================================================
 
+class ContentDetailItem(BaseModel):
+    heading: str
+    explanation: str
+    example: Optional[str] = None
+    teacher_prompt: Optional[str] = None
+    expected_student_response: Optional[str] = None
+    common_mistake: Optional[str] = None
+    wrap_up: Optional[str] = None
+    source_chunk_ids: List[str] = Field(default_factory=list)
+
+
 class ContentSlide(BaseModel):
     slide_id: str
     title: str
-    bullets: List[str] = Field(default_factory=list, max_length=6)
-    notes: Optional[str] = Field(None, max_length=600)  # ~120 từ tiếng Việt
+    bullets: List[str] = Field(default_factory=list)
+    notes: Optional[str] = None
     source_chunk_ids: List[str] = Field(default_factory=list)
+    duration_minutes: Optional[int] = None
+    objectives: List[str] = Field(default_factory=list)
+    teacher_activities: List[str] = Field(default_factory=list)
+    student_activities: List[str] = Field(default_factory=list)
+    content_detail: List[ContentDetailItem] = Field(default_factory=list)
+    assessment: List[str] = Field(default_factory=list)
+    transition: Optional[str] = None
 
 
 class ContentPayload(BaseModel):
@@ -186,6 +233,13 @@ class MergedSlide(BaseModel):
     media: List[MediaItem] = Field(default_factory=list)
     questions: List[SlideQuizItem] = Field(default_factory=list)
     source_chunk_ids: List[str] = Field(default_factory=list)
+    duration_minutes: Optional[int] = None
+    objectives: List[str] = Field(default_factory=list)
+    teacher_activities: List[str] = Field(default_factory=list)
+    student_activities: List[str] = Field(default_factory=list)
+    content_detail: List[ContentDetailItem] = Field(default_factory=list)
+    assessment: List[str] = Field(default_factory=list)
+    transition: Optional[str] = None
 
 
 # ============================================================
@@ -243,7 +297,7 @@ __all__ = [
     "AgentResult",
     "MediaItem", "MediaPayload",
     "OutlineSlide", "OutlinePayload",
-    "ContentSlide", "ContentPayload",
+    "ContentDetailItem", "ContentSlide", "ContentPayload",
     "SlideQuizItem", "QuizPayload",
     "MergedSlide",
     "QualityIssue", "QualityReviewResult",

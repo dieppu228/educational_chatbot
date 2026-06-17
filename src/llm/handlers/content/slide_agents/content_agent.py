@@ -4,7 +4,12 @@ from typing import Dict, List, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from src.llm.handlers.content.slide_agents.base_slide_agent import BaseSlideAgent
-from src.llm.prompts import SLIDE_CONTENT_TEMPLATE, LESSON_PLAN_CONTENT_TEMPLATE
+from src.llm.prompts import (
+    LESSON_PLAN_CONTENT_TEMPLATE,
+    LESSON_PLAN_OUTLINE_CONTEXT_PROMPT,
+    QUALITY_REVISION_INSTRUCTION_PROMPT,
+    SLIDE_CONTENT_TEMPLATE,
+)
 from src.schemas.slide_schemas import OutlineSlide
 
 logger = logging.getLogger("chatbot.slide_agent.content")
@@ -52,6 +57,7 @@ class ContentAgent(BaseSlideAgent):
                     slide_data=slide_data,
                     chunk_map=chunk_map,
                     template=template,
+                    task_type=task_type,
                     revision_instruction=revision_instruction,
                 )
                 futures[future] = slide_data
@@ -83,6 +89,7 @@ class ContentAgent(BaseSlideAgent):
         slide_data: Dict[str, Any],
         chunk_map: Dict[str, str],
         template=None,
+        task_type: str = "slide",
         revision_instruction: Optional[str] = None,
     ) -> dict:
         if template is None:
@@ -93,6 +100,7 @@ class ContentAgent(BaseSlideAgent):
         title = slide_data.get("title", "")
         objective = slide_data.get("objective", "")
         key_points = slide_data.get("key_points", [])
+        key_points_text = ", ".join(self._stringify_list(key_points))
         source_ids = slide_data.get("source_chunk_ids", [])
 
         # Lấy context subset từ chunk_map
@@ -107,34 +115,89 @@ class ContentAgent(BaseSlideAgent):
             slide_type=slide_type,
             slide_title=title,
             slide_objective=objective or "N/A",
-            key_points=", ".join(key_points),
+            key_points=key_points_text,
             context_subset=context_subset,
         )
+        is_lesson_plan = task_type == "lesson_plan"
+        if is_lesson_plan:
+            prompt += LESSON_PLAN_OUTLINE_CONTEXT_PROMPT.format(
+                duration_minutes=slide_data.get("duration_minutes") or "N/A",
+                teaching_goal=slide_data.get("teaching_goal") or objective or "N/A",
+                activity_type=slide_data.get("activity_type") or slide_type,
+                knowledge_units=", ".join(
+                    self._stringify_list(slide_data.get("knowledge_units") or key_points)
+                ) or "N/A",
+            )
         if revision_instruction:
-            prompt += (
-                "\n\n=== QUALITY REVIEW REVISION INSTRUCTION ===\n"
-                f"{revision_instruction}\n"
-                "Chỉ sửa các phần bị nêu trong instruction, giữ nguyên các phần đã đạt."
+            prompt += QUALITY_REVISION_INSTRUCTION_PROMPT.format(
+                revision_instruction=revision_instruction,
             )
 
         response = self._call_llm(prompt, temperature=0.3)
         result = self._parse_json(response)
 
         # Enforce constraints
-        bullets = result.get("bullets", [])[:6]  # Max 6 bullets
+        bullets = result.get("bullets", [])
+        if not is_lesson_plan:
+            bullets = bullets[:6]  # Max 6 bullets for slide output.
         result["bullets"] = bullets
         result["slide_id"] = slide_id  # Đảm bảo slide_id khớp
+        if is_lesson_plan:
+            result.setdefault("duration_minutes", slide_data.get("duration_minutes"))
+            result.setdefault("objectives", [])
+            result.setdefault("teacher_activities", [])
+            result.setdefault("student_activities", [])
+            result.setdefault("content_detail", [])
+            result.setdefault("assessment", [])
+            result.setdefault("transition", None)
 
         return result
 
     def _fallback_from_outline(self, slide_data: Dict[str, Any]) -> dict:
-        return {
+        fallback = {
             "slide_id": slide_data.get("slide_id", "s0"),
             "title": slide_data.get("title", ""),
             "bullets": slide_data.get("key_points", [])[:6],
             "notes": None,
             "source_chunk_ids": slide_data.get("source_chunk_ids", []),
         }
+        if slide_data.get("knowledge_units") or slide_data.get("duration_minutes"):
+            fallback.update({
+                "duration_minutes": slide_data.get("duration_minutes"),
+                "objectives": [slide_data.get("teaching_goal")] if slide_data.get("teaching_goal") else [],
+                "teacher_activities": [],
+                "student_activities": [],
+                "content_detail": [
+                    {
+                        "heading": unit,
+                        "explanation": "Cần bổ sung nội dung chi tiết từ context.",
+                        "source_chunk_ids": slide_data.get("source_chunk_ids", []),
+                    }
+                    for unit in slide_data.get("knowledge_units", [])
+                ],
+                "assessment": [],
+                "transition": None,
+            })
+        return fallback
+
+    @staticmethod
+    def _stringify_list(items: List[Any]) -> List[str]:
+        values = []
+        for item in items or []:
+            if isinstance(item, str):
+                values.append(item)
+            elif isinstance(item, dict):
+                values.append(
+                    str(
+                        item.get("heading")
+                        or item.get("title")
+                        or item.get("name")
+                        or item
+                    )
+                )
+            else:
+                values.append(str(item))
+        return values
 
 
 __all__ = ["ContentAgent"]

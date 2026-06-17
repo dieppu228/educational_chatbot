@@ -484,11 +484,49 @@ class SlideService:
                     "summary": "📝"}.get(slide_type, "📄")
             lines.append(f"╔══ Phần {i} [{icon} {slide_type.upper()}] ══╗")
             lines.append(f"  📌 {section.get('title', '')}")
+            if section.get("duration_minutes"):
+                lines.append(f"  ⏱ Thời lượng: {section.get('duration_minutes')} phút")
             for b in section.get("bullets", []):
                 lines.append(f"  ▸ {b}")
+            if section.get("objectives"):
+                lines.append("  🎯 Mục tiêu:")
+                for item in section.get("objectives", []):
+                    lines.append(f"    - {item}")
+            if section.get("teacher_activities"):
+                lines.append("  👩‍🏫 Hoạt động GV:")
+                for item in section.get("teacher_activities", []):
+                    lines.append(f"    - {item}")
+            if section.get("student_activities"):
+                lines.append("  🧑‍🎓 Hoạt động HS:")
+                for item in section.get("student_activities", []):
+                    lines.append(f"    - {item}")
+            for detail in section.get("content_detail", []) or []:
+                if not isinstance(detail, dict):
+                    detail = detail.model_dump() if hasattr(detail, "model_dump") else {}
+                heading = detail.get("heading")
+                if heading:
+                    lines.append(f"  📚 {heading}")
+                if detail.get("explanation"):
+                    lines.append(f"    Nội dung: {detail.get('explanation')}")
+                if detail.get("example"):
+                    lines.append(f"    Ví dụ: {detail.get('example')}")
+                if detail.get("teacher_prompt"):
+                    lines.append(f"    Câu hỏi GV: {detail.get('teacher_prompt')}")
+                if detail.get("expected_student_response"):
+                    lines.append(f"    Dự kiến HS: {detail.get('expected_student_response')}")
+                if detail.get("common_mistake"):
+                    lines.append(f"    Sai lầm thường gặp: {detail.get('common_mistake')}")
+                if detail.get("wrap_up"):
+                    lines.append(f"    Chốt: {detail.get('wrap_up')}")
+            if section.get("assessment"):
+                lines.append("  ✅ Đánh giá:")
+                for item in section.get("assessment", []):
+                    lines.append(f"    - {item}")
+            if section.get("transition"):
+                lines.append(f"  🔁 Chuyển ý: {section.get('transition')}")
             notes = section.get("notes")
             if notes:
-                lines.append(f"  📎 Ghi chú GV: {notes[:150]}{'...' if len(notes) > 150 else ''}")
+                lines.append(f"  📎 Ghi chú GV: {notes}")
             if section.get("questions"):
                 lines.append(f"  🎯 {len(section['questions'])} tiêu chí đánh giá")
             lines.append("")
