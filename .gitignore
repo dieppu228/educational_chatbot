@@ -53,6 +53,7 @@ claude.md
 
 data/sessions/
 app/data/exports/
+app/frontend/node_modules/
 # LaTeX auxiliary files
 *.aux
 *.bbl

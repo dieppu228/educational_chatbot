@@ -208,7 +208,7 @@ The current repo keeps the RAGAS outputs and supporting scripts under `src/evalu
 
 - Python 3.11+ is recommended.
 - Install dependencies from `requirements.txt`.
-- Set `GENAI_API_KEY` in `.env`.
+- Create `.env` from `.env.example` and set the required API keys.
 - Make sure `data/rag_chunks_v2.json` and `data/embeddings.npy` already exist.
 
 Install dependencies:
@@ -217,15 +217,26 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-Minimal `.env`:
+Initialize the runtime configuration:
 
-```env
-GENAI_API_KEY=your_gemini_api_key
+```bash
+cp .env.example .env
 ```
+
+At minimum, set `GENAI_API_KEY`. Set `TAVILY_API_KEY` when web/media search is enabled. Process environment variables override values from `.env`; explicit constructor arguments override both.
 
 ### Start the API + frontend
 
-The current entrypoint is:
+Build the React frontend after installing or changing frontend dependencies:
+
+```bash
+cd app/frontend
+npm install
+npm run build
+cd ../..
+```
+
+The API serves the production build from `app/frontend/dist`. Start it with:
 
 - `app/api.py`
 
@@ -245,9 +256,14 @@ Available endpoints:
 - `GET /api/frontend-info`
 - `GET /api/exports/{file_id}`
 
-The frontend is served from:
+For frontend development with hot reload, run the API on port `8000` and Vite separately:
 
-- `app/frontend/index.html`
+```bash
+cd app/frontend
+npm run dev
+```
+
+Vite runs at `http://127.0.0.1:5173` and proxies `/api` to FastAPI.
 
 ## Rebuilding embeddings
 
