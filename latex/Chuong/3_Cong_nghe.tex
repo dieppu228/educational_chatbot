@@ -2,9 +2,9 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Chương 2 đã trình bày cơ sở lý thuyết, khảo sát các hướng tiếp cận và xác định Retrieval-Augmented Generation là hướng tiếp cận phù hợp cho bài toán hỏi đáp trên SGK Tin học THPT. Trên cơ sở đó, chương này mô tả phương pháp được đề xuất, bao gồm kiến trúc tổng thể, các thành phần xử lý chính và cách tổ chức đánh giá cho các node trọng tâm trong pipeline.
+Chương 2 đã trình bày cơ sở lý thuyết, khảo sát các hướng tiếp cận và xác định Retrieval-Augmented Sinh văn bản (generation) là hướng tiếp cận phù hợp cho bài toán hỏi đáp trên SGK Tin học THPT. Trên cơ sở đó, chương này mô tả phương pháp được đề xuất, bao gồm kiến trúc tổng thể, các thành phần xử lý chính và cách tổ chức đánh giá cho các nút (node) trọng tâm trong luồng xử lý (pipeline).
 
-Nội dung chương được trình bày theo hướng nghiên cứu, tập trung vào dữ liệu, retrieval, reranking, generation và evaluation, không đi sâu vào chi tiết cài đặt phần mềm.
+Nội dung chương được trình bày theo hướng nghiên cứu, tập trung vào dữ liệu, truy xuất (retrieval), xếp hạng lại (reranking), sinh văn bản và đánh giá (evaluation), không đi sâu vào chi tiết cài đặt phần mềm.
 
 \section{Tổng quan kiến trúc hệ thống}
 
@@ -12,13 +12,13 @@ Nội dung chương được trình bày theo hướng nghiên cứu, tập trun
 
 Bài toán của đồ án là xây dựng một trợ lý giáo dục cho môn Tin học THPT, hỗ trợ người học và giáo viên khai thác nội dung từ sách giáo khoa trong môi trường tương tác số. Phạm vi dữ liệu của hệ thống được giới hạn vào sách giáo khoa Tin học lớp 10, 11 và 12 của hai bộ sách Cánh Diều và Kết Nối Tri Thức. Trên nền dữ liệu này, hệ thống không chỉ thực hiện tác vụ hỏi đáp kiến thức mà còn hỗ trợ các tác vụ sinh học liệu có cấu trúc, đòi hỏi khả năng tổng hợp và tổ chức lại nội dung.
 
-Ba nhóm tác vụ chính của hệ thống gồm hỏi đáp dựa trên SGK, sinh slide bài giảng và soạn giáo án. Với tác vụ hỏi đáp, hệ thống cần truy xuất các đoạn ngữ cảnh liên quan thông qua \textit{Retriever}, sau đó sử dụng \textit{LLM} để sinh câu trả lời bám sát tài liệu nguồn. Với tác vụ sinh slide và giáo án, hệ thống cần bao phủ nội dung bài học ở mức tổng thể, đồng thời tổ chức lại tri thức theo trình tự sư phạm thay vì chỉ trả về các đoạn văn bản rời rạc. Do đó, bài toán không dừng ở một pipeline \textit{Retrieval-Augmented Generation} (RAG) đơn giản, mà mở rộng thành bài toán điều phối nhiều bước xử lý với các yêu cầu khác nhau về truy xuất, tổng hợp và kiểm soát chất lượng.
+Ba nhóm tác vụ chính của hệ thống gồm hỏi đáp dựa trên SGK, sinh slide bài giảng và soạn giáo án. Với tác vụ hỏi đáp, hệ thống cần truy xuất các đoạn ngữ cảnh liên quan thông qua bộ truy xuất (retriever), sau đó sử dụng \textit{LLM} để sinh câu trả lời bám sát tài liệu nguồn. Với tác vụ sinh slide và giáo án, hệ thống cần bao phủ nội dung bài học ở mức tổng thể, đồng thời tổ chức lại tri thức theo trình tự sư phạm thay vì chỉ trả về các đoạn văn bản rời rạc. Do đó, bài toán không dừng ở một luồng xử lý \textit{Retrieval-Augmented Sinh văn bản} (RAG) đơn giản, mà mở rộng thành bài toán điều phối nhiều bước xử lý với các yêu cầu khác nhau về truy xuất, tổng hợp và kiểm soát chất lượng.
 
-Trên cơ sở đó, phương pháp đề xuất cần thỏa mãn một số yêu cầu chính. Thứ nhất, hệ thống phải khai thác tri thức từ SGK theo đúng phạm vi lớp, bộ sách và chủ đề nhằm hạn chế sai lệch ngữ cảnh. Thứ hai, cơ chế truy xuất phải xử lý được cả câu hỏi cụ thể lẫn các yêu cầu tổng hợp nội dung ở mức bài học. Thứ ba, phần sinh nội dung phải có cơ chế kiểm soát chất lượng đầu ra đối với các sản phẩm dài như slide và giáo án. Cuối cùng, kiến trúc hệ thống phải hỗ trợ đánh giá riêng chất lượng truy hồi của \textit{Retriever}/\textit{Reranker} và chất lượng sinh của \textit{LLM}.
+Trên cơ sở đó, phương pháp đề xuất cần thỏa mãn một số yêu cầu chính. Thứ nhất, hệ thống phải khai thác tri thức từ SGK theo đúng phạm vi lớp, bộ sách và chủ đề nhằm hạn chế sai lệch ngữ cảnh. Thứ hai, cơ chế truy xuất phải xử lý được cả câu hỏi cụ thể lẫn các yêu cầu tổng hợp nội dung ở mức bài học. Thứ ba, phần sinh nội dung phải có cơ chế kiểm soát chất lượng đầu ra đối với các sản phẩm dài như slide và giáo án. Cuối cùng, kiến trúc hệ thống phải hỗ trợ đánh giá riêng chất lượng truy hồi của bộ truy xuất/bộ xếp hạng lại (reranker) và chất lượng sinh của \textit{LLM}.
 
 \subsection{Kiến trúc tổng thể và luồng xử lý một yêu cầu}
 
-Kiến trúc của hệ thống được tổ chức theo hai tầng \textit{Agent} đặt trên nền \textit{Retrieval-Augmented Generation}. Tầng điều phối tác tử đảm nhiệm việc phân tích yêu cầu, lập kế hoạch và lựa chọn nhánh xử lý. Tầng sinh nội dung \textit{Multi-Agent} đảm nhiệm việc tạo các sản phẩm dài như slide và giáo án. Hai tầng này cùng sử dụng một lõi truy xuất tri thức chung để bảo đảm đầu ra được grounding trên nội dung SGK.
+Kiến trúc của hệ thống được tổ chức theo hai tầng tác tử (agent) đặt trên nền \textit{Retrieval-Augmented Sinh văn bản}. Tầng điều phối tác tử đảm nhiệm việc phân tích yêu cầu, lập kế hoạch và lựa chọn nhánh xử lý. Tầng sinh nội dung đa tác tử (multi-agent) đảm nhiệm việc tạo các sản phẩm dài như slide và giáo án. Hai tầng này cùng sử dụng một lõi truy xuất tri thức chung để bảo đảm đầu ra được bám sát (grounding) trên nội dung SGK.
 
 \begin{figure}[!htbp]
     \centering
@@ -63,25 +63,25 @@ Kiến trúc của hệ thống được tổ chức theo hai tầng \textit{Age
     \label{fig:method-overall-architecture}
 \end{figure}
 
-Trong Hình \ref{fig:method-overall-architecture}, trục chính của vòng đời xử lý đi theo chuỗi từ yêu cầu đầu vào, phân tích ngữ cảnh và ý định, lập kế hoạch, điều phối đa tác vụ, thực thi dịch vụ nghiệp vụ, kiểm soát chất lượng đầu ra, rồi đến phản hồi và lưu trạng thái phiên. Cách biểu diễn này cho thấy bộ điều phối của hệ thống hoạt động theo một luồng xử lý chính, trong khi các năng lực truy xuất và sinh học liệu dài được gọi vào theo từng loại yêu cầu, thay vì xuất hiện như một bước tuần tự bắt buộc cho mọi truy vấn.
+Trong Hình~\ref{fig:method-overall-architecture}, trục chính của vòng đời xử lý đi theo chuỗi từ yêu cầu đầu vào, phân tích ngữ cảnh và ý định, lập kế hoạch, điều phối đa tác vụ, thực thi dịch vụ nghiệp vụ, kiểm soát chất lượng đầu ra, rồi đến phản hồi và lưu trạng thái phiên. Cách biểu diễn này cho thấy bộ điều phối của hệ thống hoạt động theo một luồng xử lý chính, trong khi các năng lực truy xuất và sinh học liệu dài được gọi vào theo từng loại yêu cầu, thay vì xuất hiện như một bước tuần tự bắt buộc cho mọi truy vấn.
 
-Ở bên phải của trục chính, khối ``Truy xuất và công cụ'' được đặt như một nền dùng chung cho các nhánh cần tri thức SGK. Từ khối ``Dịch vụ nghiệp vụ'', hệ thống gọi xuống lõi truy xuất để lấy ngữ cảnh thông qua \textit{Retriever}; nếu tác vụ là sinh slide hoặc giáo án thì ngữ cảnh này tiếp tục được đưa vào ``Quy trình đa tác tử nội dung''. Bố cục này phản ánh quan hệ phụ thuộc giữa các thành phần: truy xuất tri thức diễn ra trước khi tầng \textit{Multi-Agent} tổng hợp sản phẩm.
+Ở bên phải của trục chính, khối ``Truy xuất và công cụ'' được đặt như một nền dùng chung cho các nhánh cần tri thức SGK. Từ khối ``Dịch vụ nghiệp vụ'', hệ thống gọi xuống lõi truy xuất để lấy ngữ cảnh thông qua bộ truy xuất; nếu tác vụ là sinh slide hoặc giáo án thì ngữ cảnh này tiếp tục được đưa vào ``Quy trình đa tác tử nội dung''. Bố cục này phản ánh quan hệ phụ thuộc giữa các thành phần: truy xuất tri thức diễn ra trước khi tầng đa tác tử tổng hợp sản phẩm.
 
-Phần cuối của sơ đồ cho thấy mọi đầu ra đều đi qua khối ``Kiểm soát chất lượng đầu ra'' trước khi trả về cho người dùng. Với câu trả lời ngắn, lớp này kiểm tra mức độ phù hợp và bám sát ngữ cảnh; với quiz, slide và giáo án, lớp này thực hiện hậu kiểm trước khi công bố kết quả. Hai mũi tên nét đứt cũng thể hiện rằng chat đơn giản có thể bỏ qua lõi RAG, trong khi các tác vụ cần grounding trên SGK sẽ kết nối đến nền truy xuất chung.
+Phần cuối của sơ đồ cho thấy mọi đầu ra đều đi qua khối ``Kiểm soát chất lượng đầu ra'' trước khi trả về cho người dùng. Với câu trả lời ngắn, lớp này kiểm tra mức độ phù hợp và bám sát ngữ cảnh; với quiz, slide và giáo án, lớp này thực hiện hậu kiểm trước khi công bố kết quả. Hai mũi tên nét đứt cũng thể hiện rằng chat đơn giản có thể bỏ qua lõi RAG, trong khi các tác vụ cần bám sát trên SGK sẽ kết nối đến nền truy xuất chung.
 
 \subsection{Công nghệ nền}
 
-Về mặt công nghệ, phương pháp được hiện thực hóa trên một số thành phần nền tảng tương ứng với từng vai trò trong kiến trúc. Mô hình ngôn ngữ lớn Gemini được sử dụng như \textit{LLM} cho các bước cần suy luận ngôn ngữ như nhận diện ý định, viết lại truy vấn và sinh nội dung. LangGraph được sử dụng cho bộ điều phối nội dung ở tầng sinh học liệu, nơi quy trình có nhiều bước trung gian và có thể tạm dừng để con người tham gia duyệt. Ở tầng truy xuất, Qdrant được sử dụng như một \textit{Vector Database} để lưu trữ và tìm kiếm ngữ nghĩa trên tập chunk đã được lập chỉ mục.
+Về mặt công nghệ, phương pháp được hiện thực hóa trên một số thành phần nền tảng tương ứng với từng vai trò trong kiến trúc. Mô hình ngôn ngữ lớn Gemini được sử dụng như \textit{LLM} cho các bước cần suy luận ngôn ngữ như nhận diện ý định, viết lại truy vấn và sinh nội dung. LangGraph được sử dụng cho bộ điều phối nội dung ở tầng sinh học liệu, nơi quy trình có nhiều bước trung gian và có thể tạm dừng để con người tham gia duyệt. Ở tầng truy xuất, Qdrant được sử dụng như một cơ sở dữ liệu vector (vector database) để lưu trữ và tìm kiếm ngữ nghĩa trên tập phân đoạn (chunk) đã được lập chỉ mục.
 
-Đối với biểu diễn tri thức, hệ thống sử dụng mô hình \textit{Embedding} tiếng Việt để chuyển mỗi khối nội dung SGK thành vector ngữ nghĩa, qua đó bảo toàn tốt hơn đặc trưng ngôn ngữ của dữ liệu trong không gian biểu diễn. Song song với đó, một thành phần tìm kiếm từ khóa kiểu BM25 được dùng để bổ sung tín hiệu lexical, sau đó kết quả được hợp nhất bằng \textit{Reciprocal Rank Fusion}. Ở giai đoạn sau truy xuất, mô hình \textit{Reranker} dạng cross-encoder được dùng để sắp xếp lại các ứng viên theo mức độ liên quan đối với truy vấn.
+Đối với biểu diễn tri thức, hệ thống sử dụng mô hình vector nhúng (embedding) tiếng Việt để chuyển mỗi khối nội dung SGK thành vector ngữ nghĩa, qua đó bảo toàn tốt hơn đặc trưng ngôn ngữ của dữ liệu trong không gian biểu diễn. Song song với đó, một thành phần tìm kiếm từ khóa kiểu BM25 được dùng để bổ sung tín hiệu lexical, sau đó kết quả được hợp nhất bằng \textit{Reciprocal Rank Fusion}. Ở giai đoạn sau truy xuất, mô hình bộ xếp hạng lại dạng cross-encoder được dùng để sắp xếp lại các ứng viên theo mức độ liên quan đối với truy vấn.
 
 Trong phạm vi chương này, các công nghệ trên chỉ được trình bày ở mức cần thiết để làm rõ vai trò trong phương pháp đề xuất. Thông số cài đặt cụ thể của từng công nghệ sẽ được trình bày ở chương tiếp theo.
 
-\section{Nền tảng tri thức: tiền xử lý, chunking và lập chỉ mục}
+\section{Nền tảng tri thức: tiền xử lý, phân đoạn (chunking) và lập chỉ mục}
 
-Mọi đầu ra của hệ thống đều được grounding trên nội dung sách giáo khoa, do đó chất lượng của tầng tri thức nền ảnh hưởng trực tiếp đến hiệu quả truy hồi và sinh nội dung. Phần này mô tả quy trình biến văn bản SGK thô thành một tập chunk có cấu trúc, được embedding và lập chỉ mục để phục vụ truy hồi. Trong toàn bộ pipeline này, bước chunking theo tiêu đề (heading-based chunking) giữ vai trò trung tâm vì nó quyết định ranh giới của đơn vị tri thức được đưa vào các bước xử lý sau.
+Mọi đầu ra của hệ thống đều được bám sát trên nội dung sách giáo khoa, do đó chất lượng của tầng tri thức nền ảnh hưởng trực tiếp đến hiệu quả truy hồi và sinh nội dung. Phần này mô tả quy trình biến văn bản SGK thô thành một tập phân đoạn có cấu trúc, được embedding và lập chỉ mục để phục vụ truy hồi. Trong toàn bộ luồng xử lý này, bước phân đoạn theo tiêu đề (phân đoạn theo tiêu đề (tiêu đề (heading)-based phân đoạn)) giữ vai trò trung tâm vì nó quyết định ranh giới của đơn vị tri thức được đưa vào các bước xử lý sau.
 
-Về bản chất, tầng tri thức của hệ thống không chỉ là một kho lưu trữ dữ liệu tĩnh mà là kết quả của một pipeline tiền xử lý nhiều bước. Mỗi bước trong pipeline này tác động trực tiếp đến chất lượng truy hồi ở giai đoạn sau. Nếu ranh giới chunk không phù hợp, mô hình embedding sẽ biểu diễn sai đơn vị kiến thức; nếu metadata không đầy đủ, tầng truy hồi sẽ khó giới hạn đúng phạm vi lớp, bộ sách và bài học; nếu chỉ mục vector không đồng bộ với dữ liệu nguồn, kết quả truy xuất có thể mất tính ổn định giữa các lần chạy thực nghiệm. Vì vậy, việc mô tả rõ quy trình xây dựng tầng tri thức là cần thiết trước khi phân tích cơ chế retrieval ở mục kế tiếp.
+Về bản chất, tầng tri thức của hệ thống không chỉ là một kho lưu trữ dữ liệu tĩnh mà là kết quả của một luồng xử lý tiền xử lý nhiều bước. Mỗi bước trong luồng xử lý này tác động trực tiếp đến chất lượng truy hồi ở giai đoạn sau. Nếu ranh giới phân đoạn không phù hợp, mô hình embedding sẽ biểu diễn sai đơn vị kiến thức; nếu siêu dữ liệu (metadata) không đầy đủ, tầng truy hồi sẽ khó giới hạn đúng phạm vi lớp, bộ sách và bài học; nếu chỉ mục vector không đồng bộ với dữ liệu nguồn, kết quả truy xuất có thể mất tính ổn định giữa các lần chạy thực nghiệm. Vì vậy, việc mô tả rõ quy trình xây dựng tầng tri thức là cần thiết trước khi phân tích cơ chế truy xuất ở mục kế tiếp.
 
 \begin{figure}[H]
     \centering
@@ -112,17 +112,17 @@ Về bản chất, tầng tri thức của hệ thống không chỉ là một k
 
     \end{tikzpicture}
     }
-    \caption{Quy trình từ văn bản SGK đến tập chunk được lập chỉ mục, với chunking theo tiêu đề là bước trung tâm}
+    \caption{Quy trình từ văn bản SGK đến tập phân đoạn được lập chỉ mục, với phân đoạn theo tiêu đề là bước trung tâm}
     \label{fig:method-ingest-pipeline}
 \end{figure}
 
-Hình~\ref{fig:method-ingest-pipeline} mô tả quy trình một chiều biến tệp bài học SGK thành các chunk sẵn sàng cho truy hồi, gồm năm bước nối tiếp. Đầu vào là tệp Markdown của một bài học, trong đó cấu trúc phân cấp (chủ đề, tiêu đề bài, tiêu đề mục) đã được thể hiện qua các mốc tiêu đề. Bước trung tâm là \textit{chunking theo heading}: một máy trạng thái quét tuần tự văn bản và chốt một chunk mới tại mỗi mốc tiêu đề, đồng thời gán trường \texttt{level} (độ sâu tiêu đề) và dựng chuỗi breadcrumb cho chunk đó. Tiếp theo, bước chuẩn hóa kích thước gộp các chunk quá ngắn và cắt các chunk quá dài để đưa độ dài về khoảng hợp lý mà không phá vỡ ranh giới ngữ nghĩa. Bước thứ tư phân loại vai trò sư phạm (\texttt{type}) của mỗi chunk bằng một mô hình ngôn ngữ nhẹ và sinh \texttt{chunk\_id} tất định. Cuối cùng, mỗi chunk được embedding cùng breadcrumb thành vector 768 chiều và được lập chỉ mục trên Qdrant kèm toàn bộ payload metadata. Trong các bước này, chunking theo tiêu đề giữ vai trò quyết định vì nó định hình ranh giới và tính mạch lạc của mọi chunk ở các bước sau; ba mục tiếp theo lần lượt trình bày chi tiết nguồn dữ liệu và metadata, cơ chế chunking, và khâu vector hóa -- lưu trữ.
+Hình~\ref{fig:method-ingest-pipeline} mô tả quy trình một chiều biến tệp bài học SGK thành các phân đoạn sẵn sàng cho truy hồi, gồm năm bước nối tiếp. Đầu vào là tệp Markdown của một bài học, trong đó cấu trúc phân cấp (chủ đề, tiêu đề bài, tiêu đề mục) đã được thể hiện qua các mốc tiêu đề. Bước trung tâm là \textit{phân đoạn theo tiêu đề}: một máy trạng thái quét tuần tự văn bản và chốt một phân đoạn mới tại mỗi mốc tiêu đề, đồng thời gán trường \texttt{level} (độ sâu tiêu đề) và dựng chuỗi đường dẫn ngữ cảnh (breadcrumb) cho phân đoạn đó. Tiếp theo, bước chuẩn hóa kích thước gộp các phân đoạn quá ngắn và cắt các phân đoạn quá dài để đưa độ dài về khoảng hợp lý mà không phá vỡ ranh giới ngữ nghĩa. Bước thứ tư phân loại vai trò sư phạm (\texttt{type}) của mỗi phân đoạn bằng một mô hình ngôn ngữ nhẹ và sinh \texttt{chunk\_id} tất định. Cuối cùng, mỗi phân đoạn được embedding cùng đường dẫn ngữ cảnh thành vector 768 chiều và được lập chỉ mục trên Qdrant kèm toàn bộ dữ liệu kèm theo (payload) siêu dữ liệu. Trong các bước này, phân đoạn theo tiêu đề giữ vai trò quyết định vì nó định hình ranh giới và tính mạch lạc của mọi phân đoạn ở các bước sau; ba mục tiếp theo lần lượt trình bày chi tiết nguồn dữ liệu và siêu dữ liệu, cơ chế phân đoạn, và khâu vector hóa -- lưu trữ.
 
-\subsection{Nguồn SGK, cấu trúc phân cấp và lược đồ metadata}
+\subsection{Nguồn SGK, cấu trúc phân cấp và lược đồ siêu dữ liệu}
 
 Dữ liệu nền của hệ thống là sách giáo khoa Tin học THPT của hai bộ Cánh Diều và Kết Nối Tri Thức, trải đều ba khối lớp 10, 11 và 12. Toàn bộ nội dung được số hóa về định dạng Markdown và tổ chức theo đúng cấu trúc phân cấp tự nhiên của sách: mỗi bộ sách (\textit{book}) chia theo khối lớp (\textit{grade}), mỗi lớp gồm nhiều chủ đề (\textit{topic}), mỗi chủ đề gồm nhiều bài học (\textit{lesson}), và mỗi bài học lại được chia thành các mục theo cấp độ tiêu đề. Cấu trúc thư mục phản ánh trực tiếp phân cấp này, trong đó mỗi tệp Markdown tương ứng với một bài học và tệp \texttt{README.md} ở mỗi thư mục chủ đề lưu mã cùng tên chủ đề.
 
-Sau bước xử lý, tập tri thức thu được gồm 2.348 chunk, bao phủ 36 chủ đề và 186 bài học khác nhau. Bảng~\ref{tab:chunk-distribution} trình bày phân bố số lượng chunk theo bộ sách và khối lớp.
+Sau bước xử lý, tập tri thức thu được gồm 2.348 phân đoạn, bao phủ 36 chủ đề và 186 bài học khác nhau. Bảng~\ref{tab:chunk-distribution} trình bày phân bố số lượng phân đoạn theo bộ sách và khối lớp.
 
 \begin{table}[!htbp]
 \centering
@@ -137,13 +137,13 @@ Kết Nối Tri Thức (KNTT) & 401 & 350 & 393 & 1.144 \\
 \textbf{Tổng} & \textbf{802} & \textbf{789} & \textbf{757} & \textbf{2.348} \\
 \hline
 \end{tabular}
-\caption{Phân bố số lượng chunk theo bộ sách và khối lớp}
+\caption{Phân bố số lượng phân đoạn theo bộ sách và khối lớp}
 \label{tab:chunk-distribution}
 \end{table}
 
-Số liệu trong Bảng~\ref{tab:chunk-distribution} cho thấy dữ liệu tương đối cân bằng giữa hai bộ sách, với 1.204 chunk thuộc bộ Cánh Diều và 1.144 chunk thuộc bộ Kết Nối Tri Thức. Phân bố theo khối lớp cũng không có chênh lệch lớn, lần lượt là 802 chunk ở lớp 10, 789 chunk ở lớp 11 và 757 chunk ở lớp 12. Phân bố này giúp giảm nguy cơ tầng truy hồi thiên lệch về một bộ sách hay một khối lớp cụ thể.
+Số liệu trong Bảng~\ref{tab:chunk-distribution} cho thấy dữ liệu tương đối cân bằng giữa hai bộ sách, với 1.204 phân đoạn thuộc bộ Cánh Diều và 1.144 phân đoạn thuộc bộ Kết Nối Tri Thức. Phân bố theo khối lớp cũng không có chênh lệch lớn, lần lượt là 802 phân đoạn ở lớp 10, 789 phân đoạn ở lớp 11 và 757 phân đoạn ở lớp 12. Phân bố này giúp giảm nguy cơ tầng truy hồi thiên lệch về một bộ sách hay một khối lớp cụ thể.
 
-Mỗi chunk được gắn một lược đồ metadata thống nhất nhằm phục vụ lọc phạm vi khi truy hồi và truy vết nguồn khi sinh nội dung. Bảng~\ref{tab:chunk-metadata} mô tả các trường chính của lược đồ này.
+Mỗi phân đoạn được gắn một lược đồ siêu dữ liệu thống nhất nhằm phục vụ lọc phạm vi khi truy hồi và truy vết nguồn khi sinh nội dung. Bảng~\ref{tab:chunk-metadata} mô tả các trường chính của lược đồ này.
 
 \begin{table}[!htbp]
 \centering
@@ -157,22 +157,22 @@ Mỗi chunk được gắn một lược đồ metadata thống nhất nhằm ph
 \texttt{grade} & str & Khối lớp (10 / 11 / 12) \\
 \texttt{topic}, \texttt{topic\_name} & str & Mã và tên chủ đề \\
 \texttt{lesson}, \texttt{lesson\_name} & str & Mã và tên bài học \\
-\texttt{section\_title} & str & Tiêu đề mục chứa chunk \\
+\texttt{section\_title} & str & Tiêu đề mục chứa phân đoạn \\
 \texttt{level} & int & Độ sâu tiêu đề (1--6) \\
 \texttt{type} & str & Loại nội dung sư phạm \\
 \texttt{breadcrumb} & str & Đường dẫn ngữ cảnh: chủ đề > bài > mục \\
-\texttt{content} & str & Nội dung văn bản của chunk \\
-\texttt{full\_content} & str & Ghép breadcrumb và content để vector hóa \\
+\texttt{content} & str & Nội dung văn bản của phân đoạn \\
+\texttt{full\_content} & str & Ghép đường dẫn ngữ cảnh và content để vector hóa \\
 \texttt{source\_path} & str & Đường dẫn tệp nguồn \\
 \hline
 \end{tabular}
-\caption{Lược đồ metadata của một chunk}
+\caption{Lược đồ siêu dữ liệu của một phân đoạn}
 \label{tab:chunk-metadata}
 \end{table}
 
-Bảng~\ref{tab:chunk-metadata} cho thấy mỗi chunk không chỉ lưu nội dung văn bản mà còn mang theo các trường metadata về phạm vi học liệu, vị trí phân cấp và nguồn gốc dữ liệu. Tập trường này là cơ sở để tầng truy hồi thực hiện lọc theo bộ sách, lớp, chủ đề và bài học, đồng thời hỗ trợ truy vết nguồn ở các bước sinh nội dung và đánh giá.
+Bảng~\ref{tab:chunk-metadata} cho thấy mỗi phân đoạn không chỉ lưu nội dung văn bản mà còn mang theo các trường siêu dữ liệu về phạm vi học liệu, vị trí phân cấp và nguồn gốc dữ liệu. Tập trường này là cơ sở để tầng truy hồi thực hiện lọc theo bộ sách, lớp, chủ đề và bài học, đồng thời hỗ trợ truy vết nguồn ở các bước sinh nội dung và đánh giá.
 
-Trường \texttt{type} phân loại mỗi chunk theo vai trò sư phạm thay vì chỉ theo hình thức văn bản, gồm sáu nhãn: \textit{theory} (lý thuyết, khái niệm, ví dụ), \textit{exercise} (luyện tập, bài tập), \textit{objective} (mục tiêu bài học), \textit{application} (vận dụng), \textit{summary} (tóm tắt) và \textit{note} (lưu ý). Bảng~\ref{tab:chunk-type} trình bày phân bố số lượng chunk theo từng nhãn.
+Trường \texttt{type} phân loại mỗi phân đoạn theo vai trò sư phạm thay vì chỉ theo hình thức văn bản, gồm sáu nhãn: \textit{theory} (lý thuyết, khái niệm, ví dụ), \textit{exercise} (luyện tập, bài tập), \textit{objective} (mục tiêu bài học), \textit{application} (vận dụng), \textit{summary} (tóm tắt) và \textit{note} (lưu ý). Bảng~\ref{tab:chunk-type} trình bày phân bố số lượng phân đoạn theo từng nhãn.
 
 \begin{table}[!htbp]
 \centering
@@ -191,15 +191,15 @@ Trường \texttt{type} phân loại mỗi chunk theo vai trò sư phạm thay v
 \textbf{Tổng} & & \textbf{2.348} & \textbf{100\%} \\
 \hline
 \end{tabular}
-\caption{Phân bố số lượng chunk theo loại nội dung sư phạm (\texttt{type})}
+\caption{Phân bố số lượng phân đoạn theo loại nội dung sư phạm (\texttt{type})}
 \label{tab:chunk-type}
 \end{table}
 
-Số liệu trong Bảng~\ref{tab:chunk-type} cho thấy phần lớn nội dung thuộc nhãn \textit{theory}, chiếm khoảng 71,6\% tổng số chunk. Phân bố này phản ánh đặc thù của SGK, trong đó phần trình bày khái niệm, giải thích và ví dụ chiếm ưu thế so với các thành phần như bài tập, mục tiêu hay tóm tắt. Nhãn loại nội dung này tạo cơ sở cho việc khai thác chọn lọc ở các tác vụ phía sau, chẳng hạn ưu tiên chunk \textit{objective} và \textit{summary} khi dựng dàn ý bài giảng, hoặc chunk \textit{exercise} khi sinh câu hỏi luyện tập.
+Số liệu trong Bảng~\ref{tab:chunk-type} cho thấy phần lớn nội dung thuộc nhãn \textit{theory}, chiếm khoảng 71,6\% tổng số phân đoạn. Phân bố này phản ánh đặc thù của SGK, trong đó phần trình bày khái niệm, giải thích và ví dụ chiếm ưu thế so với các thành phần như bài tập, mục tiêu hay tóm tắt. Nhãn loại nội dung này tạo cơ sở cho việc khai thác chọn lọc ở các tác vụ phía sau, chẳng hạn ưu tiên phân đoạn \textit{objective} và \textit{summary} khi dựng dàn ý bài giảng, hoặc phân đoạn \textit{exercise} khi sinh câu hỏi luyện tập.
 
-\subsection{Chunking theo tiêu đề}
+\subsection{Phân đoạn theo tiêu đề}
 
-Khác với cách chia chunk theo cửa sổ ký tự cố định, chiến lược \textbf{chunking theo tiêu đề (heading-based chunking)} được sử dụng trong đồ án xác định ranh giới chunk trực tiếp từ cấu trúc tiêu đề Markdown của SGK. Theo đó, mỗi chunk tương ứng với một đơn vị nội dung mạch lạc về mặt sư phạm. Cụ thể, bộ chunking hoạt động như một máy trạng thái quét tuần tự từng dòng của tệp bài học; mỗi khi gặp một mốc phân cấp --- dòng chủ đề (``CHỦ ĐỀ ...''), tiêu đề bài (``\# Bài X: ...'') hay tiêu đề mục (``\#\# ...'', ``\#\#\# ...'') --- hệ thống chốt chunk đang tích lũy và mở một chunk mới gắn với mốc đó. Cách chia này bảo đảm mỗi chunk nằm trọn trong một mục của một bài, không bị cắt ngang giữa câu hay giữa các ý.
+Khác với cách chia phân đoạn theo cửa sổ ký tự cố định, chiến lược \textbf{phân đoạn theo tiêu đề (phân đoạn theo tiêu đề)} được sử dụng trong đồ án xác định ranh giới phân đoạn trực tiếp từ cấu trúc tiêu đề Markdown của SGK. Theo đó, mỗi phân đoạn tương ứng với một đơn vị nội dung mạch lạc về mặt sư phạm. Cụ thể, bộ phân đoạn hoạt động như một máy trạng thái quét tuần tự từng dòng của tệp bài học; mỗi khi gặp một mốc phân cấp --- dòng chủ đề (``CHỦ ĐỀ ...''), tiêu đề bài (``\# Bài X: ...'') hay tiêu đề mục (``\#\# ...'', ``\#\#\# ...'') --- hệ thống chốt phân đoạn đang tích lũy và mở một phân đoạn mới gắn với mốc đó. Cách chia này bảo đảm mỗi phân đoạn nằm trọn trong một mục của một bài, không bị cắt ngang giữa câu hay giữa các ý.
 
 Để làm rõ cơ chế này, có thể xét một tài liệu giả lập gồm ba tầng tiêu đề như sau:
 
@@ -219,14 +219,14 @@ May tinh A co dia chi 192.168.1.10.
 Ten mien giup nguoi dung de nho dia chi tai nguyen hon.
 \end{lstlisting}
 
-Với đầu vào trên, hệ thống không tạo một chunk duy nhất cho toàn bộ bài học mà chốt chunk tại từng mốc tiêu đề. Bảng~\ref{tab:chunking-prototype} minh họa kết quả phân đoạn tương ứng.
+Với đầu vào trên, hệ thống không tạo một phân đoạn duy nhất cho toàn bộ bài học mà chốt phân đoạn tại từng mốc tiêu đề. Bảng~\ref{tab:chunking-prototype} minh họa kết quả phân đoạn tương ứng.
 
 \begin{table}[!htbp]
 \centering
 \small
 \begin{tabular}{|l|c|p{0.32\textwidth}|p{0.28\textwidth}|}
 \hline
-\textbf{Chunk giả lập} & \textbf{Level} & \textbf{Breadcrumb} & \textbf{Nội dung chính} \\
+\textbf{Phân đoạn giả lập} & \textbf{Level} & \textbf{Đường dẫn ngữ cảnh} & \textbf{Nội dung chính} \\
 \hline
 $c_1$ & 1 & Chủ đề 2 > Bài 3 & Đoạn mở đầu của bài học \\
 \hline
@@ -237,29 +237,29 @@ $c_3$ & 3 & Chủ đề 2 > Bài 3 > 1. Địa chỉ IP > Ví dụ & Ví dụ v�
 $c_4$ & 2 & Chủ đề 2 > Bài 3 > 2. Tên miền & Khái niệm tên miền \\
 \hline
 \end{tabular}
-\caption{Ví dụ minh họa cách chunking theo tiêu đề trên một tài liệu ba tầng heading}
+\caption{Ví dụ minh họa cách phân đoạn theo tiêu đề trên một tài liệu ba tầng tiêu đề}
 \label{tab:chunking-prototype}
 \end{table}
 
-Bảng~\ref{tab:chunking-prototype} cho thấy ranh giới chunk được quyết định bởi tiêu đề gần nhất đang có hiệu lực. Đoạn mở đầu ngay sau tiêu đề bài được gán vào chunk mức $1$. Khi gặp mục ``1. Địa chỉ IP'', hệ thống tạo một chunk mới ở mức $2$. Phần ``Ví dụ'' bên trong mục này tiếp tục được tách thành một chunk mức $3$, do nó được mở bởi một tiêu đề con riêng. Tương tự, khi gặp mục ``2. Tên miền'', hệ thống chốt chunk trước đó và mở ra một chunk mới. Nhờ cách chia này, mỗi chunk giữ được cả nội dung trực tiếp lẫn vị trí phân cấp trong bài học.
+Bảng~\ref{tab:chunking-prototype} cho thấy ranh giới phân đoạn được quyết định bởi tiêu đề gần nhất đang có hiệu lực. Đoạn mở đầu ngay sau tiêu đề bài được gán vào phân đoạn mức $1$. Khi gặp mục ``1. Địa chỉ IP'', hệ thống tạo một phân đoạn mới ở mức $2$. Phần ``Ví dụ'' bên trong mục này tiếp tục được tách thành một phân đoạn mức $3$, do nó được mở bởi một tiêu đề con riêng. Tương tự, khi gặp mục ``2. Tên miền'', hệ thống chốt phân đoạn trước đó và mở ra một phân đoạn mới. Nhờ cách chia này, mỗi phân đoạn giữ được cả nội dung trực tiếp lẫn vị trí phân cấp trong bài học.
 
-Mỗi chunk được gán trường \texttt{level} bằng đúng độ sâu tiêu đề trong Markdown: tiêu đề bài tương ứng \texttt{level}~$=1$, các mục chính \texttt{level}~$=2$, các mục con \texttt{level}~$\geq 3$. Phân bố thực tế cho thấy nội dung tập trung chủ yếu ở \texttt{level}~$2$ (1.229 chunk) và \texttt{level}~$3$ (921 chunk). Song song, mỗi chunk mang một chuỗi \textit{breadcrumb} dạng ``tên chủ đề > tên bài > tiêu đề mục'' làm ngữ cảnh phân cấp gọn nhẹ; breadcrumb được ghép vào trước nội dung khi embedding và khi xếp hạng lại bằng \textit{Reranker}, qua đó hỗ trợ phân biệt các chunk có câu chữ tương tự nhưng thuộc bài khác nhau.
+Mỗi phân đoạn được gán trường \texttt{level} bằng đúng độ sâu tiêu đề trong Markdown: tiêu đề bài tương ứng \texttt{level}~$=1$, các mục chính \texttt{level}~$=2$, các mục con \texttt{level}~$\geq 3$. Phân bố thực tế cho thấy nội dung tập trung chủ yếu ở \texttt{level}~$2$ (1.229 phân đoạn) và \texttt{level}~$3$ (921 phân đoạn). Song song, mỗi phân đoạn mang một chuỗi \textit{đường dẫn ngữ cảnh} dạng ``tên chủ đề > tên bài > tiêu đề mục'' làm ngữ cảnh phân cấp gọn nhẹ; đường dẫn ngữ cảnh được ghép vào trước nội dung khi embedding và khi xếp hạng lại bằng bộ xếp hạng lại, qua đó hỗ trợ phân biệt các phân đoạn có câu chữ tương tự nhưng thuộc bài khác nhau.
 
-Vì ranh giới chunk bám theo tiêu đề nên kích thước chunk phụ thuộc độ dài tự nhiên của từng mục. Để xử lý hai trường hợp cực đoan, một bước chuẩn hóa kích thước nhẹ được áp dụng sau khi chia: các chunk quá ngắn (dưới 100 ký tự) được gộp vào chunk liền trước nếu cùng bài và cùng loại nội dung, còn các chunk quá dài (trên 2.000 ký tự) được cắt theo ranh giới đoạn văn. Các ngưỡng này chỉ tác động tới một phần nhỏ tập chunk và không làm thay đổi bản chất chia theo tiêu đề; độ dài chunk thực tế dao động quanh trung bình 651 ký tự. Cuối cùng, nhãn \texttt{type} được tinh chỉnh bằng một mô hình ngôn ngữ nhẹ (Gemini~2.5~Flash-Lite) trên cơ sở nhãn heuristic ban đầu, có cơ chế đệm (cache) để bảo đảm tính tái lập; đồng thời mỗi chunk nhận một \texttt{chunk\_id} sinh tất định bằng hàm băm trên (bộ sách, lớp, chủ đề, bài, breadcrumb, thứ tự, dấu vân nội dung), giúp việc tái dựng tập chunk có tính idempotent.
+Vì ranh giới phân đoạn bám theo tiêu đề nên kích thước phân đoạn phụ thuộc độ dài tự nhiên của từng mục. Để xử lý hai trường hợp cực đoan, một bước chuẩn hóa kích thước nhẹ được áp dụng sau khi chia: các phân đoạn quá ngắn (dưới 100 ký tự) được gộp vào phân đoạn liền trước nếu cùng bài và cùng loại nội dung, còn các phân đoạn quá dài (trên 2.000 ký tự) được cắt theo ranh giới đoạn văn. Các ngưỡng này chỉ tác động tới một phần nhỏ tập phân đoạn và không làm thay đổi bản chất chia theo tiêu đề; độ dài phân đoạn thực tế dao động quanh trung bình 651 ký tự. Cuối cùng, nhãn \texttt{type} được tinh chỉnh bằng một mô hình ngôn ngữ nhẹ (Gemini~2.5~Flash-Lite) trên cơ sở nhãn kinh nghiệm (heuristic) ban đầu, có cơ chế đệm (cache) để bảo đảm tính tái lập; đồng thời mỗi phân đoạn nhận một \texttt{chunk\_id} sinh tất định bằng hàm băm trên (bộ sách, lớp, chủ đề, bài, đường dẫn ngữ cảnh, thứ tự, dấu vân nội dung), giúp việc tái dựng tập phân đoạn có tính idempotent.
 
 \subsection{Biểu diễn vector tiếng Việt và lưu trữ Qdrant}
 
-Để hỗ trợ truy hồi ngữ nghĩa, mỗi chunk được chuyển thành một vector số thực bằng mô hình embedding tiếng Việt \texttt{dangvantuan/vietnamese-document-embedding}, sinh vector 768 chiều. Văn bản đưa vào mô hình là trường \texttt{full\_content} (breadcrumb ghép với nội dung) thay vì chỉ riêng nội dung, để ngữ cảnh phân cấp được phản ánh trong không gian vector. Sau khi mã hóa, các vector được chuẩn hóa $L_2$ nhằm bảo đảm độ đo cosine quy về tích vô hướng; quá trình này có kiểm tra và xử lý các vector suy biến (chuẩn gần không hoặc giá trị không hữu hạn) để duy trì tính ổn định của tập chỉ mục.
+Để hỗ trợ truy hồi ngữ nghĩa, mỗi phân đoạn được chuyển thành một vector số thực bằng mô hình embedding tiếng Việt \texttt{dangvantuan/vietnamese-document-embedding}, sinh vector 768 chiều. Văn bản đưa vào mô hình là trường \texttt{full\_content} (đường dẫn ngữ cảnh ghép với nội dung) thay vì chỉ riêng nội dung, để ngữ cảnh phân cấp được phản ánh trong không gian vector. Sau khi mã hóa, các vector được chuẩn hóa $L_2$ nhằm bảo đảm độ đo cosine quy về tích vô hướng; quá trình này có kiểm tra và xử lý các vector suy biến (chuẩn gần không hoặc giá trị không hữu hạn) để duy trì tính ổn định của tập chỉ mục.
 
-Tập vector cùng metadata được lưu vào Qdrant dưới một collection tên \texttt{educational\_chatbot}, cấu hình không gian 768 chiều với độ đo khoảng cách cosine. Mỗi điểm (point) trong Qdrant nhận \texttt{chunk\_id} làm định danh, mang vector ngữ nghĩa và toàn bộ payload metadata ở Bảng~\ref{tab:chunk-metadata}; nhờ đó hệ thống có thể vừa tìm kiếm theo độ tương đồng vừa lọc cứng theo bộ sách, lớp, chủ đề trong cùng một truy vấn. Quá trình nạp dữ liệu được thực hiện theo lô và có kiểm tra tính nhất quán giữa số chunk và số vector. Ngoài ra, một dấu vân (fingerprint) trên nguồn embedding được lưu kèm để phát hiện khi dữ liệu chunk thay đổi và chỉ tính lại vector khi cần. Thiết kế lưu trữ này cho phép tầng truy hồi nạp dữ liệu từ kho Qdrant hoặc từ tệp vector cục bộ trong các kịch bản triển khai và thực nghiệm.
+Tập vector cùng siêu dữ liệu được lưu vào Qdrant dưới một collection tên \texttt{educational\_chatbot}, cấu hình không gian 768 chiều với độ đo khoảng cách cosine. Mỗi điểm (point) trong Qdrant nhận \texttt{chunk\_id} làm định danh, mang vector ngữ nghĩa và toàn bộ dữ liệu kèm theo siêu dữ liệu ở Bảng~\ref{tab:chunk-metadata}; nhờ đó hệ thống có thể vừa tìm kiếm theo độ tương đồng vừa lọc cứng theo bộ sách, lớp, chủ đề trong cùng một truy vấn. Quá trình nạp dữ liệu được thực hiện theo lô và có kiểm tra tính nhất quán giữa số phân đoạn và số vector. Ngoài ra, một dấu vân (fingerprint) trên nguồn embedding được lưu kèm để phát hiện khi dữ liệu phân đoạn thay đổi và chỉ tính lại vector khi cần. Thiết kế lưu trữ này cho phép tầng truy hồi nạp dữ liệu từ kho Qdrant hoặc từ tệp vector cục bộ trong các kịch bản triển khai và thực nghiệm.
 
 \section{Cơ chế truy hồi ngữ cảnh (RAG core)}
 
 \subsection{Truy hồi lai BM25 và dense, hợp nhất bằng Reciprocal Rank Fusion}
 
-Lõi truy hồi của hệ thống được xây dựng theo hướng truy hồi lai, kết hợp giữa tìm kiếm từ khóa (\textit{keyword search}) và tìm kiếm ngữ nghĩa theo vector (\textit{vector search}). Trong đó, \textit{keyword search} phù hợp với các truy vấn có mức trùng khớp bề mặt cao với SGK, còn \textit{vector search} phù hợp với các truy vấn diễn đạt lại hoặc dùng từ đồng nghĩa.
+Lõi truy hồi của hệ thống được xây dựng theo hướng truy hồi lai trong kiến trúc RAG \cite{lewis2020rag}, kết hợp giữa tìm kiếm từ khóa (tìm kiếm từ khóa (keyword search)) và tìm kiếm ngữ nghĩa theo vector (tìm kiếm vector (vector search)). Trong đó, tìm kiếm từ khóa phù hợp với các truy vấn có mức trùng khớp bề mặt cao với SGK, còn tìm kiếm vector phù hợp với các truy vấn diễn đạt lại hoặc dùng từ đồng nghĩa.
 
-Với \textit{keyword search}, hệ thống sử dụng BM25. Xuất phát từ TF-IDF, trong đó tần suất từ được ký hiệu bởi Công thức~\ref{eq:tf}:
+Với tìm kiếm từ khóa, hệ thống sử dụng BM25, một hàm xếp hạng phổ biến trong truy hồi thông tin \cite{robertson2009bm25}. Xuất phát từ TF-IDF, trong đó tần suất từ được ký hiệu bởi Công thức~\ref{eq:tf}:
 \begin{equation}
 \mathrm{TF}(t, d) = f(t, d),
 \label{eq:tf}
@@ -275,7 +275,7 @@ Trong đó:\\
 \item $N$ là số tài liệu trong tập chỉ mục.
 \item $n(t)$ là số tài liệu chứa từ $t$.
 \end{itemize}
-Trên cơ sở đó, điểm BM25 của truy vấn $q$ đối với chunk $d$ được tính như sau:
+Trên cơ sở đó, điểm BM25 của truy vấn $q$ đối với phân đoạn $d$ được tính theo Công thức~\ref{eq:bm25}:
 \begin{equation}
 \mathrm{BM25}(q,d)=\sum_{t \in q} \mathrm{IDF}(t)\cdot
 \frac{f(t,d)\,(k_1+1)}
@@ -286,13 +286,13 @@ Trong đó:\\
 \begin{itemize}
 \item $q$ là truy vấn.
 \item $t$ là một term thuộc truy vấn $q$.
-\item $f(t,d)$ là số lần xuất hiện của từ $t$ trong chunk $d$.
-\item $|d|$ là độ dài của chunk $d$.
-\item $\mathrm{avgdl}$ là độ dài chunk trung bình của toàn bộ tập chỉ mục.
+\item $f(t,d)$ là số lần xuất hiện của từ $t$ trong phân đoạn $d$.
+\item $|d|$ là độ dài của phân đoạn $d$.
+\item $\mathrm{avgdl}$ là độ dài phân đoạn trung bình của toàn bộ tập chỉ mục.
 \item $k_1$ và $b$ là các siêu tham số điều chỉnh ảnh hưởng của tần suất từ và độ dài tài liệu.
 \end{itemize}
 
-Với \textit{vector search}, mỗi truy vấn $q$ và mỗi chunk $d$ được ánh xạ thành embedding $\mathbf{e}_q$ và $\mathbf{e}_d$. Độ tương đồng được tính bằng cosine similarity theo Công thức~\ref{eq:cosine-sim}:
+Với tìm kiếm vector, mỗi truy vấn $q$ và mỗi phân đoạn $d$ được ánh xạ thành embedding $\mathbf{e}_q$ và $\mathbf{e}_d$. Cách biểu diễn này kế thừa hướng truy hồi dense và sentence embedding trong các hệ thống hỏi đáp hiện đại \cite{karpukhin2020dpr,reimers2019sbert}. Độ tương đồng được tính bằng cosine similarity theo Công thức~\ref{eq:cosine-sim}:
 \begin{equation}
 \mathrm{cos\_sim}(\mathbf{e}_q,\mathbf{e}_d)
 =
@@ -303,13 +303,13 @@ Với \textit{vector search}, mỗi truy vấn $q$ và mỗi chunk $d$ được 
 Trong đó:\\
 \begin{itemize}
 \item $\mathbf{e}_q$ là embedding của truy vấn.
-\item $\mathbf{e}_d$ là embedding của chunk.
+\item $\mathbf{e}_d$ là embedding của phân đoạn.
 \item $\mathbf{e}_q \cdot \mathbf{e}_d$ là tích vô hướng giữa hai vector.
 \item $\|\cdot\|_2$ là chuẩn Euclid.
 \end{itemize}
 Do các vector được chuẩn hóa $L_2$ trước khi lập chỉ mục, độ đo này quy về so sánh hướng trong không gian vector và được dùng trực tiếp trong truy vấn Qdrant.
 
-Hai danh sách kết quả từ BM25 và \textit{vector search} được hợp nhất bằng \textit{Reciprocal Rank Fusion} (RRF), thay vì trộn trực tiếp điểm số. Với một chunk $d$, điểm RRF được xác định theo Công thức~\ref{eq:rrf}:
+Hai danh sách kết quả từ BM25 và tìm kiếm vector được hợp nhất bằng \textit{Reciprocal Rank Fusion} (RRF), thay vì trộn trực tiếp điểm số \cite{cormack2009rrf}. Với một phân đoạn $d$, điểm RRF được xác định theo Công thức~\ref{eq:rrf}:
 \begin{equation}
 \mathrm{RRF}(d)=\sum_{r \in \mathcal{R}} \frac{1}{k+\mathrm{rank}_r(d)},
 \label{eq:rrf}
@@ -317,16 +317,16 @@ Hai danh sách kết quả từ BM25 và \textit{vector search} được hợp n
 Trong đó:\\
 \begin{itemize}
 \item $\mathcal{R}$ là tập các danh sách xếp hạng thành phần.
-\item $\mathrm{rank}_r(d)$ là thứ hạng của chunk $d$ trong danh sách $r$.
+\item $\mathrm{rank}_r(d)$ là thứ hạng của phân đoạn $d$ trong danh sách $r$.
 \item $k$ là hằng số làm trơn.
 \end{itemize}
-Cách hợp nhất này tránh phụ thuộc vào khác biệt thang điểm giữa BM25 và cosine similarity, đồng thời giữ lại các chunk có thứ hạng cao ở ít nhất một kênh truy hồi. Kết quả của bước này là một tập candidate ban đầu để chuyển sang bước reranking.
+Cách hợp nhất này tránh phụ thuộc vào khác biệt thang điểm giữa BM25 và cosine similarity, đồng thời giữ lại các phân đoạn có thứ hạng cao ở ít nhất một kênh truy hồi. Kết quả của bước này là một tập ứng viên (candidate) ban đầu để chuyển sang bước xếp hạng lại.
 
 \subsection{Xếp hạng lại bằng cross-encoder}
 
-Sau bước truy hồi lai, hệ thống áp dụng một bước \textit{reranking} bằng cross-encoder để tái xếp hạng tập candidate. Mục tiêu của bước này là thay thế thứ tự dựa trên mức tương đồng sơ cấp bằng thứ tự gần hơn với mức độ liên quan thực sự giữa truy vấn và chunk.
+Sau bước truy hồi lai, hệ thống áp dụng một bước \textit{xếp hạng lại} bằng cross-encoder để tái xếp hạng tập ứng viên. Mục tiêu của bước này là thay thế thứ tự dựa trên mức tương đồng sơ cấp bằng thứ tự gần hơn với mức độ liên quan thực sự giữa truy vấn và phân đoạn. Cách tiếp cận cross-encoder cho reranking đã được sử dụng rộng rãi trong bài toán xếp hạng lại đoạn văn \cite{nogueira2019passage}.
 
-\textit{Reranker} nhận đầu vào là cặp \textit{(query, context)} và sinh ra một điểm số liên quan
+Bộ xếp hạng lại nhận đầu vào là cặp truy vấn -- ngữ cảnh và sinh ra điểm số liên quan theo Công thức~\ref{eq:rerank-score}:
 \begin{equation}
 s_{\mathrm{rerank}} = f_{\theta}(q, d),
 \label{eq:rerank-score}
@@ -334,20 +334,20 @@ s_{\mathrm{rerank}} = f_{\theta}(q, d),
 Trong đó:\\
 \begin{itemize}
 \item $q$ là truy vấn.
-\item $d$ là chunk ứng viên.
+\item $d$ là phân đoạn ứng viên.
 \item $\theta$ là tập tham số của mô hình.
 \item $f_{\theta}$ là hàm chấm điểm của cross-encoder.
 \end{itemize}
-Khác với \textit{vector search}, mô hình này mã hóa đồng thời cả truy vấn và chunk, do đó có thể khai thác tương tác token-level giữa hai vế. Trong triển khai hiện tại, phần văn bản đưa vào \textit{Reranker} không chỉ gồm \texttt{content} mà còn ghép thêm \textit{breadcrumb}, nhằm cung cấp thêm ngữ cảnh phân cấp của chunk trong SGK.
+Khác với tìm kiếm vector, mô hình này mã hóa đồng thời cả truy vấn và phân đoạn, do đó có thể khai thác tương tác mức token (token-level) giữa hai vế. Trong triển khai hiện tại, phần văn bản đưa vào bộ xếp hạng lại không chỉ gồm \texttt{content} mà còn ghép thêm \textit{đường dẫn ngữ cảnh}, nhằm cung cấp thêm ngữ cảnh phân cấp của phân đoạn trong SGK.
 
-Sau khi tính lại điểm số, hệ thống chọn top-$N$ chunk để xây dựng ngữ cảnh cuối. Giá trị $N$ được đặt theo loại tác vụ: với hỏi đáp ngắn, $N$ nhỏ hơn để hạn chế nhiễu; với slide hoặc giáo án, $N$ lớn hơn để tăng độ bao phủ. Vì vậy, reranking vừa là bước cải thiện thứ hạng, vừa là bước chọn lọc ngữ cảnh đầu vào cho tầng generation.
+Sau khi tính lại điểm số, hệ thống chọn top-$N$ phân đoạn để xây dựng ngữ cảnh cuối. Giá trị $N$ được đặt theo loại tác vụ: với hỏi đáp ngắn, $N$ nhỏ hơn để hạn chế nhiễu; với slide hoặc giáo án, $N$ lớn hơn để tăng độ bao phủ. Vì vậy, xếp hạng lại vừa là bước cải thiện thứ hạng, vừa là bước chọn lọc ngữ cảnh đầu vào cho tầng sinh văn bản.
 
 \subsection{Truy hồi thích ứng (Adaptive RAG)}
 \label{subsec:adaptive-rag}
 
-Không phải mọi truy vấn trong hệ thống đều cần cùng một cách truy hồi. Câu hỏi định nghĩa ngắn, yêu cầu liệt kê bài học, truy vấn tổng quan theo chủ đề và yêu cầu sinh slide từ một bài học có phạm vi ngữ cảnh khác nhau. Vì vậy, hệ thống sử dụng cơ chế \textit{Adaptive RAG} để chọn strategy truy hồi phù hợp theo loại truy vấn và thông tin phạm vi hiện có.
+Không phải mọi truy vấn trong hệ thống đều cần cùng một cách truy hồi. Câu hỏi định nghĩa ngắn, yêu cầu liệt kê bài học, truy vấn tổng quan theo chủ đề và yêu cầu sinh slide từ một bài học có phạm vi ngữ cảnh khác nhau. Vì vậy, hệ thống sử dụng cơ chế RAG thích ứng (Adaptive RAG) để chọn chiến lược (strategy) truy hồi phù hợp theo loại truy vấn và thông tin phạm vi hiện có; hướng thiết kế này gần với các nghiên cứu truy hồi có cấu trúc phân cấp cho hỏi đáp mở \cite{liu2021densehierarchical}.
 
-Về mặt lý thuyết, cơ chế này có hai thành phần chính. Thành phần thứ nhất là bước phân loại truy vấn, nhằm xác định loại nhu cầu truy hồi trước khi chọn strategy. Thành phần thứ hai là bước ràng buộc phạm vi (\textit{scope filtering}) theo bộ sách, lớp hoặc chủ đề nếu các metadata này đã được nhận diện ở tầng điều phối. Nhờ đó, không gian tìm kiếm được thu hẹp trước khi thực hiện BM25 hoặc \textit{vector search}. Trong trường hợp strategy đang dùng không trả về đủ ngữ cảnh, hệ thống có thể fallback về cấu hình mặc định để bảo đảm độ phủ.
+Về mặt lý thuyết, cơ chế này có hai thành phần chính. Thành phần thứ nhất là bước phân loại truy vấn, nhằm xác định loại nhu cầu truy hồi trước khi chọn chiến lược. Thành phần thứ hai là bước ràng buộc phạm vi (\textit{lọc theo phạm vi (scope filtering)}) theo bộ sách, lớp hoặc chủ đề nếu các siêu dữ liệu này đã được nhận diện ở tầng điều phối. Nhờ đó, không gian tìm kiếm được thu hẹp trước khi thực hiện BM25 hoặc tìm kiếm vector. Trong trường hợp chiến lược đang dùng không trả về đủ ngữ cảnh, hệ thống có thể dự phòng (fallback) về cấu hình mặc định để bảo đảm độ phủ.
 
 \begin{figure}[H]
 \centering
@@ -398,24 +398,24 @@ Về mặt lý thuyết, cơ chế này có hai thành phần chính. Thành ph�
 \label{fig:method-adaptive-rag}
 \end{figure}
 
-Trong Hình \ref{fig:method-adaptive-rag}, bộ phân loại truy vấn được đặt ở trung tâm vì đây là thành phần quyết định strategy truy hồi sẽ được áp dụng trước. Bốn strategy ở tầng dưới tương ứng với bốn kiểu nhu cầu truy hồi khác nhau, trong khi khối ``Bộ kết hợp ngữ cảnh'' chuẩn hóa đầu ra của từng strategy về một cấu trúc chung cho tầng trên sử dụng.
-Trong cấu trúc này, \textit{STANDARD} là strategy mặc định gồm BM25, \textit{vector search}, RRF và reranking. \textit{BROAD} ưu tiên các chunk mô tả ở mức khái quát. \textit{CURRICULUM} phục vụ các truy vấn liệt kê bài học hoặc cấu trúc chương trình, trong đó đầu ra cần ở mức danh sách bài thay vì đoạn nội dung chi tiết. \textit{HRAG} kết hợp các chunk mức cao và mức chi tiết trong cùng phạm vi bài học. Sau khi truy hồi, khối ``Bộ kết hợp ngữ cảnh'' thực hiện chuẩn hóa đầu ra để các strategy khác nhau có thể cung cấp ngữ cảnh theo cùng một cấu trúc cho tầng trên sử dụng.
+Trong Hình~\ref{fig:method-adaptive-rag}, bộ phân loại truy vấn được đặt ở trung tâm vì đây là thành phần quyết định chiến lược truy hồi sẽ được áp dụng trước. Bốn chiến lược ở tầng dưới tương ứng với bốn kiểu nhu cầu truy hồi khác nhau, trong khi khối ``Bộ kết hợp ngữ cảnh'' chuẩn hóa đầu ra của từng chiến lược về một cấu trúc chung cho tầng trên sử dụng.
+Trong cấu trúc này, \textit{STANDARD} là chiến lược mặc định gồm BM25, tìm kiếm vector, RRF và xếp hạng lại. \textit{BROAD} ưu tiên các phân đoạn mô tả ở mức khái quát. \textit{CURRICULUM} phục vụ các truy vấn liệt kê bài học hoặc cấu trúc chương trình, trong đó đầu ra cần ở mức danh sách bài thay vì đoạn nội dung chi tiết. \textit{HRAG} kết hợp các phân đoạn mức cao và mức chi tiết trong cùng phạm vi bài học. Sau khi truy hồi, khối ``Bộ kết hợp ngữ cảnh'' thực hiện chuẩn hóa đầu ra để các chiến lược khác nhau có thể cung cấp ngữ cảnh theo cùng một cấu trúc cho tầng trên sử dụng.
 
 \section{Tầng điều phối tác tử}
 
 \subsection{Sự cần thiết của tầng điều phối tác tử}
 
-Nếu hệ thống chỉ phục vụ một tác vụ hỏi đáp đơn giản, một pipeline tuyến tính gồm query analysis, retrieval và answer generation là đủ. Tuy nhiên, bài toán của đồ án bao gồm đồng thời nhiều nhóm yêu cầu khác nhau, từ hỏi đáp khái niệm, giải thích bài học, sinh slide đến soạn giáo án. Các yêu cầu này khác nhau không chỉ ở output format mà còn ở retrieval scope, mức độ phụ thuộc vào multi-turn context và số bước xử lý trung gian. Do đó, việc dùng một pipeline cố định cho mọi truy vấn làm giảm khả năng thích ứng của hệ thống.
+Nếu hệ thống chỉ phục vụ một tác vụ hỏi đáp đơn giản, một luồng xử lý tuyến tính gồm phân tích truy vấn (query analysis), truy xuất và sinh câu trả lời (answer sinh văn bản) là đủ. Tuy nhiên, bài toán của đồ án bao gồm đồng thời nhiều nhóm yêu cầu khác nhau, từ hỏi đáp khái niệm, giải thích bài học, sinh slide đến soạn giáo án. Các yêu cầu này khác nhau không chỉ ở output format mà còn ở truy xuất scope, mức độ phụ thuộc vào ngữ cảnh đa lượt (multi-turn context) và số bước xử lý trung gian. Do đó, việc dùng một luồng xử lý cố định cho mọi truy vấn làm giảm khả năng thích ứng của hệ thống.
 
-Tầng điều phối tác tử được đưa vào để tách riêng ba trách nhiệm: intent understanding, execution routing và action execution. Trong kiến trúc này, bộ điều phối không được thiết kế như một \textit{Agent} tự trị bao trùm toàn bộ hệ thống. Thay vào đó, nó là một lớp orchestration mỏng, giữ \textit{request state}, chỉ gọi \textit{LLM} ở các vị trí cần suy luận ngôn ngữ như intent routing hoặc query rewriting, và dùng deterministic logic cho planning, dispatch và session management. Cách tổ chức này giúp giảm số lượt gọi mô hình, hạn chế latency và làm rõ ranh giới giữa reasoning dựa trên ngôn ngữ với quyết định có thể mô hình hóa bằng rule.
+Tầng điều phối tác tử được đưa vào để tách riêng ba trách nhiệm: hiểu ý định (ý định (intent) understanding), điều hướng thực thi (execution routing) và thực thi hành động (action execution). Trong kiến trúc này, bộ điều phối không được thiết kế như một tác tử tự trị bao trùm toàn bộ hệ thống. Thay vào đó, nó là một lớp điều phối (orchestration) mỏng, giữ \textit{trạng thái yêu cầu (request state)}, chỉ gọi \textit{LLM} ở các vị trí cần suy luận ngôn ngữ như định tuyến ý định (ý định routing) hoặc viết lại truy vấn (query rewriting), và dùng deterministic logic cho planning, điều phối (dispatch) và quản lý phiên (session management). Cách tổ chức này có liên hệ với mô hình kết hợp suy luận và hành động trong tác tử ngôn ngữ \cite{yao2022react}, nhưng được ràng buộc lại để phù hợp với hệ thống hỏi đáp có thể kiểm chứng. Nhờ đó, hệ thống giảm số lượt gọi mô hình, hạn chế độ trễ (latency) và làm rõ ranh giới giữa suy luận (reasoning) dựa trên ngôn ngữ với quyết định có thể mô hình hóa bằng luật (rule).
 
-Vai trò thứ hai của tầng điều phối là hỗ trợ multi-intent request. Trong thực tế sử dụng, một câu hỏi có thể đồng thời chứa nhiều action, chẳng hạn vừa yêu cầu giải thích khái niệm, vừa yêu cầu tạo bài tập hoặc sinh dàn ý bài giảng. Khi đó, hệ thống cần phân rã đầu vào thành một \textit{action list} có thứ tự, tránh xử lý trùng lặp và duy trì được \textit{session state} xuyên suốt phiên làm việc. Đây là lý do phần điều phối được mô hình hóa thành một tầng riêng, thay vì gắn trực tiếp vào từng dịch vụ nghiệp vụ.
+Vai trò thứ hai của tầng điều phối là hỗ trợ yêu cầu đa ý định (multi-ý định request). Trong thực tế sử dụng, một câu hỏi có thể đồng thời chứa nhiều action, chẳng hạn vừa yêu cầu giải thích khái niệm, vừa yêu cầu tạo bài tập hoặc sinh dàn ý bài giảng. Khi đó, hệ thống cần phân rã đầu vào thành một danh sách hành động (action list) có thứ tự, tránh xử lý trùng lặp và duy trì được trạng thái phiên (session state) xuyên suốt phiên làm việc. Đây là lý do phần điều phối được mô hình hóa thành một tầng riêng, thay vì gắn trực tiếp vào từng dịch vụ nghiệp vụ.
 
 \subsection{Định tuyến ý định bằng mô hình ngôn ngữ lớn}
 
-Điểm vào đầu tiên của tầng điều phối là bài toán intent routing. Với cùng một surface query, hệ thống cần xác định truy vấn đang hướng tới hỏi đáp kiến thức, sinh học liệu dài, hay một thao tác phụ trợ khác như thống kê tiến độ hoặc ôn câu sai. Ngoài intent type, hệ thống còn cần trích xuất các scope field như bộ sách, lớp, chủ đề và bài học khi thông tin này xuất hiện trong câu hỏi hoặc có thể suy ra từ session context.
+Điểm vào đầu tiên của tầng điều phối là bài toán định tuyến ý định. Với cùng một truy vấn bề mặt (surface query), hệ thống cần xác định truy vấn đang hướng tới hỏi đáp kiến thức, sinh học liệu dài, hay một thao tác phụ trợ khác như thống kê tiến độ hoặc ôn câu sai. Ngoài loại ý định (ý định type), hệ thống còn cần trích xuất các trường phạm vi (scope field) như bộ sách, lớp, chủ đề và bài học khi thông tin này xuất hiện trong câu hỏi hoặc có thể suy ra từ session context.
 
-Trong phương pháp đề xuất, bước intent routing được giao cho \textit{LLM} thay vì heuristic thuần túy. Lý do là cùng một intent có thể được diễn đạt theo nhiều cách khác nhau, đặc biệt trong ngôn ngữ học sinh. Router cần xử lý được indirect query, composite query và cả các trường hợp câu hỏi ngắn nhưng phụ thuộc mạnh vào turn history. Đầu ra của bước này không phải một nhãn duy nhất, mà là một danh sách tối đa ba intent có thứ tự ưu tiên, đi kèm các scope field phục vụ các tầng sau.
+Trong phương pháp đề xuất, bước định tuyến ý định được giao cho \textit{LLM} thay vì kinh nghiệm thuần túy. Lý do là cùng một ý định có thể được diễn đạt theo nhiều cách khác nhau, đặc biệt trong ngôn ngữ học sinh. Router cần xử lý được truy vấn gián tiếp (indirect query), truy vấn phức hợp (composite query) và cả các trường hợp câu hỏi ngắn nhưng phụ thuộc mạnh vào lịch sử hội thoại (turn history). Đầu ra của bước này không phải một nhãn duy nhất, mà là một danh sách tối đa ba ý định có thứ tự ưu tiên, đi kèm các trường phạm vi phục vụ các tầng sau.
 
 \begin{figure}[!htbp]
     \centering
@@ -448,35 +448,35 @@ Trong phương pháp đề xuất, bước intent routing được giao cho \tex
     \label{fig:method-intent-routing}
 \end{figure}
 
-Hình~\ref{fig:method-intent-routing} mô tả processing chain từ câu hỏi gốc đến đầu ra intent routing. Đầu vào ban đầu gồm câu hỏi hiện tại, thông tin người dùng, bộ sách hoặc lớp được chọn trên giao diện và \textit{session state}. Thành phần \textit{ContextAnalyzer} đứng trước cùng vì đây là bước quyết định câu hỏi hiện tại có phụ thuộc vào turn history hay không. Nếu phụ thuộc, hệ thống lấy các lượt hội thoại gần và liên quan để mở rộng câu hỏi hiện tại trước khi chuyển sang bước sau.
+Hình~\ref{fig:method-intent-routing} mô tả chuỗi xử lý (processing chain) từ câu hỏi gốc đến đầu ra định tuyến ý định. Đầu vào ban đầu gồm câu hỏi hiện tại, thông tin người dùng, bộ sách hoặc lớp được chọn trên giao diện và trạng thái phiên. Thành phần \textit{ContextAnalyzer} đứng trước cùng vì đây là bước quyết định câu hỏi hiện tại có phụ thuộc vào lịch sử hội thoại hay không. Nếu phụ thuộc, hệ thống lấy các lượt hội thoại gần và liên quan để mở rộng câu hỏi hiện tại trước khi chuyển sang bước sau.
 
-Sau bước phân tích ngữ cảnh, hệ thống chỉ gọi \textit{QueryRewriter} khi truy vấn cần được reformulate để hỗ trợ \textit{retrieval}. Thành phần này không thay thế câu hỏi gốc, mà tạo ra một hoặc nhiều expanded query nhằm tăng recall của tầng truy hồi trong các trường hợp câu hỏi quá ngắn, thiếu chủ ngữ hoặc dùng diễn đạt không trùng với SGK. Cuối cùng, bộ định tuyến ý định dùng \textit{LLM} để phân tích yêu cầu đã được làm giàu và trả về danh sách intent, retrieval query và các scope field như chủ đề, lớp và bộ sách. Đầu ra này là input trực tiếp cho tầng planning.
+Sau bước phân tích ngữ cảnh, hệ thống chỉ gọi \textit{QueryRewriter} khi truy vấn cần được tái cấu trúc (reformulate) để hỗ trợ truy xuất (truy xuất). Thành phần này không thay thế câu hỏi gốc, mà tạo ra một hoặc nhiều truy vấn mở rộng (expanded query) nhằm tăng độ phủ (recall) của tầng truy hồi trong các trường hợp câu hỏi quá ngắn, thiếu chủ ngữ hoặc dùng diễn đạt không trùng với SGK. Cuối cùng, bộ định tuyến ý định dùng \textit{LLM} để phân tích yêu cầu đã được làm giàu và trả về danh sách ý định, truy vấn truy xuất (truy xuất query) và các trường phạm vi như chủ đề, lớp và bộ sách. Đầu ra này là input trực tiếp cho tầng planning.
 
 \subsection{Làm giàu ngữ cảnh hội thoại và viết lại truy vấn}
 
-Context enrichment là bước cần thiết vì nhiều truy vấn trong thực tế không tự mang đủ thông tin để tầng truy hồi hoạt động chính xác. Các câu như ``giải thích kỹ hơn'', ``bài này khác gì bài trước'' hoặc ``làm cho em vài câu hỏi'' chỉ có thể được hiểu đúng nếu hệ thống nối chúng với turn trước đó. Do vậy, trước khi query rewriting, hệ thống trước hết phải xác định liệu câu hỏi hiện tại có phụ thuộc vào history hay không.
+Làm giàu ngữ cảnh (context enrichment) là bước cần thiết vì nhiều truy vấn trong thực tế không tự mang đủ thông tin để tầng truy hồi hoạt động chính xác. Các câu như ``giải thích kỹ hơn'', ``bài này khác gì bài trước'' hoặc ``làm cho em vài câu hỏi'' chỉ có thể được hiểu đúng nếu hệ thống nối chúng với turn trước đó. Do vậy, trước khi viết lại truy vấn, hệ thống trước hết phải xác định liệu câu hỏi hiện tại có phụ thuộc vào history hay không.
 
-Trong hệ thống, \textit{ContextAnalyzer} được hiện thực bằng deterministic logic. Thành phần này quan sát câu hỏi hiện tại, \textit{session state} và một số surface cue như đại từ hồi chỉ, câu rút gọn hoặc việc người dùng tiếp tục một chủ đề đã mở trước đó. Khi phát hiện context dependency, bộ phân tích trích xuất một cửa sổ hội thoại ngắn, ưu tiên các turn gần nhất và các turn có cùng lesson scope. Kết quả của bước này là một phiên bản câu hỏi đã được disambiguate, đủ để tầng dưới xử lý mà không cần mang theo toàn bộ history.
+Trong hệ thống, \textit{ContextAnalyzer} được hiện thực bằng deterministic logic. Thành phần này quan sát câu hỏi hiện tại, trạng thái phiên và một số surface cue như đại từ hồi chỉ, câu rút gọn hoặc việc người dùng tiếp tục một chủ đề đã mở trước đó. Khi phát hiện context dependency, bộ phân tích trích xuất một cửa sổ hội thoại ngắn, ưu tiên các turn gần nhất và các turn có cùng lesson scope. Kết quả của bước này là một phiên bản câu hỏi đã được disambiguate, đủ để tầng dưới xử lý mà không cần mang theo toàn bộ history.
 
-\textit{QueryRewriter} đóng vai trò chuyển câu hỏi đã làm giàu thành dạng phù hợp hơn cho \textit{retrieval}. Với truy vấn hỏi đáp, bộ viết lại có thể sinh thêm các paraphrase gần nghĩa để tăng recall của \textit{keyword search} và \textit{vector search}. Với truy vấn sinh học liệu dài, bộ viết lại ưu tiên làm rõ lesson scope, topic scope và output type. Việc tách bước này khỏi \textit{IntentRouter} giúp hệ thống kiểm soát hai bài toán khác nhau: một bài toán là intent understanding, bài toán còn lại là retrieval-oriented reformulation.
+\textit{QueryRewriter} đóng vai trò chuyển câu hỏi đã làm giàu thành dạng phù hợp hơn cho truy xuất. Với truy vấn hỏi đáp, bộ viết lại có thể sinh thêm các paraphrase gần nghĩa để tăng độ phủ của tìm kiếm từ khóa và tìm kiếm vector. Với truy vấn sinh học liệu dài, bộ viết lại ưu tiên làm rõ lesson scope, topic scope và output type. Việc tách bước này khỏi \textit{IntentRouter} giúp hệ thống kiểm soát hai bài toán khác nhau: một bài toán là hiểu ý định, bài toán còn lại là retrieval-oriented reformulation.
 
-Trong thiết kế hiện tại, conversation context sau khi được phân tích không được đưa thẳng vào toàn bộ pipeline ở mọi bước. Thay vào đó, nó được nén thành một structured representation gồm câu hỏi đã làm rõ, expanded query, scope field và cờ đánh dấu mức độ phụ thuộc history. Cách chuẩn hóa này giúp các thành phần planning và retrieval dùng lại cùng một input schema, thay vì mỗi thành phần tự diễn giải lịch sử theo cách riêng.
+Trong thiết kế hiện tại, conversation context sau khi được phân tích không được đưa thẳng vào toàn bộ luồng xử lý ở mọi bước. Thay vào đó, nó được nén thành một structured representation gồm câu hỏi đã làm rõ, truy vấn mở rộng, trường phạm vi và cờ đánh dấu mức độ phụ thuộc history. Cách chuẩn hóa này giúp các thành phần planning và truy xuất dùng lại cùng một input schema, thay vì mỗi thành phần tự diễn giải lịch sử theo cách riêng.
 
 \subsection{Quản lý trạng thái hội thoại và vòng đời session}
 
-State management là nền của tầng điều phối, không phải một feature tách rời. Sau bước intent routing, hệ thống phải quyết định câu hỏi hiện tại có thuộc cùng một phiên làm việc với các turn trước đó hay không, rồi mới có thể lập kế hoạch hành động chính xác. Vì vậy, trong phương pháp đề xuất, \textit{SessionManager} được đặt đúng giữa intent routing và action planning, đóng vai trò duy trì continuity của multi-turn context, đồng thời ngăn việc trộn lẫn các workflow khác bản chất trong cùng một session.
+State management là nền của tầng điều phối, không phải một feature tách rời. Sau bước định tuyến ý định, hệ thống phải quyết định câu hỏi hiện tại có thuộc cùng một phiên làm việc với các turn trước đó hay không, rồi mới có thể lập kế hoạch hành động chính xác. Vì vậy, trong phương pháp đề xuất, \textit{SessionManager} được đặt đúng giữa định tuyến ý định và action planning, đóng vai trò duy trì continuity của ngữ cảnh đa lượt, đồng thời ngăn việc trộn lẫn các workflow khác bản chất trong cùng một session.
 
-Mô hình trạng thái được tổ chức theo ba lớp. Ở lớp chung nhất là \textit{Session}, lưu định danh phiên, người dùng, topic hiện tại, intent chính, book scope, timestamp và lịch sử message. Trên nền đó, hệ thống chỉ kích hoạt một trong hai intent-specific state là \textit{QuizState} hoặc \textit{SlideState}, tương ứng với hai nhóm workflow có cấu trúc trạng thái khác nhau. \textit{QuizState} phục vụ các vòng sinh câu hỏi, chấm đáp án và ôn tập; \textit{SlideState} phục vụ các workflow sinh slide, giáo án và các điểm dừng \textit{human-in-the-loop}. Thiết kế này giúp session vừa giữ được conversation history dùng chung, vừa cô lập được state nghiệp vụ đặc thù của từng task type.
+Mô hình trạng thái được tổ chức theo ba lớp. Ở lớp chung nhất là \textit{Session}, lưu định danh phiên, người dùng, topic hiện tại, ý định chính, book scope, timestamp và lịch sử message. Trên nền đó, hệ thống chỉ kích hoạt một trong hai ý định-specific state là \textit{QuizState} hoặc \textit{SlideState}, tương ứng với hai nhóm workflow có cấu trúc trạng thái khác nhau. \textit{QuizState} phục vụ các vòng sinh câu hỏi, chấm đáp án và ôn tập; \textit{SlideState} phục vụ các workflow sinh slide, giáo án và các điểm dừng \textit{human-in-the-loop}. Thiết kế này giúp session vừa giữ được conversation history dùng chung, vừa cô lập được state nghiệp vụ đặc thù của từng task type.
 
 Luật vòng đời session được thực hiện bởi \textit{SessionManager.resolve\_session()}. Nếu người dùng chưa có session hiện hành, hệ thống tạo session mới. Nếu \textit{IntentRouter} phát hiện đổi topic rõ ràng, session cũ được lưu lại và phiên mới được khởi tạo để tránh kéo theo context không còn liên quan. Với các yêu cầu sinh nội dung, hệ thống còn xét thêm \textit{task type transition}. Chẳng hạn, một session đang ở nhánh quiz có thể tiếp tục cho nhiều round cùng loại, nhưng khi chuyển từ quiz sang slide hoặc từ slide sang quiz thì hệ thống tách phiên mới, vì hai workflow này có state object, artifact và logic điều phối khác nhau. Khi không có tín hiệu đổi topic hoặc đổi task type, session hiện tại được reuse để bảo toàn ngữ cảnh hội thoại.
 
-Vai trò quan trọng thứ hai của session management là cung cấp history theo đúng mức chi tiết cho các bước suy luận ngôn ngữ. Trong thiết kế hiện tại, \textit{Session.get\_context\_messages()} trả về một cửa sổ message gần nhất để inject vào intent detection, giúp router phân biệt các truy vấn mơ hồ như ``làm tiếp'', ``chấm câu này'' hay ``giải thích ý trên''. Ở nhánh contextualization, \textit{ContextAnalyzer} và \textit{QueryRewriter} không dùng toàn bộ session thô, mà chỉ lấy phần history liên quan để tạo \textit{context snippet} rồi viết lại truy vấn phục vụ \textit{retrieval}. Cách dùng này giữ cho session trở thành nguồn trạng thái thống nhất của tầng điều phối, nhưng vẫn kiểm soát được độ dài context và ranh giới thông tin được truyền sang từng node.
+Vai trò quan trọng thứ hai của quản lý phiên là cung cấp history theo đúng mức chi tiết cho các bước suy luận ngôn ngữ. Trong thiết kế hiện tại, \textit{Session.get\_context\_messages()} trả về một cửa sổ message gần nhất để inject vào ý định detection, giúp router phân biệt các truy vấn mơ hồ như ``làm tiếp'', ``chấm câu này'' hay ``giải thích ý trên''. Ở nhánh contextualization, \textit{ContextAnalyzer} và \textit{QueryRewriter} không dùng toàn bộ session thô, mà chỉ lấy phần history liên quan để tạo \textit{context snippet} rồi viết lại truy vấn phục vụ truy xuất. Cách dùng này giữ cho session trở thành nguồn trạng thái thống nhất của tầng điều phối, nhưng vẫn kiểm soát được độ dài context và ranh giới thông tin được truyền sang từng nút.
 
-Việc tách state management thành một cơ chế thiết kế riêng trong tầng điều phối mang lại hai lợi ích. Thứ nhất, action planner luôn nhận được một \textit{session state} đã được chuẩn hóa về topic, task type và history context, nhờ đó quyết định tiếp theo không phải suy diễn lại trạng thái từ đầu. Thứ hai, các workflow multi-turn như ``sinh quiz rồi chấm đáp án'', ``sinh dàn ý rồi duyệt outline'', hoặc ``hỏi tiếp trong cùng bài học'' có thể vận hành liên tục mà không làm rò rỉ ngữ cảnh sang một tác vụ khác. Chi tiết cài đặt của lớp lưu phiên, cơ chế auto-save và đồng bộ truy cập sẽ được trình bày ở Chương~4, vì chúng thuộc phạm vi hiện thực hóa hơn là phạm vi thiết kế phương pháp.
+Việc tách state management thành một cơ chế thiết kế riêng trong tầng điều phối mang lại hai lợi ích. Thứ nhất, action planner luôn nhận được một trạng thái phiên đã được chuẩn hóa về topic, task type và history context, nhờ đó quyết định tiếp theo không phải suy diễn lại trạng thái từ đầu. Thứ hai, các workflow multi-turn như ``sinh quiz rồi chấm đáp án'', ``sinh dàn ý rồi duyệt outline'', hoặc ``hỏi tiếp trong cùng bài học'' có thể vận hành liên tục mà không làm rò rỉ ngữ cảnh sang một tác vụ khác. Chi tiết cài đặt của lớp lưu phiên, cơ chế auto-save và đồng bộ truy cập sẽ được trình bày ở Chương~4, vì chúng thuộc phạm vi hiện thực hóa hơn là phạm vi thiết kế phương pháp.
 
 \subsection{Lập kế hoạch hành động và thực thi đa hành động}
 
-Sau khi có danh sách intent, hệ thống chuyển sang bước action planning. Mục tiêu của bước này là ánh xạ từng intent sang một business action cụ thể, đồng thời quyết định execution order khi trong cùng một yêu cầu xuất hiện nhiều intent. Khác với bước intent routing, bài toán planning ở đây được giải quyết bằng deterministic logic thay vì \textit{LLM}. Lý do là action space của hệ thống là hữu hạn và đã biết trước, bao gồm hỏi đáp, giải thích khái niệm, sinh slide, sinh giáo án, sinh quiz, chấm đáp án, ôn câu sai và một số thao tác hỗ trợ khác.
+Sau khi có danh sách ý định, hệ thống chuyển sang bước action planning. Mục tiêu của bước này là ánh xạ từng ý định sang một business action cụ thể, đồng thời quyết định execution order khi trong cùng một yêu cầu xuất hiện nhiều ý định. Khác với bước định tuyến ý định, bài toán planning ở đây được giải quyết bằng deterministic logic thay vì \textit{LLM}. Lý do là action space của hệ thống là hữu hạn và đã biết trước, bao gồm hỏi đáp, giải thích khái niệm, sinh slide, sinh giáo án, sinh quiz, chấm đáp án, ôn câu sai và một số thao tác hỗ trợ khác.
 
 \begin{figure}[!htbp]
     \centering
@@ -507,9 +507,9 @@ Sau khi có danh sách intent, hệ thống chuyển sang bước action plannin
     \label{fig:method-action-planning}
 \end{figure}
 
-Hình~\ref{fig:method-action-planning} cho thấy bước planning gồm hai khối chính. Trước hết, \textit{SessionManager} xác định session hiện tại của người dùng, từ đó quyết định nên tiếp tục workflow đang có hay khởi tạo phiên mới. Tiếp theo, planner nhận đồng thời thông tin intent và \textit{session state} để sinh ra một \textit{action list} đã được deduplicate. Chẳng hạn, nếu nhiều intent liên tiếp cùng dẫn tới một hành động hỏi đáp trong cùng một lesson scope, hệ thống không tạo nhiều bước xử lý trùng nhau mà gộp về một action duy nhất.
+Hình~\ref{fig:method-action-planning} cho thấy bước planning gồm hai khối chính. Trước hết, \textit{SessionManager} xác định session hiện tại của người dùng, từ đó quyết định nên tiếp tục workflow đang có hay khởi tạo phiên mới. Tiếp theo, planner nhận đồng thời thông tin ý định và trạng thái phiên để sinh ra một danh sách hành động đã được deduplicate. Chẳng hạn, nếu nhiều ý định liên tiếp cùng dẫn tới một hành động hỏi đáp trong cùng một lesson scope, hệ thống không tạo nhiều bước xử lý trùng nhau mà gộp về một action duy nhất.
 
-Sau bước planning, \textit{action list} được thực thi theo một execution loop đa hành động. Về bản chất, đây là một chu trình \textit{OBSERVE--DECIDE--ACT}: hệ thống đọc \textit{session state} và intermediate result, chọn action kế tiếp cần chạy, rồi dispatch sang đúng business service tương ứng. Cấu trúc này cho phép hệ thống stream dần kết quả của từng action, đồng thời cập nhật intermediate state mà không cần chờ toàn bộ composite request kết thúc mới sinh phản hồi.
+Sau bước planning, danh sách hành động được thực thi theo một execution loop đa hành động. Về bản chất, đây là một chu trình \textit{OBSERVE--DECIDE--ACT}: hệ thống đọc trạng thái phiên và intermediate result, chọn action kế tiếp cần chạy, rồi điều phối sang đúng business service tương ứng. Cấu trúc này cho phép hệ thống stream dần kết quả của từng action, đồng thời cập nhật intermediate state mà không cần chờ toàn bộ composite request kết thúc mới sinh phản hồi.
 
 \begin{figure}[!htbp]
     \centering
@@ -552,27 +552,27 @@ Sau bước planning, \textit{action list} được thực thi theo một execut
     \label{fig:method-execution-loop}
 \end{figure}
 
-Hình~\ref{fig:method-execution-loop} làm rõ execution loop sau bước planning. Khối \textit{OBSERVE} đọc \textit{session state} và các intermediate result đã có. Khối \textit{DECIDE} chọn action kế tiếp cần chạy dựa trên \textit{action list} còn lại. Khối \textit{ACT} tương ứng với execution dispatcher, chịu trách nhiệm route sang đúng business service. Với các action gắn với quiz, luồng được chuyển sang dịch vụ quiz. Với các action cần sinh học liệu dài, luồng được chuyển sang dịch vụ slide/giáo án để tiếp tục gọi nhánh \textit{Multi-Agent}. Với các action giải thích hoặc hội thoại ngắn, hệ thống dùng chat handler chuyên biệt. Kết quả sau mỗi vòng được ghi trở lại vào \textit{session state} để phục vụ iteration kế tiếp.
+Hình~\ref{fig:method-execution-loop} làm rõ execution loop sau bước planning. Khối \textit{OBSERVE} đọc trạng thái phiên và các intermediate result đã có. Khối \textit{DECIDE} chọn action kế tiếp cần chạy dựa trên danh sách hành động còn lại. Khối \textit{ACT} tương ứng với execution dispatcher, chịu trách nhiệm route sang đúng business service. Với các action gắn với quiz, luồng được chuyển sang dịch vụ quiz. Với các action cần sinh học liệu dài, luồng được chuyển sang dịch vụ slide/giáo án để tiếp tục gọi nhánh đa tác tử. Với các action giải thích hoặc hội thoại ngắn, hệ thống dùng chat handler chuyên biệt. Kết quả sau mỗi vòng được ghi trở lại vào trạng thái phiên để phục vụ iteration kế tiếp.
 
-Thiết kế này cho phép bộ điều phối giữ vai trò trung tâm của phương pháp đề xuất mà không làm nó trở thành một monolithic reasoning block. \textit{LLM} chỉ xuất hiện ở những bước cần language understanding hoặc query reformulation; còn state management, planning và action dispatch vẫn được thực hiện bằng deterministic mechanism. Nhờ đó, hệ thống duy trì được tính giải thích được của processing flow, đồng thời vẫn đủ linh hoạt để hỗ trợ composite request trong cùng một session.
+Thiết kế này cho phép bộ điều phối giữ vai trò trung tâm của phương pháp đề xuất mà không làm nó trở thành một monolithic suy luận block. \textit{LLM} chỉ xuất hiện ở những bước cần language understanding hoặc query reformulation; còn state management, planning và action điều phối vẫn được thực hiện bằng deterministic mechanism. Nhờ đó, hệ thống duy trì được tính giải thích được của processing flow, đồng thời vẫn đủ linh hoạt để hỗ trợ composite request trong cùng một session.
 
 \section{Tầng sinh nội dung đa tác tử}
 
 \subsection{Mô hình Supervisor--Specialist và lý do lựa chọn}
 
-Đối với các tác vụ sinh slide và soạn giáo án, hệ thống không chỉ cần tạo văn bản đầu ra mà còn phải bảo đảm đồng thời nhiều ràng buộc như cấu trúc sư phạm, độ bám nguồn, khả năng gắn học liệu minh họa, mức độ đầy đủ của phần luyện tập và tính nhất quán của toàn bộ artifact cuối. Nếu toàn bộ quá trình này được giao cho một \textit{single-agent} duy nhất, prompt sẽ phải bao hàm cùng lúc yêu cầu lập dàn ý, viết nội dung, đề xuất media, sinh đánh giá và tự kiểm tra chất lượng. Cách tiếp cận đó làm tăng tải nhận thức của mô hình, khiến ranh giới trách nhiệm mờ đi và khó truy vết khi đầu ra không đạt yêu cầu.
+Đối với các tác vụ sinh slide và soạn giáo án, hệ thống không chỉ cần tạo văn bản đầu ra mà còn phải bảo đảm đồng thời nhiều ràng buộc như cấu trúc sư phạm, độ bám nguồn, khả năng gắn học liệu minh họa, mức độ đầy đủ của phần luyện tập và tính nhất quán của toàn bộ artifact cuối. Nếu toàn bộ quá trình này được giao cho một \textit{single-agent} duy nhất, prompt sẽ phải bao hàm cùng lúc yêu cầu lập dàn ý, viết nội dung, đề xuất media, sinh đánh giá và tự kiểm tra chất lượng. Cách tiếp cận đó làm tăng tải nhận thức của mô hình, khiến ranh giới trách nhiệm mờ đi và khó truy vết khi đầu ra không đạt yêu cầu. Các khảo sát gần đây về hệ đa tác tử dựa trên LLM cũng nhấn mạnh nhu cầu phân tách vai trò, giao thức phối hợp và kiểm soát lỗi khi nhiều tác tử cùng tham gia một nhiệm vụ \cite{guo2024multiagents}.
 
 Vì vậy, đồ án lựa chọn kiến trúc \textit{Supervisor--Specialist}. Trong kiến trúc này, một \textit{Content Supervisor} giữ vai trò điều phối workflow, còn từng \textit{specialist agent} chỉ xử lý một lớp nhiệm vụ hẹp đã được xác định trước. Supervisor không trực tiếp sinh nội dung bài học mà thực hiện ba chức năng chính: (i) phân rã yêu cầu thành các bước con, (ii) ràng buộc thứ tự thực thi giữa các bước, và (iii) thu thập kết quả trung gian để quyết định bước tiếp theo. Cách phân tách này giúp workflow sinh nội dung gần với một quy trình xử lý có trạng thái (\textit{stateful workflow}) hơn là một lần gọi mô hình đơn lẻ.
 
-Một ưu điểm quan trọng khác của mô hình này là khả năng kiểm soát \textit{grounding}. Trong pipeline hiện tại, phần outline được sinh trước để xác lập khung sư phạm, sau đó agent viết nội dung mới được phép khai thác các chunk đã truy hồi để điền nội dung chi tiết cho từng slide hoặc từng mục giáo án. Việc tách outline và drafting thành hai bước độc lập giúp giảm nguy cơ mô hình vừa tự quyết cấu trúc vừa tự mở rộng nội dung ngoài phạm vi nguồn. Đồng thời, các bước tùy chọn như gợi ý media hoặc sinh đánh giá nhúng cũng có thể được thêm vào hoặc bỏ qua mà không làm thay đổi hợp đồng dữ liệu của các bước cốt lõi.
+Một ưu điểm quan trọng khác của mô hình này là khả năng kiểm soát \textit{bám sát}. Trong luồng xử lý hiện tại, phần outline được sinh trước để xác lập khung sư phạm, sau đó agent viết nội dung mới được phép khai thác các phân đoạn đã truy hồi để điền nội dung chi tiết cho từng slide hoặc từng mục giáo án. Việc tách outline và drafting thành hai bước độc lập giúp giảm nguy cơ mô hình vừa tự quyết cấu trúc vừa tự mở rộng nội dung ngoài phạm vi nguồn. Đồng thời, các bước tùy chọn như gợi ý media hoặc sinh đánh giá nhúng cũng có thể được thêm vào hoặc bỏ qua mà không làm thay đổi hợp đồng dữ liệu của các bước cốt lõi.
 
-Xét về mặt hiện thực hệ thống, kiến trúc \textit{Supervisor--Specialist} còn phù hợp với LangGraph, nơi toàn bộ workflow được mô hình hóa thành đồ thị có trạng thái, hỗ trợ \textit{interrupt--resume} cho \textit{human-in-the-loop} và hỗ trợ vòng phản tư (\textit{reflection loop}) khi hậu kiểm chất lượng yêu cầu sửa đổi. Do đó, đây là lựa chọn phù hợp hơn so với \textit{single-agent} nếu mục tiêu không chỉ là ``sinh được nội dung'', mà còn là quản lý được quá trình sinh nội dung một cách có thể giải thích và có thể kiểm chứng.
+Xét về mặt hiện thực hệ thống, kiến trúc \textit{Supervisor--Specialist} còn phù hợp với LangGraph, nơi toàn bộ workflow được mô hình hóa thành đồ thị có trạng thái, hỗ trợ \textit{interrupt--resume} cho \textit{human-in-the-loop} và hỗ trợ vòng phản tư (\textit{reflection loop}) khi hậu kiểm chất lượng yêu cầu sửa đổi. Những hệ thống tác tử sinh tương tác cũng cho thấy vai trò của trạng thái, bộ nhớ và hành vi phối hợp trong các workflow dài \cite{park2023generativeagents}. Do đó, đây là lựa chọn phù hợp hơn so với \textit{single-agent} nếu mục tiêu không chỉ là ``sinh được nội dung'', mà còn là quản lý được quá trình sinh nội dung một cách có thể giải thích và có thể kiểm chứng.
 
 \subsection{Giao thức giao tiếp và cơ chế điều phối giữa các tác tử}
 
 Để các tác tử chuyên biệt có thể phối hợp mà không phụ thuộc chặt vào cài đặt nội bộ của nhau, hệ thống sử dụng một giao thức trao đổi thống nhất dựa trên hai thực thể \textit{AgentTask} và \textit{AgentTaskResult}. \textit{AgentTask} là gói lệnh mà supervisor gửi cho một specialist agent, bao gồm định danh tác vụ, loại tác vụ, mục tiêu, đầu vào, tập ràng buộc, tham chiếu ngữ cảnh và loại artifact kỳ vọng. Chiều ngược lại, \textit{AgentTaskResult} là gói phản hồi chuẩn hóa, chứa trạng thái thực thi, artifact đầu ra, điểm tin cậy (\textit{confidence}), danh sách cảnh báo, thời gian xử lý và thông tin lỗi nếu có. Việc chuẩn hóa hai thực thể này giúp supervisor có thể điều phối nhiều agent bằng cùng một cơ chế, thay vì phải xây dựng một giao diện riêng cho từng agent.
 
-Toàn bộ workflow được duy trì trên một \textit{workflow state} dùng chung. Trạng thái này chứa không chỉ các trường đầu vào như \texttt{task\_type}, \texttt{query}, \texttt{topic}, \texttt{grade}, \texttt{book} và tập \texttt{rag\_chunks}, mà còn lưu các artifact trung gian như \texttt{outline\_payload}, \texttt{content\_payload}, \texttt{media\_payload}, \texttt{quiz\_payload}, \texttt{quality\_review} và một \textit{artifact registry} để supervisor có thể tra cứu kết quả theo \texttt{artifact\_type}. Cấu trúc trạng thái này đóng vai trò là lớp bộ nhớ thao tác của riêng pipeline sinh nội dung, tách biệt với \textit{session state} ở tầng điều phối đã trình bày trước đó.
+Toàn bộ workflow được duy trì trên một \textit{workflow state} dùng chung. Trạng thái này chứa không chỉ các trường đầu vào như \texttt{task\_type}, \texttt{query}, \texttt{topic}, \texttt{grade}, \texttt{book} và tập \texttt{rag\_chunks}, mà còn lưu các artifact trung gian như \texttt{outline\_payload}, \texttt{content\_payload}, \texttt{media\_payload}, \texttt{quiz\_payload}, \texttt{quality\_review} và một \textit{artifact registry} để supervisor có thể tra cứu kết quả theo \texttt{artifact\_type}. Cấu trúc trạng thái này đóng vai trò là lớp bộ nhớ thao tác của riêng luồng xử lý sinh nội dung, tách biệt với trạng thái phiên ở tầng điều phối đã trình bày trước đó.
 
 Trong triển khai hiện tại, cơ chế điều phối được hiện thực bằng các \textit{tool adapter} gắn với supervisor. Chúng vừa đóng vai trò cầu nối để chuyển từ quyết định của supervisor sang một \textit{AgentTask} cụ thể, vừa đảm bảo rằng dữ liệu đầu vào cho từng specialist luôn tuân theo hợp đồng tương ứng. Chẳng hạn, bước \texttt{generate\_content} sẽ bị chặn nếu chưa có \texttt{outline\_payload}; bước \texttt{merge\_results} chỉ được phép chạy sau khi ít nhất outline và content đã sẵn sàng; còn bước \texttt{check\_quality} chỉ được kích hoạt sau khi artifact cuối đã được hợp nhất. Nhờ vậy, phần suy luận bằng mô hình ngôn ngữ được giữ trong phạm vi ``quyết định dùng tác tử nào'', còn điều kiện hợp lệ của workflow vẫn được bảo vệ bằng logic xác định.
 
@@ -618,13 +618,13 @@ Trong triển khai hiện tại, cơ chế điều phối được hiện thực
     \label{fig:method-content-multi-agent}
 \end{figure}
 
-Hình \ref{fig:method-content-multi-agent} mô tả quan hệ giữa supervisor, các specialist agent và bộ hợp nhất kết quả. Ở đỉnh sơ đồ là bộ điều phối nội dung, chịu trách nhiệm quyết định bước nào sẽ được gọi kế tiếp. Ở tầng dưới là các specialist agent tương ứng với các nhiệm vụ con: lập dàn ý, viết nội dung, gợi ý media và sinh đánh giá nhúng. Điểm cần nhấn mạnh là các agent này không giao tiếp trực tiếp với nhau; mọi yêu cầu đều đi qua supervisor. Cách tổ chức này giữ cho luồng điều khiển tập trung tại một điểm, nhờ đó dễ áp dụng các ràng buộc thứ tự như ``phải có outline trước khi viết nội dung'' hoặc ``chỉ được hậu kiểm sau khi đã hợp nhất kết quả''.
+Hình~\ref{fig:method-content-multi-agent} mô tả quan hệ giữa supervisor, các specialist agent và bộ hợp nhất kết quả. Ở đỉnh sơ đồ là bộ điều phối nội dung, chịu trách nhiệm quyết định bước nào sẽ được gọi kế tiếp. Ở tầng dưới là các specialist agent tương ứng với các nhiệm vụ con: lập dàn ý, viết nội dung, gợi ý media và sinh đánh giá nhúng. Điểm cần nhấn mạnh là các agent này không giao tiếp trực tiếp với nhau; mọi yêu cầu đều đi qua supervisor. Cách tổ chức này giữ cho luồng điều khiển tập trung tại một điểm, nhờ đó dễ áp dụng các ràng buộc thứ tự như ``phải có outline trước khi viết nội dung'' hoặc ``chỉ được hậu kiểm sau khi đã hợp nhất kết quả''.
 
-\subsection{Các tác tử chuyên biệt trong pipeline sinh nội dung}
+\subsection{Các tác tử chuyên biệt trong luồng xử lý sinh nội dung}
 
-Trong pipeline hiện tại, \textit{PedagogyPlannerAgent} là tác tử được kích hoạt đầu tiên. Đầu vào của tác tử này là \texttt{context\_map} đã được tổng hợp từ các chunk truy hồi, cùng với metadata về chủ đề, lớp, bộ sách và \texttt{task\_type}. Nhiệm vụ của nó là xây dựng \textit{outline payload} gồm tiêu đề bài học và danh sách các slide hoặc section dự kiến, mỗi phần tử có \texttt{slide\_type}, tiêu đề, các ý chính và tham chiếu đến các chunk nguồn liên quan. Về bản chất, đây là bước chuyển từ ngữ cảnh truy hồi sang cấu trúc sư phạm ở mức khung, tạo tiền đề cho các bước sinh nội dung sau đó.
+Trong luồng xử lý hiện tại, \textit{PedagogyPlannerAgent} là tác tử được kích hoạt đầu tiên. Đầu vào của tác tử này là \texttt{context\_map} đã được tổng hợp từ các phân đoạn truy hồi, cùng với siêu dữ liệu về chủ đề, lớp, bộ sách và \texttt{task\_type}. Nhiệm vụ của nó là xây dựng \textit{outline dữ liệu kèm theo} gồm tiêu đề bài học và danh sách các slide hoặc section dự kiến, mỗi phần tử có \texttt{slide\_type}, tiêu đề, các ý chính và tham chiếu đến các phân đoạn nguồn liên quan. Về bản chất, đây là bước chuyển từ ngữ cảnh truy hồi sang cấu trúc sư phạm ở mức khung, tạo tiền đề cho các bước sinh nội dung sau đó.
 
-\textit{ContentDraftingAgent} là tác tử cốt lõi của pipeline vì nó trực tiếp biến outline thành nội dung giảng dạy. Tác tử này nhận \texttt{outline\_payload} đã được duyệt cùng với \texttt{chunk\_map}, sau đó sinh \texttt{content\_payload} ở mức từng slide hoặc từng mục giáo án. Trong ràng buộc gửi kèm \textit{AgentTask}, hệ thống đặt \texttt{must\_use\_source\_chunks=True}; do đó, nội dung sinh ra phải bám vào tập chunk đã truy hồi thay vì mở rộng tùy ý theo tri thức tham số của mô hình. Đây là cơ chế quan trọng để duy trì \textit{grounding} cho các artifact có độ dài lớn hơn hỏi đáp ngắn.
+\textit{ContentDraftingAgent} là tác tử cốt lõi của luồng xử lý vì nó trực tiếp biến outline thành nội dung giảng dạy. Tác tử này nhận \texttt{outline\_payload} đã được duyệt cùng với \texttt{chunk\_map}, sau đó sinh \texttt{content\_payload} ở mức từng slide hoặc từng mục giáo án. Trong ràng buộc gửi kèm \textit{AgentTask}, hệ thống đặt \texttt{must\_use\_source\_chunks=True}; do đó, nội dung sinh ra phải bám vào tập phân đoạn đã truy hồi thay vì mở rộng tùy ý theo tri thức tham số của mô hình. Đây là cơ chế quan trọng để duy trì \textit{bám sát} cho các artifact có độ dài lớn hơn hỏi đáp ngắn.
 
 \textit{MediaResearchAgent} giữ vai trò bổ trợ. Tác tử này không làm thay đổi luồng kiến thức chính của bài giảng mà chỉ sinh các gợi ý media như ảnh minh họa hoặc tài nguyên trực quan phù hợp với loại slide. Kết quả của bước này được lưu dưới dạng \texttt{media\_payload}, gồm media cho trang mở đầu và media gắn với các slide nội dung. Trong trường hợp bước này thất bại, workflow vẫn có thể tiếp tục vì media được xem là thành phần tăng cường chứ không phải điều kiện bắt buộc để hoàn thành artifact.
 
@@ -634,9 +634,9 @@ Trong pipeline hiện tại, \textit{PedagogyPlannerAgent} là tác tử đượ
 
 Sau khi các specialist agent hoàn thành phần việc của mình, hệ thống không giao cho một mô hình ngôn ngữ khác nhiệm vụ ``viết lại toàn bộ'' artifact cuối. Thay vào đó, bước hợp nhất được thực hiện bởi một dịch vụ xác định (\textit{deterministic service}) là \textit{SlideMerger}. Dịch vụ này lấy \texttt{outline\_payload} làm khung chuẩn, sau đó lần lượt ghép nội dung chi tiết, media và câu hỏi tương ứng vào từng slide theo \texttt{slide\_id}. Cách hợp nhất này giúp bảo toàn cấu trúc đã được lập kế hoạch từ trước, đồng thời hạn chế nguy cơ một lượt gọi mô hình cuối cùng làm thay đổi ngoài ý muốn thứ tự hoặc nội dung của các phần đã được specialist tạo ra.
 
-Về mặt chất lượng, hệ thống áp dụng hai lớp kiểm soát bổ sung nhau. Lớp thứ nhất là các kiểm tra cấu trúc mang tính xác định, chẳng hạn kiểm tra sự hiện diện của các loại slide tối thiểu, kiểm tra việc thiếu tiêu đề hoặc thiếu \texttt{source\_chunk\_ids} ở các slide cần grounding. Lớp thứ hai là \textit{QualityReviewerAgent}, một tác tử hậu kiểm dùng mô hình ngôn ngữ để đánh giá artifact đầu ra theo rubric tổng quát và trả về \texttt{quality\_review}. Kết quả hậu kiểm không chỉ gồm điểm số và các vấn đề phát hiện được, mà còn chỉ ra \textit{reflection action} tương ứng, ví dụ chấp nhận, yêu cầu sửa outline, yêu cầu sửa content, yêu cầu sửa phần đánh giá hoặc chặn kết quả để cần người duyệt.
+Về mặt chất lượng, hệ thống áp dụng hai lớp kiểm soát bổ sung nhau. Lớp thứ nhất là các kiểm tra cấu trúc mang tính xác định, chẳng hạn kiểm tra sự hiện diện của các loại slide tối thiểu, kiểm tra việc thiếu tiêu đề hoặc thiếu \texttt{source\_chunk\_ids} ở các slide cần bám sát. Lớp thứ hai là \textit{QualityReviewerAgent}, một tác tử hậu kiểm dùng mô hình ngôn ngữ để đánh giá artifact đầu ra theo rubric tổng quát và trả về \texttt{quality\_review}. Kết quả hậu kiểm không chỉ gồm điểm số và các vấn đề phát hiện được, mà còn chỉ ra \textit{reflection action} tương ứng, ví dụ chấp nhận, yêu cầu sửa outline, yêu cầu sửa content, yêu cầu sửa phần đánh giá hoặc chặn kết quả để cần người duyệt.
 
-Ngoài hậu kiểm tự động, pipeline còn tích hợp \textit{human-in-the-loop} tại bước outline. Sau khi \textit{PedagogyPlannerAgent} sinh dàn ý ban đầu, workflow có thể tạm dừng ở trạng thái \textit{interrupt}. Người dùng được phép duyệt nguyên trạng hoặc chỉnh sửa outline trước khi supervisor tiếp tục gọi bước viết nội dung. Điểm chèn con người tại đây là hợp lý vì outline là nơi quyết định cấu trúc sư phạm tổng thể; một chỉnh sửa sớm ở giai đoạn này thường hiệu quả hơn so với can thiệp sau khi toàn bộ slide hoặc giáo án đã được sinh xong.
+Ngoài hậu kiểm tự động, luồng xử lý còn tích hợp \textit{human-in-the-loop} tại bước outline. Sau khi \textit{PedagogyPlannerAgent} sinh dàn ý ban đầu, workflow có thể tạm dừng ở trạng thái \textit{interrupt}. Người dùng được phép duyệt nguyên trạng hoặc chỉnh sửa outline trước khi supervisor tiếp tục gọi bước viết nội dung. Điểm chèn con người tại đây là hợp lý vì outline là nơi quyết định cấu trúc sư phạm tổng thể; một chỉnh sửa sớm ở giai đoạn này thường hiệu quả hơn so với can thiệp sau khi toàn bộ slide hoặc giáo án đã được sinh xong.
 
 \begin{figure}[H]
 \centering
@@ -686,25 +686,25 @@ Ngoài hậu kiểm tự động, pipeline còn tích hợp \textit{human-in-the
 \label{fig:method-generation-quality}
 \end{figure}
 
-Hình \ref{fig:method-generation-quality} mô tả mối quan hệ giữa nhánh sinh nội dung và cơ chế hậu kiểm. Trong nhánh slide/giáo án, bộ điều phối nội dung gọi lần lượt các specialist, chuyển kết quả sang khối hợp nhất, rồi mới đưa artifact cuối qua lớp hậu kiểm chất lượng. Mũi tên nét đứt quay ngược từ khối hậu kiểm về bộ điều phối biểu diễn \textit{reflection loop}: nếu reviewer xác định đầu ra cần chỉnh sửa, supervisor sẽ phát sinh một \texttt{revision\_instruction} và kích hoạt lại đúng bước liên quan thay vì chạy lại toàn bộ pipeline từ đầu. Giới hạn số vòng phản tư được đặt nhỏ để kiểm soát chi phí và độ trễ.
+Hình~\ref{fig:method-generation-quality} mô tả mối quan hệ giữa nhánh sinh nội dung và cơ chế hậu kiểm. Trong nhánh slide/giáo án, bộ điều phối nội dung gọi lần lượt các specialist, chuyển kết quả sang khối hợp nhất, rồi mới đưa artifact cuối qua lớp hậu kiểm chất lượng. Mũi tên nét đứt quay ngược từ khối hậu kiểm về bộ điều phối biểu diễn \textit{reflection loop}: nếu reviewer xác định đầu ra cần chỉnh sửa, supervisor sẽ phát sinh một \texttt{revision\_instruction} và kích hoạt lại đúng bước liên quan thay vì chạy lại toàn bộ luồng xử lý từ đầu. Giới hạn số vòng phản tư được đặt nhỏ để kiểm soát chi phí và độ trễ.
 
 \subsection{Tái sử dụng kiến trúc cho các tác vụ sinh nội dung}
 
-Một mục tiêu thiết kế quan trọng của tầng sinh nội dung là không xây dựng hai pipeline tách rời cho slide và giáo án. Thay vào đó, hệ thống dùng chung một kiến trúc đa tác tử, trong đó khác biệt giữa hai tác vụ được điều khiển chủ yếu bởi biến \texttt{task\_type}. Giá trị này được truyền xuyên suốt từ đầu vào của \textit{ContentPipelineInput}, vào \textit{workflow state}, rồi đến từng \textit{AgentTask}. Nhờ đó, cùng một supervisor và cùng một tập specialist có thể thích nghi đầu ra cho hai loại artifact mà không cần nhân đôi logic orchestration.
+Một mục tiêu thiết kế quan trọng của tầng sinh nội dung là không xây dựng hai luồng xử lý tách rời cho slide và giáo án. Thay vào đó, hệ thống dùng chung một kiến trúc đa tác tử, trong đó khác biệt giữa hai tác vụ được điều khiển chủ yếu bởi biến \texttt{task\_type}. Giá trị này được truyền xuyên suốt từ đầu vào của \textit{ContentPipelineInput}, vào \textit{workflow state}, rồi đến từng \textit{AgentTask}. Nhờ đó, cùng một supervisor và cùng một tập specialist có thể thích nghi đầu ra cho hai loại artifact mà không cần nhân đôi logic điều phối.
 
 Việc tái sử dụng này thể hiện ở nhiều mức. Thứ nhất, cả hai tác vụ đều dùng chung tầng truy hồi, cùng cơ chế tổng hợp ngữ cảnh và cùng giao thức \textit{AgentTask}/\textit{AgentTaskResult}. Thứ hai, các specialist dùng chung hầu hết prompt và contract dữ liệu, chỉ thay đổi một số ràng buộc theo \texttt{task\_type}, chẳng hạn slide thường yêu cầu ngắn gọn hơn và ưu tiên phần luyện tập nhúng, trong khi giáo án có thể cần cấu trúc section dài hơn. Thứ ba, năng lực sinh quiz không bị tách rời khỏi nhánh sinh nội dung mà được tái sử dụng dưới dạng \textit{embedded assessment}, cho phép cùng một nền sinh câu hỏi phục vụ cả workflow quiz độc lập lẫn workflow slide/giáo án. Thứ tư, bước hậu kiểm và phản tư vẫn giữ nguyên logic, chỉ thay reviewer hoặc rubric tương ứng với loại artifact cần đánh giá.
 
-Khác biệt chủ yếu nằm ở giai đoạn đóng gói đầu ra. Với \texttt{task\_type=slide}, artifact sau khi hợp nhất có thể được chuyển tiếp sang \textit{SlideExportService} để xuất tệp PPTX. Với \texttt{task\_type=lesson\_plan}, pipeline vẫn dùng chung các bước sinh nội dung và hậu kiểm, nhưng không cần qua lớp xuất bản slide. Cách tổ chức này cho phép tái sử dụng phần lớn hạ tầng sinh nội dung, đồng thời vẫn giữ đủ linh hoạt để mở rộng thêm các loại artifact mới trong tương lai mà không phải thiết kế lại toàn bộ workflow.
+Khác biệt chủ yếu nằm ở giai đoạn đóng gói đầu ra. Với \texttt{task\_type=slide}, artifact sau khi hợp nhất có thể được chuyển tiếp sang \textit{SlideExportService} để xuất tệp PPTX. Với \texttt{task\_type=lesson\_plan}, luồng xử lý vẫn dùng chung các bước sinh nội dung và hậu kiểm, nhưng không cần qua lớp xuất bản slide. Cách tổ chức này cho phép tái sử dụng phần lớn hạ tầng sinh nội dung, đồng thời vẫn giữ đủ linh hoạt để mở rộng thêm các loại artifact mới trong tương lai mà không phải thiết kế lại toàn bộ workflow.
 
 \section{Phương pháp đánh giá}
 
 \subsection{Đánh giá truy hồi}
 
-Trong đồ án này, retrieval là thành phần được đánh giá định lượng chính vì đây là bước quyết định chất lượng ngữ cảnh đầu vào cho toàn bộ pipeline RAG. Phương pháp đánh giá được tổ chức dưới dạng một benchmark hỏi đáp gắn với dữ liệu SGK, trong đó mỗi câu hỏi được liên kết với một bài học đích thông qua \textit{lesson key}. Cách tổ chức này phù hợp với đặc thù dữ liệu của đồ án: một bài học thường được chia thành nhiều chunk, nên điều cần kiểm tra trước hết là hệ thống có truy xuất đúng bài học mục tiêu hay không, thay vì yêu cầu gán nhãn relevance chi tiết cho toàn bộ chunk trong kho tri thức. Bộ benchmark này được xây dựng từ chính kho tri thức SGK đã xử lý và được dùng thống nhất cho các cấu hình retrieval khác nhau.
+Trong đồ án này, truy xuất là thành phần được đánh giá định lượng chính vì đây là bước quyết định chất lượng ngữ cảnh đầu vào cho toàn bộ luồng xử lý RAG. Phương pháp đánh giá được tổ chức dưới dạng một benchmark hỏi đáp gắn với dữ liệu SGK, trong đó mỗi câu hỏi được liên kết với một bài học đích thông qua \textit{lesson key}. Cách tổ chức này phù hợp với đặc thù dữ liệu của đồ án: một bài học thường được chia thành nhiều phân đoạn, nên điều cần kiểm tra trước hết là hệ thống có truy xuất đúng bài học mục tiêu hay không, thay vì yêu cầu gán nhãn relevance chi tiết cho toàn bộ phân đoạn trong kho tri thức. Bộ benchmark này được xây dựng từ chính kho tri thức SGK đã xử lý và được dùng thống nhất cho các cấu hình truy xuất khác nhau.
 
-Với mỗi truy vấn kiểm thử, một chunk được xem là đúng nếu metadata của nó khớp với bài học vàng theo các trường phạm vi như bộ sách, lớp, chủ đề và bài học. Trên cơ sở đó, đồ án sử dụng các độ đo Hit@$k$, Recall@$k$, Precision@$k$, MRR@$k$ và nDCG@$k$ để đánh giá chất lượng retrieval tại các mức $k$ khác nhau. Các độ đo này được dùng nhằm phản ánh ba khía cạnh bổ sung nhau: khả năng tìm thấy bài học đúng trong top-$k$, vị trí xuất hiện của kết quả đúng trong danh sách xếp hạng, và mức độ tập trung của các kết quả liên quan ở các thứ hạng đầu.
+Với mỗi truy vấn kiểm thử, một phân đoạn được xem là đúng nếu siêu dữ liệu của nó khớp với bài học vàng theo các trường phạm vi như bộ sách, lớp, chủ đề và bài học. Trên cơ sở đó, đồ án sử dụng các độ đo Hit@$k$, Độ phủ@$k$, Precision@$k$, MRR@$k$ và nDCG@$k$ để đánh giá chất lượng truy xuất tại các mức $k$ khác nhau. Đây là nhóm độ đo phổ biến trong các benchmark truy hồi thông tin \cite{thakur2021beir}; riêng nDCG kế thừa hướng đánh giá dựa trên độ lợi tích lũy có xét vị trí xếp hạng \cite{jarvelin2002cumulated}. Các độ đo này được dùng nhằm phản ánh ba khía cạnh bổ sung nhau: khả năng tìm thấy bài học đúng trong top-$k$, vị trí xuất hiện của kết quả đúng trong danh sách xếp hạng, và mức độ tập trung của các kết quả liên quan ở các thứ hạng đầu.
 
-Benchmark retrieval của đồ án gồm tập câu hỏi kiểm thử được sinh bám theo nội dung SGK, kèm metadata phạm vi và bài học đích để đối chiếu. Bộ benchmark này bao phủ nhiều nhóm truy vấn như \textit{definition}, \textit{fact}, \textit{list}, \textit{compare}, \textit{process} và \textit{application}, qua đó cho phép quan sát chất lượng retrieval dưới nhiều kiểu diễn đạt khác nhau của học sinh. Đồng thời, benchmark được xây dựng theo hướng bao phủ toàn bộ các seed đã chọn từ kho tri thức, nên tập truy vấn kiểm thử không chỉ tập trung vào một vài bài đơn lẻ mà trải đều trên toàn bộ hai bộ sách, ba khối lớp và các chủ đề khác nhau trong chương trình. Nhờ đó, kết quả đánh giá retrieval phản ánh được hành vi của hệ thống trên phạm vi dữ liệu đầy đủ của đồ án, thay vì chỉ trên một tập con hẹp hoặc một vài bài học tiêu biểu.
+Benchmark truy xuất của đồ án gồm tập câu hỏi kiểm thử được sinh bám theo nội dung SGK, kèm siêu dữ liệu phạm vi và bài học đích để đối chiếu. Bộ benchmark này bao phủ nhiều nhóm truy vấn như \textit{definition}, \textit{fact}, \textit{list}, \textit{compare}, \textit{process} và \textit{application}, qua đó cho phép quan sát chất lượng truy xuất dưới nhiều kiểu diễn đạt khác nhau của học sinh. Đồng thời, benchmark được xây dựng theo hướng bao phủ toàn bộ các seed đã chọn từ kho tri thức, nên tập truy vấn kiểm thử không chỉ tập trung vào một vài bài đơn lẻ mà trải đều trên toàn bộ hai bộ sách, ba khối lớp và các chủ đề khác nhau trong chương trình. Nhờ đó, kết quả đánh giá truy xuất phản ánh được hành vi của hệ thống trên phạm vi dữ liệu đầy đủ của đồ án, thay vì chỉ trên một tập con hẹp hoặc một vài bài học tiêu biểu. Các độ đo dùng cho đánh giá truy xuất được tóm tắt trong Bảng~\ref{tab:retrieval-metrics-method}.
 
 \begin{table}[H]
     \centering
@@ -715,27 +715,27 @@ Benchmark retrieval của đồ án gồm tập câu hỏi kiểm thử được
         \hline
         Hit@$k$ & Kiểm tra xem có ít nhất một kết quả đúng xuất hiện trong top-$k$ hay không & Đo khả năng truy xuất trúng bài học mục tiêu ở các mức cắt khác nhau \\
         \hline
-        Recall@$k$ & Tỷ lệ kết quả liên quan được thu hồi trong top-$k$ & Đánh giá độ bao phủ của retriever đối với các chunk thuộc bài học đúng \\
+        Độ phủ@$k$ & Tỷ lệ kết quả liên quan được thu hồi trong top-$k$ & Đánh giá độ bao phủ của retriever đối với các phân đoạn thuộc bài học đúng \\
         \hline
         Precision@$k$ & Tỷ lệ kết quả đúng trong top-$k$ & Đánh giá mức độ nhiễu của danh sách truy xuất \\
         \hline
         MRR@$k$ & Nghịch đảo thứ hạng của kết quả đúng đầu tiên & Đo mức độ hệ thống đưa kết quả đúng lên sớm đến đâu \\
         \hline
-        nDCG@$k$ & Độ lợi tích lũy có chuẩn hóa theo thứ hạng & Đánh giá chất lượng sắp xếp tổng thể của danh sách retrieval \\
+        nDCG@$k$ & Độ lợi tích lũy có chuẩn hóa theo thứ hạng & Đánh giá chất lượng sắp xếp tổng thể của danh sách truy xuất \\
         \hline
     \end{tabular}
     \vspace{0.2cm}
-    \caption{Các độ đo dùng cho đánh giá retrieval trong đồ án}
+    \caption{Các độ đo dùng cho đánh giá truy xuất trong đồ án}
     \label{tab:retrieval-metrics-method}
 \end{table}
 
-Để tách riêng ảnh hưởng của retriever và reranker, quy trình đánh giá retrieval được chia thành hai cấu hình. Cấu hình \textit{no-rerank} đo trực tiếp chất lượng của khối truy xuất ban đầu sau bước hợp nhất candidate. Cấu hình \textit{with-rerank} dùng cùng tập candidate nhưng đánh giá lại sau khi áp dụng cross-encoder reranker. Cách tách này giúp xác định rõ reranker có thực sự cải thiện thứ hạng của các chunk liên quan hay không, đồng thời cho phép so sánh công bằng giữa hai giai đoạn trước và sau xếp hạng lại trên cùng một tập truy vấn kiểm thử. Các số liệu thực nghiệm tương ứng được trình bày ở Chương 4.
+Để tách riêng ảnh hưởng của retriever và reranker, quy trình đánh giá truy xuất được chia thành hai cấu hình. Cấu hình \textit{no-xếp hạng lại (rerank)} đo trực tiếp chất lượng của khối truy xuất ban đầu sau bước hợp nhất ứng viên. Cấu hình \textit{with-xếp hạng lại} dùng cùng tập ứng viên nhưng đánh giá lại sau khi áp dụng cross-encoder reranker. Cách tách này giúp xác định rõ reranker có thực sự cải thiện thứ hạng của các phân đoạn liên quan hay không, đồng thời cho phép so sánh công bằng giữa hai giai đoạn trước và sau xếp hạng lại trên cùng một tập truy vấn kiểm thử. Các số liệu thực nghiệm tương ứng được trình bày ở Chương 4.
 
 \subsection{Đánh giá chất lượng sinh}
 
-Khác với retrieval, chất lượng generation không được đánh giá chủ yếu bằng một độ đo duy nhất ở mức chunk hay lesson, mà được xem xét theo mức độ đúng nội dung, mức độ bám nguồn và mức độ phù hợp với câu hỏi của người học. Trong đồ án, phần đánh giá này được thực hiện theo hai hướng bổ trợ nhau. Hướng thứ nhất là sử dụng kết quả đánh giá tự động đã có sẵn bằng RAGAS để quan sát các tiêu chí như \textit{faithfulness}, \textit{answer relevancy}, \textit{context precision} và \textit{context recall}. Hướng thứ hai là đọc và phân tích đầu ra theo rubric thủ công khi cần xem xét sâu hơn các trường hợp lỗi hoặc các mẫu câu trả lời đặc thù.
+Khác với truy xuất, chất lượng sinh văn bản không được đánh giá chủ yếu bằng một độ đo duy nhất ở mức phân đoạn hay lesson, mà được xem xét theo mức độ đúng nội dung, mức độ bám nguồn và mức độ phù hợp với câu hỏi của người học. Trong đồ án, phần đánh giá này được thực hiện theo hai hướng bổ trợ nhau. Hướng thứ nhất là sử dụng kết quả đánh giá tự động đã có sẵn bằng RAGAS để quan sát các tiêu chí như \textit{faithfulness}, \textit{answer relevancy}, \textit{context precision} và \textit{context độ phủ} \cite{es2023ragas}. Hướng thứ hai là đọc và phân tích đầu ra theo rubric thủ công khi cần xem xét sâu hơn các trường hợp lỗi hoặc các mẫu câu trả lời đặc thù.
 
-Benchmark generation được tổ chức ở mức cặp \textit{câu hỏi -- câu trả lời tham chiếu}, kèm theo ngữ cảnh truy xuất mà hệ thống đã sử dụng để sinh đáp án. Cách tổ chức này cho phép đánh giá không chỉ chất lượng đầu ra cuối cùng mà còn cả mối quan hệ giữa chất lượng câu trả lời và mức độ phù hợp của context được đưa vào mô hình.
+Benchmark sinh văn bản được tổ chức ở mức cặp \textit{câu hỏi -- câu trả lời tham chiếu}, kèm theo ngữ cảnh truy xuất mà hệ thống đã sử dụng để sinh đáp án. Cách tổ chức này cho phép đánh giá không chỉ chất lượng đầu ra cuối cùng mà còn cả mối quan hệ giữa chất lượng câu trả lời và mức độ phù hợp của context được đưa vào mô hình. Bảng~\ref{tab:generation-metrics-method} trình bày các độ đo được dùng cho phần đánh giá này.
 
 \begin{table}[H]
     \centering
@@ -748,9 +748,9 @@ Benchmark generation được tổ chức ở mức cặp \textit{câu hỏi -- 
         \hline
         Answer Relevancy & Mức độ câu trả lời đi đúng trọng tâm câu hỏi & Đánh giá tính phù hợp của đáp án với nhu cầu hỏi đáp của người học \\
         \hline
-        Context Precision & Mức độ các chunk quan trọng được ưu tiên trong context & Đánh giá chất lượng ngữ cảnh từ góc nhìn hỗ trợ generation \\
+        Context Precision & Mức độ các phân đoạn quan trọng được ưu tiên trong context & Đánh giá chất lượng ngữ cảnh từ góc nhìn hỗ trợ sinh văn bản \\
         \hline
-        Context Recall & Mức độ context bao phủ thông tin cần thiết cho đáp án & Kiểm tra xem retriever đã cung cấp đủ cơ sở để sinh câu trả lời hay chưa \\
+        Context Độ phủ & Mức độ context bao phủ thông tin cần thiết cho đáp án & Kiểm tra xem retriever đã cung cấp đủ cơ sở để sinh câu trả lời hay chưa \\
         \hline
     \end{tabular}
     \vspace{0.2cm}
@@ -758,11 +758,11 @@ Benchmark generation được tổ chức ở mức cặp \textit{câu hỏi -- 
     \label{tab:generation-metrics-method}
 \end{table}
 
-Điểm cần nhấn mạnh là node \textit{validate} hoặc \textit{quality reviewer} xuất hiện trong pipeline runtime không được dùng như bộ chấm điểm chính cho generation trong thực nghiệm. Vai trò của chúng là kiểm soát đầu ra khi hệ thống vận hành, còn đánh giá trong luận văn vẫn phải dựa trên benchmark, tiêu chí đã xác định trước và kết quả kiểm chứng tách biệt với pipeline chạy thực tế. Nhờ đó, phần đánh giá generation giữ được ranh giới rõ giữa cơ chế kiểm soát runtime và bằng chứng thực nghiệm.
+Điểm cần nhấn mạnh là nút \textit{validate} hoặc \textit{quality reviewer} xuất hiện trong luồng xử lý runtime không được dùng như bộ chấm điểm chính cho sinh văn bản trong thực nghiệm. Vai trò của chúng là kiểm soát đầu ra khi hệ thống vận hành, còn đánh giá trong luận văn vẫn phải dựa trên benchmark, tiêu chí đã xác định trước và kết quả kiểm chứng tách biệt với luồng xử lý chạy thực tế. Nhờ đó, phần đánh giá sinh văn bản giữ được ranh giới rõ giữa cơ chế kiểm soát runtime và bằng chứng thực nghiệm.
 
 \section{Kết chương}
 
-Chương này đã trình bày phương pháp đề xuất của đồ án theo ba lớp chính: nền tảng tri thức được xây dựng từ dữ liệu SGK đã chunking và lập chỉ mục; lõi truy hồi ngữ cảnh dựa trên hybrid retrieval, reranking và truy hồi thích ứng; cùng với tầng điều phối tác tử và tầng sinh nội dung đa tác tử cho các tác vụ phức tạp hơn. Bên cạnh đó, chương cũng xác định cách đánh giá hai thành phần trọng tâm của hệ thống là retrieval và generation, trong đó retrieval được xem là bằng chứng định lượng chính, còn generation được đánh giá theo mức độ bám nguồn và mức độ phù hợp với câu hỏi.
+Chương này đã trình bày phương pháp đề xuất của đồ án theo ba lớp chính: nền tảng tri thức được xây dựng từ dữ liệu SGK đã phân đoạn và lập chỉ mục; lõi truy hồi ngữ cảnh dựa trên hybrid truy xuất, xếp hạng lại và truy hồi thích ứng; cùng với tầng điều phối tác tử và tầng sinh nội dung đa tác tử cho các tác vụ phức tạp hơn. Bên cạnh đó, chương cũng xác định cách đánh giá hai thành phần trọng tâm của hệ thống là truy xuất và sinh văn bản, trong đó truy xuất được xem là bằng chứng định lượng chính, còn sinh văn bản được đánh giá theo mức độ bám nguồn và mức độ phù hợp với câu hỏi.
 
 Trên cơ sở phương pháp đã mô tả, Chương 4 sẽ trình bày cách hiện thực hóa hệ thống, quy trình xây dựng benchmark, các kiểm thử chức năng và những kết quả thực nghiệm đã thu được. Đây là phần dùng để kiểm chứng mức độ hiệu quả của giải pháp trên dữ liệu SGK Tin học THPT trong điều kiện cài đặt cụ thể của đồ án.
 
