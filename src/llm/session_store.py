@@ -6,14 +6,15 @@ import threading
 from pathlib import Path
 from typing import List, Optional, Dict
 from src.llm.memory import Session
+from src.config.config import project_path, settings
 
 logger = logging.getLogger("chatbot.session_store")
 
 
 class SessionStore:
 
-    def __init__(self, storage_path: str = "data/sessions"):
-        self.storage_path = Path(storage_path)
+    def __init__(self, storage_path: Optional[str] = None):
+        self.storage_path = project_path(storage_path or settings.SESSION_STORAGE_DIR)
         self.storage_path.mkdir(parents=True, exist_ok=True)
         self._index_file = self.storage_path / "_index.json"
 

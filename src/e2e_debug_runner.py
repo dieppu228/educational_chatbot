@@ -3,7 +3,6 @@ import asyncio
 import json
 import logging
 import multiprocessing
-import os
 import sys
 import time
 from pathlib import Path
@@ -14,22 +13,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-try:
-    from dotenv import load_dotenv
-except ImportError:
-    load_dotenv = None
-
-if load_dotenv:
-    load_dotenv(PROJECT_ROOT / ".env")
-
+from src.config.config import project_path, settings
 from src.rag.retrieve_rebuild import CustomSearch
 from src.rag.reranker import Reranker
 from src.llm.orchestrator import Orchestrator
 from src.utils.trace_decorator import suppress_http_request_logs
 
 
-LOG_DIR = PROJECT_ROOT / "logs" / "e2e_runs"
-DEFAULT_TIMEOUT_SECONDS = 10000
+LOG_DIR = project_path(settings.E2E_LOG_DIR)
+DEFAULT_TIMEOUT_SECONDS = settings.E2E_TIMEOUT_SECONDS
 
 
 def _json_default(value: Any) -> str:
@@ -63,8 +55,9 @@ def setup_e2e_logging(log_file: Path, verbose: bool = False) -> logging.Logger:
 
 
 def validate_runtime_inputs() -> None:
-    chunks_path = PROJECT_ROOT / "data" / "rag_chunks_v2.json"
-    embeddings_path = PROJECT_ROOT / "data" / "embeddings.npy"
+    data_dir = project_path(settings.DATA_DIR)
+    chunks_path = data_dir / settings.CHUNKS_FILE
+    embeddings_path = data_dir / settings.EMBEDDINGS_FILE
 
     missing_files = [
         str(path)
@@ -76,7 +69,7 @@ def validate_runtime_inputs() -> None:
             "Missing real RAG data files: " + ", ".join(missing_files)
         )
 
-    if not os.getenv("GENAI_API_KEY"):
+    if not settings.GENAI_API_KEY:
         raise RuntimeError(
             "GENAI_API_KEY is not set. The E2E runner calls the real LLM service "
             "and does not use mock data."
@@ -84,8 +77,9 @@ def validate_runtime_inputs() -> None:
 
 
 def init_orchestrator(logger: logging.Logger) -> Orchestrator:
-    chunks_path = PROJECT_ROOT / "data" / "rag_chunks_v2.json"
-    embeddings_path = PROJECT_ROOT / "data" / "embeddings.npy"
+    data_dir = project_path(settings.DATA_DIR)
+    chunks_path = data_dir / settings.CHUNKS_FILE
+    embeddings_path = data_dir / settings.EMBEDDINGS_FILE
 
     logger.info("Loading CustomSearch: chunks=%s embeddings=%s", chunks_path, embeddings_path)
     searcher = CustomSearch(

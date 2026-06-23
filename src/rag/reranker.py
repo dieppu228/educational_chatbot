@@ -4,12 +4,13 @@ from sentence_transformers import CrossEncoder
 
 import torch
 from src.utils.trace_decorator import trace_node
+from src.config.config import settings
 
 class Reranker:
     
-    def __init__(self, model_name: str = "AITeamVN/Vietnamese_Reranker", device: Optional[str] = None):
-        self.model_name = model_name
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    def __init__(self, model_name: Optional[str] = None, device: Optional[str] = None):
+        self.model_name = model_name or settings.RERANKER_MODEL
+        self.device = device or settings.RERANKER_DEVICE or ("cuda" if torch.cuda.is_available() else "cpu")
         self._model = None  # Lazy load
         self._load_failed = False
     

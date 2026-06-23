@@ -169,16 +169,20 @@ class WebSearchTool(BaseTool):
 
         for img in images:
             if isinstance(img, dict):
-                url = img.get("url", "")
-                desc = img.get("description", "")
+                raw_url = img.get("url") or img.get("image_url") or img.get("src") or ""
+                raw_desc = img.get("description") or img.get("alt") or img.get("title") or ""
             elif isinstance(img, str):
-                url = img
-                desc = ""
+                raw_url = img
+                raw_desc = ""
             else:
                 continue
 
+            if not isinstance(raw_url, str):
+                continue
+            url = raw_url.strip()
             if not url:
                 continue
+            desc = raw_desc if isinstance(raw_desc, str) else str(raw_desc or "")
 
             mtype = self._detect_media_type(url, desc)
 
@@ -200,8 +204,8 @@ class WebSearchTool(BaseTool):
 
     @staticmethod
     def _detect_media_type(url: str, desc: str) -> str:
-        url_l = url.lower()
-        desc_l = desc.lower()
+        url_l = (url or "").lower()
+        desc_l = (desc or "").lower()
         if _GIF_PATTERN.search(url):
             return "gif"
         if any(kw in url_l for kw in ("animation", "animated", "webm")):
@@ -217,9 +221,15 @@ class WebSearchTool(BaseTool):
         """Tìm source page chứa image (heuristic match domain)."""
         img_domain = urlparse(image_url).netloc
         for r in results:
-            r_domain = urlparse(r.get("url", "")).netloc
+            if not isinstance(r, dict):
+                continue
+            raw_url = r.get("url", "")
+            if not isinstance(raw_url, str):
+                continue
+            r_domain = urlparse(raw_url).netloc
             if r_domain and r_domain == img_domain:
-                return r.get("url", ""), r.get("title", "")
+                title = r.get("title", "")
+                return raw_url, title if isinstance(title, str) else ""
         return "", ""
 
 

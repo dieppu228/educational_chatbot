@@ -1,15 +1,14 @@
 
 import json
-import os
 import time
 import logging
 from pathlib import Path
 from typing import List, Dict, Optional
 
-from google import genai
 from google.genai.types import GenerateContentConfig
 
 from src.config.config import settings
+from src.config.genai_client import create_genai_client
 from src.llm.prompts import EVALUATION_ANSWER_PROMPT
 
 logger = logging.getLogger("evaluation.collector")
@@ -26,13 +25,13 @@ class DataCollector:
     ):
         self.retriever = retriever
         self.reranker = reranker
-        self.api_key = api_key or settings.GENAI_API_KEY or os.getenv("GENAI_API_KEY", "")
+        self.api_key = api_key or settings.GENAI_API_KEY
         self.llm_model = llm_model or settings.EVAL_LLM_MODEL
         
         if not self.api_key:
             raise ValueError("GENAI_API_KEY chưa được set")
         
-        self.client = genai.Client(api_key=self.api_key)
+        self.client = create_genai_client(api_key=self.api_key)
         self.output_dir = Path(settings.EVAL_OUTPUT_DIR)
         self.output_dir.mkdir(exist_ok=True)
     

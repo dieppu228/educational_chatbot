@@ -219,7 +219,7 @@ def upload_to_qdrant(
         )
 
     QdrantClient, models = require_qdrant_client()
-    client = QdrantClient(url=qdrant_url, timeout=60)
+    client = QdrantClient(url=qdrant_url, timeout=settings.QDRANT_TIMEOUT_SECONDS)
     vector_size = int(embeddings.shape[1])
 
     create_or_recreate_collection(
@@ -261,8 +261,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-chunking", action="store_true")
     parser.add_argument("--skip-llm-classification", action="store_true")
     parser.add_argument("--force-embeddings", action="store_true")
-    parser.add_argument("--embedding-device", default="cpu")
-    parser.add_argument("--embedding-batch-size", type=int, default=64)
+    parser.add_argument("--embedding-device", default=settings.EMBEDDING_DEVICE)
+    parser.add_argument("--embedding-batch-size", type=int, default=settings.EMBEDDING_BATCH_SIZE)
     parser.add_argument("--no-recreate", action="store_true")
     return parser.parse_args()
 

@@ -1,5 +1,6 @@
 
 import json
+import re
 from typing import Dict, List, Any, Optional
 
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
@@ -9,8 +10,9 @@ from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 
 from src.llm.graphs.state import ContentSupervisorState
+from src.config.genai_client import create_genai_client
 from src.llm.graphs.tools import ALL_TOOLS, TOOL_STATE_MAPPING
-from src.llm.agents import QualityReviewerAgent
+from src.llm.agents import MediaResearchAgent, QualityReviewerAgent
 from src.llm.prompts import (
     SUPERVISOR_AFTER_CONTENT_PROMPT,
     SUPERVISOR_AFTER_OUTLINE_PROMPT,
@@ -27,6 +29,10 @@ from src.schemas.agent_protocol import is_agent_task_result
 RECURSION_LIMIT = 25
 MAX_REFLECTION_ATTEMPTS = 2
 REVISION_ACTIONS = {"revise_outline", "revise_content", "revise_quiz"}
+MEDIA_REQUEST_PATTERN = re.compile(
+    r"\b(media|gif|animation|diagram|infographic)\b|ảnh|hình|minh\s*họa|trực\s*quan",
+    re.IGNORECASE,
+)
 
 
 # ════════════════════════════════════════════════════════
@@ -121,6 +127,7 @@ def supervisor_node(state: ContentSupervisorState) -> dict:
     llm = ChatGoogleGenerativeAI(
         model=settings.LLM_MODEL,
         google_api_key=settings.GENAI_API_KEY,
+        client=create_genai_client(),
         temperature=0.2,
     )
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
@@ -296,11 +303,61 @@ def route_after_post_tool(state: ContentSupervisorState) -> str:
     latest_tool = _latest_tool_name(state)
     if latest_tool == "check_quality":
         return "reflection_decision"
+    if (
+        state.get("task_type") == "slide"
+        and state.get("content_payload") is not None
+        and state.get("media_payload") is None
+        and _query_requests_media(state)
+    ):
+        return "media_direct"
     if state.get("content_payload") is not None and state.get("merged_slides") is None:
         return "merge_direct"
     if state.get("merged_slides") is not None and state.get("quality_review") is None:
         return "quality_direct"
     return "supervisor"
+
+
+def _query_requests_media(state: ContentSupervisorState) -> bool:
+    query = state.get("query") or ""
+    return bool(MEDIA_REQUEST_PATTERN.search(query))
+
+
+def media_direct_node(state: ContentSupervisorState) -> dict:
+    task = AgentTask(
+        task_id=f"{state.get('request_id') or 'request'}:media",
+        from_agent="content_supervisor",
+        to_agent="media_research_agent",
+        task_type="research_media",
+        objective="Tìm media minh họa phù hợp với yêu cầu trực quan trong query của người dùng.",
+        inputs={
+            "topic": state.get("topic", ""),
+            "grade": state.get("grade", ""),
+            "book": state.get("book", ""),
+        },
+        constraints={
+            "media_types": ["image", "gif"],
+            "url_optional": True,
+        },
+        expected_artifact="media_payload",
+    )
+    result = MediaResearchAgent().run_task(task)
+    result_dict = result.to_dict()
+    media_payload = result.artifact or {"hero_media": [], "inline_media": []}
+    if result.status == "failed":
+        media_payload = {"hero_media": [], "inline_media": []}
+
+    agent_results = list(state.get("agent_results", []))
+    agent_results.append(result_dict)
+    agent_tasks = list(state.get("agent_tasks", []))
+    agent_tasks.append(task.to_dict())
+    artifacts = dict(state.get("artifacts", {}))
+    artifacts["media_payload"] = media_payload
+    return {
+        "media_payload": media_payload,
+        "agent_results": agent_results,
+        "agent_tasks": agent_tasks,
+        "artifacts": artifacts,
+    }
 
 
 def merge_direct_node(state: ContentSupervisorState) -> dict:
@@ -422,6 +479,7 @@ def build_content_supervisor(checkpointer=None):
     builder.add_node("supervisor", supervisor_node)
     builder.add_node("tools", tool_node)
     builder.add_node("post_tool", post_tool_processor)
+    builder.add_node("media_direct", media_direct_node)
     builder.add_node("merge_direct", merge_direct_node)
     builder.add_node("quality_direct", quality_direct_node)
     builder.add_node("reflection_decision", reflection_decision_node)
@@ -445,10 +503,12 @@ def build_content_supervisor(checkpointer=None):
         {
             "reflection_decision": "reflection_decision",
             "supervisor": "supervisor",
+            "media_direct": "media_direct",
             "merge_direct": "merge_direct",
             "quality_direct": "quality_direct",
         },
     )
+    builder.add_edge("media_direct", "merge_direct")
     builder.add_edge("merge_direct", "quality_direct")
     builder.add_edge("quality_direct", "reflection_decision")
     builder.add_conditional_edges(

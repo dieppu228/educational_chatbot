@@ -143,13 +143,12 @@ class ContentAgent(BaseSlideAgent):
         result["bullets"] = bullets
         result["slide_id"] = slide_id  # Đảm bảo slide_id khớp
         if is_lesson_plan:
-            result.setdefault("duration_minutes", slide_data.get("duration_minutes"))
-            result.setdefault("objectives", [])
-            result.setdefault("teacher_activities", [])
-            result.setdefault("student_activities", [])
-            result.setdefault("content_detail", [])
-            result.setdefault("assessment", [])
-            result.setdefault("transition", None)
+            result = self._normalize_lesson_plan_result(
+                result=result,
+                slide_data=slide_data,
+                source_ids=source_ids,
+                context_subset=context_subset,
+            )
 
         return result
 
@@ -179,6 +178,178 @@ class ContentAgent(BaseSlideAgent):
                 "transition": None,
             })
         return fallback
+
+    def _normalize_lesson_plan_result(
+        self,
+        *,
+        result: Dict[str, Any],
+        slide_data: Dict[str, Any],
+        source_ids: List[str],
+        context_subset: str,
+    ) -> Dict[str, Any]:
+        source_ids = source_ids or slide_data.get("source_chunk_ids", [])
+        source_ids = [str(item) for item in source_ids]
+        fallback_units = self._stringify_list(
+            slide_data.get("knowledge_units")
+            or slide_data.get("key_points")
+            or result.get("bullets")
+        )
+        context_hint = self._context_hint(context_subset)
+
+        result.setdefault("duration_minutes", slide_data.get("duration_minutes"))
+        result.setdefault("source_chunk_ids", source_ids)
+        result.setdefault("notes", "")
+
+        objectives = self._stringify_list(result.get("objectives"))
+        if not objectives:
+            goal = slide_data.get("teaching_goal") or slide_data.get("objective")
+            objectives = [goal] if goal else [
+                f"HS trình bày được nội dung trọng tâm của mục {result.get('title', '')}."
+            ]
+        result["objectives"] = objectives
+
+        details = self._normalize_content_details(
+            result.get("content_detail"),
+            fallback_units=fallback_units,
+            source_ids=source_ids,
+            context_hint=context_hint,
+        )
+        result["content_detail"] = details
+
+        headings = [item["heading"] for item in details]
+        teacher_activities = self._stringify_list(result.get("teacher_activities"))
+        if len(teacher_activities) < max(2, min(len(headings), 3)):
+            teacher_activities = self._default_teacher_activities(headings)
+        result["teacher_activities"] = teacher_activities
+
+        student_activities = self._stringify_list(result.get("student_activities"))
+        if len(student_activities) < max(2, min(len(headings), 3)):
+            student_activities = self._default_student_activities(headings)
+        result["student_activities"] = student_activities
+
+        assessment = self._stringify_list(result.get("assessment"))
+        if len(assessment) < 2:
+            assessment = self._default_assessment(headings)
+        result["assessment"] = assessment
+
+        if not result.get("transition"):
+            result["transition"] = "GV tổng kết ý chính và chuyển sang hoạt động tiếp theo."
+
+        if not result.get("notes"):
+            result["notes"] = (
+                "GV tổ chức theo tiến trình: nêu vấn đề, cho HS phân tích ví dụ, "
+                "chốt kiến thức theo từng đề mục và kiểm tra nhanh cuối hoạt động."
+            )
+
+        return result
+
+    def _normalize_content_details(
+        self,
+        items: Any,
+        *,
+        fallback_units: List[str],
+        source_ids: List[str],
+        context_hint: str,
+    ) -> List[Dict[str, Any]]:
+        parsed = []
+        raw_items = items if isinstance(items, list) else []
+        for raw in raw_items:
+            if hasattr(raw, "model_dump"):
+                raw = raw.model_dump()
+            if isinstance(raw, str):
+                raw = {"heading": raw}
+            if not isinstance(raw, dict):
+                continue
+            heading = str(raw.get("heading") or "").strip()
+            if not heading:
+                continue
+            parsed.append(self._complete_content_detail(raw, source_ids, context_hint))
+
+        existing = {item["heading"].strip().lower() for item in parsed}
+        for unit in fallback_units:
+            heading = str(unit).strip()
+            if not heading or heading.lower() in existing:
+                continue
+            parsed.append(self._complete_content_detail({"heading": heading}, source_ids, context_hint))
+            existing.add(heading.lower())
+
+        if not parsed:
+            parsed.append(
+                self._complete_content_detail(
+                    {"heading": "Nội dung trọng tâm"},
+                    source_ids,
+                    context_hint,
+                )
+            )
+
+        return parsed
+
+    @staticmethod
+    def _complete_content_detail(
+        item: Dict[str, Any],
+        source_ids: List[str],
+        context_hint: str,
+    ) -> Dict[str, Any]:
+        heading = str(item.get("heading") or "Nội dung trọng tâm").strip()
+        sources = item.get("source_chunk_ids") or source_ids
+        sources = [str(source) for source in sources]
+        explanation = str(item.get("explanation") or "").strip()
+        if not explanation:
+            explanation = (
+                f"GV triển khai '{heading}' dựa trên tài liệu nguồn: {context_hint}. "
+                "Làm rõ khái niệm, vai trò và mối liên hệ với nội dung bài học."
+            )
+
+        return {
+            "heading": heading,
+            "explanation": explanation,
+            "example": str(item.get("example") or f"GV nêu một tình huống gần gũi để HS nhận diện: {heading}.").strip(),
+            "teacher_prompt": str(item.get("teacher_prompt") or f"Em hãy giải thích hoặc lấy ví dụ cho '{heading}'?").strip(),
+            "expected_student_response": str(item.get("expected_student_response") or f"HS nêu được ý chính của '{heading}' và minh họa bằng ví dụ phù hợp.").strip(),
+            "common_mistake": str(item.get("common_mistake") or "HS dễ trả lời bằng ví dụ rời rạc nhưng chưa khái quát thành khái niệm.").strip(),
+            "wrap_up": str(item.get("wrap_up") or f"GV chốt lại điểm cốt lõi của '{heading}' và liên hệ với mục tiêu bài học.").strip(),
+            "source_chunk_ids": sources,
+        }
+
+    @staticmethod
+    def _default_teacher_activities(headings: List[str]) -> List[str]:
+        activities = []
+        for heading in headings[:4]:
+            activities.append(
+                f"GV nêu vấn đề về '{heading}', yêu cầu HS quan sát tài liệu/ ví dụ và trả lời câu hỏi gợi mở."
+            )
+            activities.append(
+                f"GV nhận xét câu trả lời, chuẩn hóa thuật ngữ và chốt kiến thức về '{heading}'."
+            )
+        return activities or ["GV dẫn dắt, tổ chức thảo luận và chốt kiến thức trọng tâm."]
+
+    @staticmethod
+    def _default_student_activities(headings: List[str]) -> List[str]:
+        activities = []
+        for heading in headings[:4]:
+            activities.append(
+                f"HS đọc ngữ liệu, trao đổi cặp đôi và nêu hiểu biết ban đầu về '{heading}'."
+            )
+            activities.append(
+                f"HS trình bày ví dụ hoặc sản phẩm ngắn để chứng minh đã hiểu '{heading}'."
+            )
+        return activities or ["HS tham gia trả lời, thảo luận và ghi lại kết luận chính."]
+
+    @staticmethod
+    def _default_assessment(headings: List[str]) -> List[str]:
+        if not headings:
+            return ["HS trả lời đúng câu hỏi kiểm tra nhanh cuối hoạt động.", "HS vận dụng được kiến thức vào ví dụ mới."]
+        return [
+            f"HS giải thích đúng nội dung: {heading}."
+            for heading in headings[:4]
+        ] + ["HS nêu được ví dụ phù hợp và tránh nhầm lẫn thường gặp."]
+
+    @staticmethod
+    def _context_hint(context_subset: str) -> str:
+        text = " ".join((context_subset or "").split())
+        if not text or text == "(Không có context cụ thể)":
+            return "các chunk đã truy xuất cho bài học"
+        return text[:220]
 
     @staticmethod
     def _stringify_list(items: List[Any]) -> List[str]:

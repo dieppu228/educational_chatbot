@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import List, Optional
 from sentence_transformers import SentenceTransformer
 
+from src.config.config import project_path, settings
+
 logger = logging.getLogger("chatbot")
 
 
@@ -22,13 +24,13 @@ class EmbeddingModel:
     
     def __init__(
         self, 
-        model_name: str = "dangvantuan/vietnamese-document-embedding",
+        model_name: Optional[str] = None,
         device: Optional[str] = None,
-        batch_size: int = 64
+        batch_size: Optional[int] = None,
     ):
-        self.model_name = model_name
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.batch_size = batch_size
+        self.model_name = model_name or settings.EMBEDDING_MODEL
+        self.device = device or settings.EMBEDDING_DEVICE or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.batch_size = batch_size or settings.EMBEDDING_BATCH_SIZE
         self.model = None  # Lazy load
         self.load_failed = False
     
@@ -177,7 +179,7 @@ class EmbeddingModel:
 
     def _record_bad_text(self, idx: int, text: str) -> None:
         try:
-            log_path = Path(__file__).resolve().parents[2] / "logs" / "embedding_failures.txt"
+            log_path = project_path(settings.LOG_DIR) / settings.EMBEDDING_FAILURE_LOG_FILE
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with log_path.open("a", encoding="utf-8") as f:
                 f.write(f"index={idx}\n")
@@ -265,6 +267,14 @@ class EmbeddingModel:
     def encode_query(self, query: str) -> np.ndarray:
         return self.encode([query], show_progress=False)[0]
 
+    def warm_up(self) -> None:
+        """Load the model and verify it can produce a finite query vector."""
+        vector = self.encode_query("warmup")
+        if not np.isfinite(vector).all() or not np.any(vector):
+            raise RuntimeError(
+                f"Embedding model warmup produced invalid vector: {self.model_name}"
+            )
+
 
 # ============================================================
 # EMBED CHUNKS PIPELINE
@@ -299,9 +309,9 @@ def prepare_texts(chunks: list, use_context: bool = True) -> List[str]:
 def embed_and_save(
     chunks_path: str,
     embeddings_path: str,
-    model_name: str = "dangvantuan/vietnamese-document-embedding",
-    device: str = "cpu",
-    batch_size: int = 64,
+    model_name: Optional[str] = None,
+    device: Optional[str] = None,
+    batch_size: Optional[int] = None,
     use_context: bool = True
 ):
     print("=" * 60)
@@ -345,16 +355,15 @@ def embed_and_save(
 
 if __name__ == "__main__":
     # === Cấu hình ===
-    PROJECT_DIR = Path(__file__).resolve().parent.parent
-    
-    CHUNKS_PATH = str(PROJECT_DIR / "data" / "rag_chunks_v2.json")
-    EMBEDDINGS_PATH = str(PROJECT_DIR / "data" / "embeddings.npy")
+    data_dir = project_path(settings.DATA_DIR)
+    CHUNKS_PATH = str(data_dir / settings.CHUNKS_FILE)
+    EMBEDDINGS_PATH = str(data_dir / settings.EMBEDDINGS_FILE)
     
     # === Chạy pipeline ===
     embed_and_save(
         chunks_path=CHUNKS_PATH,
         embeddings_path=EMBEDDINGS_PATH,
-        device="cpu",
-        batch_size=64,
+        device=settings.EMBEDDING_DEVICE,
+        batch_size=settings.EMBEDDING_BATCH_SIZE,
         use_context=True,  # Embed context + content
     )

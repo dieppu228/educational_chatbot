@@ -126,6 +126,8 @@ class ActionPlanner:
                 )
                 continue
             plans.append(plan)
+        if any(plan.action != Action.CHAT for plan in plans):
+            plans = [plan for plan in plans if plan.action != Action.CHAT]
         return plans
 
     # ── Generate ────────────────────────────────────────────

@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 
 from src.config.config import settings
+from src.config.genai_client import create_genai_client
 from src.schemas.slide_schemas import AgentResult
 
 logger = logging.getLogger("chatbot.slide_agent")
@@ -19,8 +20,7 @@ class BaseSlideAgent(ABC):
 
     def __init__(self):
         try:
-            from google import genai
-            self.client = genai.Client(api_key=settings.GENAI_API_KEY)
+            self.client = create_genai_client()
         except Exception as e:
             logger.error(f"Failed to init GenAI client: {e}")
             self.client = None

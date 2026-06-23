@@ -35,7 +35,7 @@ def load_chunks_and_embeddings_from_qdrant(
     qdrant_url: str = None,
     collection_name: str = None,
     batch_size: int = None,
-    timeout: int = 60,
+    timeout: Optional[int] = None,
 ) -> Tuple[List[Dict], np.ndarray]:
     try:
         from qdrant_client import QdrantClient
@@ -45,6 +45,7 @@ def load_chunks_and_embeddings_from_qdrant(
     qdrant_url = qdrant_url or settings.QDRANT_URL
     collection_name = collection_name or settings.QDRANT_COLLECTION
     batch_size = batch_size or settings.QDRANT_SCROLL_BATCH_SIZE
+    timeout = timeout or settings.QDRANT_TIMEOUT_SECONDS
 
     client = QdrantClient(url=qdrant_url, timeout=timeout)
     points = []
@@ -94,6 +95,9 @@ class CustomSearch:
         bm25_sigmoid_threshold: float = 0.35,
         bm25_sigmoid_iqr_scale: float = 0.5,
     ):
+        warmed_model = EmbeddingModel()
+        warmed_model.warm_up()
+
         # === Load data ===
         with open(chunks_path, 'r', encoding='utf-8') as f:
             chunks = json.load(f)
@@ -109,6 +113,7 @@ class CustomSearch:
             bm25_sigmoid_iqr_scale=bm25_sigmoid_iqr_scale,
             source=f"files:{chunks_path}",
         )
+        self._model = warmed_model
 
     @classmethod
     def from_qdrant(
@@ -116,14 +121,17 @@ class CustomSearch:
         qdrant_url: str = None,
         collection_name: str = None,
         batch_size: int = None,
-        timeout: int = 60,
+        timeout: Optional[int] = None,
         **kwargs,
     ) -> "CustomSearch":
+        warmed_model = EmbeddingModel()
+        warmed_model.warm_up()
+
         chunks, embeddings = load_chunks_and_embeddings_from_qdrant(
             qdrant_url=qdrant_url or settings.QDRANT_URL,
             collection_name=collection_name or settings.QDRANT_COLLECTION,
             batch_size=batch_size or settings.QDRANT_SCROLL_BATCH_SIZE,
-            timeout=timeout,
+            timeout=timeout or settings.QDRANT_TIMEOUT_SECONDS,
         )
         instance = cls.__new__(cls)
         instance._initialize(
@@ -132,6 +140,7 @@ class CustomSearch:
             source=f"qdrant:{collection_name or settings.QDRANT_COLLECTION}",
             **kwargs,
         )
+        instance._model = warmed_model
         return instance
 
     def _initialize(

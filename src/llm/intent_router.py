@@ -1,12 +1,11 @@
 import json
 import re
-import os
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
-from google import genai
 from google.genai.types import GenerateContentConfig
 
 from src.config.config import settings
+from src.config.genai_client import create_genai_client
 from src.llm.prompts import INTENT_ROUTER_PROMPT
 from src.utils.trace_decorator import trace_node
 
@@ -44,12 +43,12 @@ class IntentRouter:
 
     def __init__(self, api_key: str = None, model_name: str = None):
         from src.llm.knowledge_map import KnowledgeMap
-        self.api_key = api_key or settings.GENAI_API_KEY or os.getenv("GENAI_API_KEY", "")
+        self.api_key = api_key or settings.GENAI_API_KEY
         if not self.api_key:
             raise ValueError("GENAI_API_KEY not set.")
 
-        self.model_name = model_name or settings.LLM_MODEL or "gemini-2.5-flash-lite"
-        self.client = genai.Client(api_key=self.api_key)
+        self.model_name = model_name or settings.LLM_MODEL
+        self.client = create_genai_client(api_key=self.api_key)
         self.k_map = KnowledgeMap()
 
     def detect(

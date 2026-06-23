@@ -1,9 +1,7 @@
 
-import os
 import json
 import logging
 import pandas as pd
-from pathlib import Path
 from typing import List, Dict, Optional
 
 # Ragas 0.4.x imports
@@ -19,7 +17,8 @@ from ragas.embeddings import LangchainEmbeddingsWrapper
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_huggingface import HuggingFaceEmbeddings as LCHuggingFaceEmbeddings
 
-from src.config.config import settings
+from src.config.config import project_path, settings
+from src.config.genai_client import create_genai_client
 
 logger = logging.getLogger("evaluation.ragas")
 
@@ -34,13 +33,13 @@ class RAGASEvaluator:
     ):
         self.llm_model = llm_model or settings.EVAL_LLM_MODEL
         self.embedding_model = embedding_model or settings.EVAL_EMBEDDING_MODEL
-        self.api_key = api_key or settings.GENAI_API_KEY or os.getenv("GENAI_API_KEY", "")
+        self.api_key = api_key or settings.GENAI_API_KEY
         
         if not self.api_key:
             raise ValueError("GENAI_API_KEY chưa được thiết lập.")
             
-        self.output_dir = Path(settings.EVAL_OUTPUT_DIR)
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir = project_path(settings.EVAL_OUTPUT_DIR)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Init metrics list — ragas 0.4.x dùng class-based metrics
         self.metrics = [
@@ -56,6 +55,7 @@ class RAGASEvaluator:
         llm = ChatGoogleGenerativeAI(
             model=self.llm_model,
             google_api_key=self.api_key,
+            client=create_genai_client(api_key=self.api_key),
             temperature=0,  # Nên fix temperature=0 khi evaluate
         )
         ragas_llm = LangchainLLMWrapper(llm)
@@ -63,7 +63,7 @@ class RAGASEvaluator:
         # Dùng langchain HuggingFaceEmbeddings + LangchainEmbeddingsWrapper
         # để đảm bảo có cả embed_query (cho ResponseRelevancy) và embed_text (cho ragas)
         lc_embeddings = LCHuggingFaceEmbeddings(
-            model_name="dangvantuan/vietnamese-document-embedding",
+            model_name=self.embedding_model,
             model_kwargs={"trust_remote_code": True},
         )
         ragas_embeddings = LangchainEmbeddingsWrapper(lc_embeddings)
@@ -103,9 +103,9 @@ class RAGASEvaluator:
         
         # Free Tier Gemini cho phép rpm thấp, chúng ta cần bóp concurrency lại
         run_config = RunConfig(
-            max_workers=2,         # Chạy tối đa 2 tác vụ cùng lúc
-            max_retries=10,        # Thử lại tối đa 10 lần nếu gặp lỗi (ví dụ 429)
-            max_wait=30            # Chờ tối đa 30s giữa các lần retry
+            max_workers=settings.EVAL_MAX_WORKERS,
+            max_retries=settings.EVAL_MAX_RETRIES,
+            max_wait=settings.EVAL_MAX_WAIT_SECONDS,
         )
         
         # 4. Evaluate

@@ -3,6 +3,7 @@ import time
 from typing import List, Dict, Optional
 
 from src.config.config import settings
+from src.config.genai_client import create_genai_client
 from src.llm.prompts import CONTEXT_BUILD_TEMPLATE
 from src.utils.trace_decorator import trace_node
 
@@ -11,8 +12,7 @@ class ContextBuilder:
 
     def __init__(self):
         try:
-            from google import genai
-            self.client = genai.Client(api_key=settings.GENAI_API_KEY)
+            self.client = create_genai_client()
         except ImportError:
             raise ImportError("google-generativeai not installed")
 

@@ -4,7 +4,7 @@ import logging
 import threading
 from typing import Generator, Optional, Dict, AsyncGenerator
 
-from src.config.config import settings
+from src.config.config import project_path, settings
 
 # Core pipeline components
 from src.llm.intent_router import IntentRouter
@@ -29,10 +29,6 @@ from src.llm.services.slide_service import SlideService
 from src.llm.execution_dispatcher import ExecutionDispatcher
 from src.utils.trace_service import trace_service, logger
 
-from pathlib import Path
-
-_project_root = Path(__file__).resolve().parent.parent.parent
-
 
 class Orchestrator:
 
@@ -46,13 +42,17 @@ class Orchestrator:
         # ── Services ───────────────────────────────────────
         self.rag_service = RAGService(retriever, reranker)
 
+        # ── MCP tool layer (in-process) ────────────────────
+        from src.tools.bootstrap import init_tool_layer
+        init_tool_layer(rag_service=self.rag_service)
+
         # ── Pipeline components ────────────────────────────
         self.intent_router = IntentRouter()
         self.context_analyzer = ContextAnalyzer()
         self.query_rewriter = QueryRewriter()
         self.memory = MemoryManager()
         self.session_store = SessionStore(
-            storage_path=str(_project_root / "data" / "sessions")
+            storage_path=str(project_path(settings.SESSION_STORAGE_DIR))
         )
         self.session_manager = SessionManager(
             session_store=self.session_store,

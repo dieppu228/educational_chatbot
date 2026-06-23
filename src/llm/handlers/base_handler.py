@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any
 from src.config.config import settings
+from src.config.genai_client import create_genai_client
 from src.llm.prompts import SYSTEM_PROMPT_SHORT
 
 
@@ -20,8 +21,7 @@ class BaseHandler(ABC):
         
         # Initialize Google Generative AI client
         try:
-            from google import genai
-            self.client = genai.Client(api_key=self.api_key)
+            self.client = create_genai_client(api_key=self.api_key)
         except ImportError:
             raise ImportError("google-generativeai not installed")
         except Exception as e:

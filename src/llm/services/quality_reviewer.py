@@ -3,10 +3,10 @@ import logging
 import re
 from typing import Any, Optional
 
-from google import genai
 from google.genai.types import GenerateContentConfig
 
 from src.config.config import settings
+from src.config.genai_client import create_genai_client
 from src.llm.prompts import (
     QUIZ_QUALITY_REVIEW_PROMPT,
     SLIDE_QUALITY_REVIEW_PROMPT,
@@ -24,7 +24,7 @@ class BaseQualityReviewer:
         self.api_key = api_key or settings.GENAI_API_KEY
         self.model_name = model_name or settings.LLM_MODEL
         try:
-            self.client = genai.Client(api_key=self.api_key)
+            self.client = create_genai_client(api_key=self.api_key)
         except Exception as exc:
             logger.warning(f"Failed to init quality reviewer client: {exc}")
             self.client = None

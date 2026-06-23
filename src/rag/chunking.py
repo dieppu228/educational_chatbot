@@ -9,6 +9,7 @@ from dataclasses import dataclass, field, asdict
 from collections import Counter
 
 from src.config.config import settings
+from src.config.genai_client import create_genai_client
 
 
 # ============================================================
@@ -159,15 +160,15 @@ class ChunkTypeClassifier:
     def __init__(
         self,
         cache_path: str,
-        model_name: str = "gemini-2.5-flash-lite",
-        batch_size: int = 20,
-        timeout_seconds: int = 45,
+        model_name: Optional[str] = None,
+        batch_size: Optional[int] = None,
+        timeout_seconds: Optional[int] = None,
         enabled: bool = True,
     ):
         self.cache_path = Path(cache_path)
-        self.model_name = model_name
-        self.batch_size = batch_size
-        self.timeout_seconds = timeout_seconds
+        self.model_name = model_name or settings.CHUNK_TYPE_MODEL
+        self.batch_size = batch_size or settings.CHUNK_TYPE_BATCH_SIZE
+        self.timeout_seconds = timeout_seconds or settings.CHUNK_TYPE_TIMEOUT_SECONDS
         self.enabled = enabled
         self.cache = self._load_cache()
         self.client = None
@@ -203,15 +204,9 @@ class ChunkTypeClassifier:
     def _get_client(self):
         if self.client is not None:
             return self.client
-        api_key = settings.GENAI_API_KEY or os.getenv("GENAI_API_KEY", "")
-        if not api_key:
+        if not settings.GENAI_API_KEY:
             raise RuntimeError("GENAI_API_KEY is not set")
-        from google import genai
-        from google.genai import types
-        self.client = genai.Client(
-            api_key=api_key,
-            http_options=types.HttpOptions(timeout=self.timeout_seconds * 1000),
-        )
+        self.client = create_genai_client(timeout_seconds=self.timeout_seconds)
         return self.client
 
     def _prompt(self, items: list[dict]) -> str:

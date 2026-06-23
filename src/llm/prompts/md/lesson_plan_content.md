@@ -14,6 +14,8 @@ Mục tiêu: {slide_objective}
 Viết section giáo án như kịch bản dạy học giáo viên dùng được ngay.
 Không viết kiểu slide ngắn. Mỗi đề mục cần đủ nội dung kiến thức, hoạt động GV/HS,
 câu hỏi gợi mở, dự kiến trả lời, ví dụ, sai lầm thường gặp và cách chốt.
+Nếu đang được yêu cầu sửa bởi Quality Reviewer, PHẢI sửa trực tiếp các field bị nêu,
+không chỉ viết lại bullets/notes.
 
 YÊU CẦU THEO FIELD:
 1. "bullets": tóm tắt nhanh 3-8 ý chính của section.
@@ -33,6 +35,14 @@ YÊU CẦU THEO FIELD:
    - "source_chunk_ids": chunk căn cứ cho đề mục.
 8. "assessment": tiêu chí/câu hỏi kiểm tra nhanh cho section.
 9. "transition": câu chuyển sang section tiếp theo.
+
+MỨC ĐỘ CHI TIẾT TỐI THIỂU:
+- Với section hình thành kiến thức hoặc nội dung chính: tạo 3-5 item trong "content_detail".
+- Mỗi item "content_detail" phải có đủ 7 field: explanation, example, teacher_prompt,
+  expected_student_response, common_mistake, wrap_up, source_chunk_ids.
+- "teacher_activities" và "student_activities" phải bám theo các heading trong "content_detail".
+- "assessment" phải gồm cả câu hỏi kiểm tra nhanh và tiêu chí đánh giá quan sát được.
+- Không dùng câu chung chung như "GV giảng bài", "HS lắng nghe", "cần bổ sung".
 
 QUY TẮC CHUNG:
 1. KHÔNG giới hạn như slide; ưu tiên đầy đủ và dùng được trong lớp học.

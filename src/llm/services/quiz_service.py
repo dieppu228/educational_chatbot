@@ -16,7 +16,7 @@ from src.llm.utils import extract_num_questions
 from src.llm.prompts import QUIZ_REVISION_QUERY_PROMPT
 from src.rag.context_builder import ContextBuilder
 from src.rag.rag_service import RAGService
-from src.utils.error_handling import safe_execute
+from src.utils.error_handling import safe_execute, user_facing_error_message
 
 logger = logging.getLogger("chatbot.quiz_service")
 
@@ -192,8 +192,8 @@ class QuizService:
                     session.add_message("assistant", display)
                     yield "\n\n" + display
                     yield (
-                        f"\n\n[Round {quiz_round.round_id + 1}] "
-                        f"Đã tạo {len(quiz_round.questions)} câu hỏi."
+                        "\n\nMình đã lưu bộ câu hỏi này trong phiên hiện tại. "
+                        "Khi bạn sẵn sàng, hãy gửi đáp án theo dạng `1A 2B 3C` nhé."
                     )
 
                     ctx.add_debug_step(
@@ -230,7 +230,7 @@ class QuizService:
                         "Handler", action="generate_quiz",
                         status="error", error=str(e)[:200],
                     )
-                    yield f"Lỗi sinh câu hỏi: {str(e)[:100]}"
+                    yield f"Lỗi sinh câu hỏi. {user_facing_error_message(e)}"
 
     # ────────────────────────────────────────────────────────
     # CHECK ANSWER (sync)
@@ -620,8 +620,8 @@ class QuizService:
                     session.add_message("assistant", display)
                     yield "\n\n" + display
                     yield (
-                        f"\n\n[Round {quiz_round.round_id + 1}] "
-                        f"Đã tạo {len(quiz_round.questions)} câu hỏi."
+                        "\n\nMình đã lưu bộ câu hỏi này trong phiên hiện tại. "
+                        "Khi bạn sẵn sàng, hãy gửi đáp án theo dạng `1A 2B 3C` nhé."
                     )
 
                     ctx.add_debug_step(
@@ -658,7 +658,7 @@ class QuizService:
                         "Handler", action="generate_quiz",
                         status="error", error=str(e)[:200],
                     )
-                    yield f"Lỗi sinh câu hỏi: {str(e)[:100]}"
+                    yield f"Lỗi sinh câu hỏi. {user_facing_error_message(e)}"
 
     # ────────────────────────────────────────────────────────
     # CHECK ANSWER (async)
