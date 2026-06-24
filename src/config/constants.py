@@ -40,8 +40,9 @@ LOG_LEVEL_ERROR = "ERROR"
 # ===== Regex Patterns =====
 PATTERN_EXTRACT_ANSWER = r'[A-Da-d]'
 PATTERN_EXTRACT_NUM_QUESTIONS = [
-    r'(\d+)\s*(?:câu|bài|question)',
-    r'(?:cho|tạo)\s+(\d+)\s*(?:câu|bài)',
+    r'(\d+)\s*(?:[-–—]|đến|toi|tới)\s*(\d+)\s*(?:câu(?:\s*hỏi)?|question(?:s)?)',
+    r'(?:cho|tạo|sinh|soạn|ra|làm)\s+(?:khoảng|tầm|khoang|tam)?\s*(\d+)\s*(?:câu(?:\s*hỏi)?|question(?:s)?)',
+    r'(\d+)\s*(?:câu(?:\s*hỏi)?|question(?:s)?)',
 ]
 PATTERN_EXTRACT_GRADE = r'tin(\d+)'
 PATTERN_EXTRACT_LESSON = r'(?:bài|lesson)\s*[\:\-]?\s*(\d+)'

@@ -10,7 +10,14 @@ def extract_num_questions(query: str) -> Optional[int]:
         match = re.search(pattern, query, re.IGNORECASE)
         if match:
             try:
-                num = int(match.group(1))
+                nums = [
+                    int(group)
+                    for group in match.groups()
+                    if group and group.isdigit()
+                ]
+                if not nums:
+                    continue
+                num = min(nums)
                 return max(1, min(10, num))  # Constrain to 1-10
             except (ValueError, IndexError):
                 continue

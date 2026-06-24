@@ -14,6 +14,7 @@ from src.llm.session_store import SessionStore
 from src.llm.memory import MemoryManager
 from src.llm.context_analyzer import ContextAnalyzer
 from src.llm.query_rewriter import QueryRewriter
+from src.llm.param_extractor import ParamExtractor
 
 # Handlers (chỉ dùng cho question_handlers dict)
 from src.llm.handlers.question.mcq_handler import MCQHandler
@@ -50,6 +51,7 @@ class Orchestrator:
         self.intent_router = IntentRouter()
         self.context_analyzer = ContextAnalyzer()
         self.query_rewriter = QueryRewriter()
+        self.param_extractor = ParamExtractor()
         self.memory = MemoryManager()
         self.session_store = SessionStore(
             storage_path=str(project_path(settings.SESSION_STORAGE_DIR))
@@ -186,19 +188,22 @@ class Orchestrator:
         # ② Context enrichment + Query Rewriting (async)
         await self._enrich_context_async(ctx)
 
-        # ③ Intent Detection (LLM call - async)
+        # ③ Shared parameter extraction (LLM + deterministic fallback)
+        await self._extract_params_async(ctx)
+
+        # ④ Intent Detection (LLM call - async)
         await self._detect_intent_async(ctx)
 
-        # ④ Session Resolution (pure code)
+        # ⑤ Session Resolution (pure code)
         self._resolve_session(ctx)
 
         # Save user message
         ctx.session.add_message("user", query)
 
-        # ⑤ Action Planning (pure code)
+        # ⑥ Action Planning (pure code)
         self._plan_action(ctx)
 
-        # ⑥ Book Resolution
+        # ⑦ Book Resolution
         ctx.resolve_book()
         ctx.resolve_grade()
         self._normalize_intents_for_scope(ctx)
@@ -217,7 +222,7 @@ class Orchestrator:
             requested_scope=ctx.requested_scope,
         )
 
-        # ⑦ Execute via Dispatcher — Agentic multi-action loop
+        # ⑧ Execute via Dispatcher — Agentic multi-action loop
         response_chunks = []
         scope_notice = self._build_scope_override_notice(ctx)
         if scope_notice:
@@ -264,11 +269,13 @@ class Orchestrator:
     def _build_scope_override_notice(self, ctx: RequestContext) -> Optional[str]:
         query_book = RequestContext._extract_book(ctx.query)
         intent_book = ctx.intent_result.book if ctx.intent_result else None
+        param_book = ctx.extracted_params.get("book")
         query_grade = RequestContext._extract_grade(ctx.query)
         intent_grade = RequestContext._extract_grade(ctx.intent_result.topic) if ctx.intent_result else None
+        param_grade = ctx.extracted_params.get("grade")
 
-        explicit_book = query_book or intent_book
-        explicit_grade = query_grade or intent_grade
+        explicit_book = query_book or intent_book or param_book
+        explicit_grade = query_grade or intent_grade or param_grade
         overrides = []
 
         if ctx.ui_book and explicit_book and explicit_book != ctx.ui_book:
@@ -394,6 +401,37 @@ class Orchestrator:
             rewrite=ctx.rewrite_info,
         )
 
+    async def _extract_params_async(self, ctx: RequestContext):
+        current_session = self.memory.get_current_session(ctx.user_id)
+        history_text = ""
+        if current_session:
+            history_text = "\n".join(
+                f"{m.role}: {m.content}" for m in current_session.messages[-5:]
+            )
+
+        t0 = time.time()
+        params = await self.param_extractor.extract_async(
+            query=ctx.query,
+            enriched_query=ctx.enriched_query,
+            rag_queries=ctx.queries_for_rag,
+            history_context=history_text,
+        )
+        elapsed = time.time() - t0
+        ctx.extracted_params = params or {}
+        ctx.add_debug_step(
+            "ParamExtractor",
+            grade=ctx.extracted_params.get("grade"),
+            book=ctx.extracted_params.get("book"),
+            task_type=ctx.extracted_params.get("task_type"),
+            lesson_reference=ctx.extracted_params.get("lesson_reference"),
+            question_count=ctx.extracted_params.get("question_count"),
+            question_count_range=ctx.extracted_params.get("question_count_range"),
+            confidence=ctx.extracted_params.get("confidence"),
+            used_llm=ctx.extracted_params.get("used_llm"),
+            model=ctx.extracted_params.get("model"),
+            time_s=round(elapsed, 2),
+        )
+
     async def _detect_intent_async(self, ctx: RequestContext):
         current_session = self.memory.get_current_session(ctx.user_id)
         current_topic = current_session.topic if current_session else None
@@ -409,6 +447,7 @@ class Orchestrator:
 
         # Populate both list and singular field (backward-compat)
         ctx.intent_results = intent_results
+        self._apply_extracted_params_to_intents(ctx)
         ctx.intent_result = intent_results[0] if intent_results else None
 
         logger.info(
@@ -434,6 +473,19 @@ class Orchestrator:
             ],
             time_s=round(intent_time, 2),
         )
+
+    @staticmethod
+    def _apply_extracted_params_to_intents(ctx: RequestContext) -> None:
+        params = ctx.extracted_params or {}
+        if not params or not ctx.intent_results:
+            return
+        for intent in ctx.intent_results:
+            if not intent.book and params.get("book"):
+                intent.book = params["book"]
+            if not intent.task_type and params.get("task_type") and intent.primary_intent == "generate":
+                intent.task_type = params["task_type"]
+            if not intent.lesson_reference and params.get("lesson_reference"):
+                intent.lesson_reference = params["lesson_reference"]
 
     def _resolve_session(self, ctx: RequestContext):
         session = self.session_manager.resolve_session(ctx.intent_result, user_id=ctx.user_id)

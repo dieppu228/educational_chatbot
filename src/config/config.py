@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     GENAI_API_VERSION: Optional[str] = None
     GENAI_TIMEOUT_SECONDS: int = 60
     LLM_MODEL: str = "gemini-2.5-flash-lite"
+    ENABLE_LLM_PARAM_EXTRACT: bool = True
+    PARAM_EXTRACT_MODEL: str = "gemini-2.5-flash-lite"
+    PARAM_EXTRACT_TIMEOUT_SECONDS: int = 20
 
     # ===== Retrieval =====
     RETRIEVER_TOP_K: int = 25
@@ -107,6 +110,9 @@ class Settings(BaseSettings):
     # ===== Remote Media Export =====
     MEDIA_DOWNLOAD_TIMEOUT_SECONDS: float = 8.0
     MEDIA_DOWNLOAD_MAX_BYTES: int = 8388608
+
+    # ===== Quality Degradation =====
+    SLIDE_QUALITY_HARD_FLOOR: float = 0.0
 
 
 settings = Settings()

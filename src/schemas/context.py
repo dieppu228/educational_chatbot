@@ -31,6 +31,7 @@ class RequestContext:
     queries_for_rag: List[str] = field(default_factory=list)
     context_enriched: bool = False
     rewrite_info: Optional[Dict] = None
+    extracted_params: Dict[str, Any] = field(default_factory=dict)
 
     # ── Intent (IntentRouter) ──────────────────────────────
     intent_result: Optional[IntentResult] = None          # Intent chính (= intent_results[0]), backward-compat
@@ -100,36 +101,60 @@ class RequestContext:
     def resolve_book(self):
         query_book = self._extract_book(self.query)
         intent_book = self.intent_result.book if self.intent_result else None
+        param_book = self.extracted_params.get("book")
         session_book = self.session.book if self.session else None
         self.effective_book = (
             query_book
             or intent_book
+            or param_book
             or self.ui_book
             or session_book
         )
         self.scope_book_source = self._first_scope_source(
             ("query", query_book),
             ("intent", intent_book),
+            ("param", param_book),
             ("ui", self.ui_book),
             ("session", session_book),
         )
         # Persist explicit query/router book for follow-up turns.
-        if self.effective_book and self.session and (query_book or intent_book or self.ui_book or not self.session.book):
+        if (
+            self.effective_book
+            and self.session
+            and (query_book or intent_book or param_book or self.ui_book or not self.session.book)
+        ):
             self.session.book = self.effective_book
         self._refresh_scope_metadata()
 
     def resolve_grade(self):
         query_grade = self._extract_grade(self.query)
         intent_grade = self._extract_grade(self.intent_result.topic) if self.intent_result else None
+        param_grade = self.extracted_params.get("grade")
+        rewrite_grade = self._extract_grade_from_texts(
+            [self.enriched_query, *self.queries_for_rag]
+        )
         session_grade = self.session.metadata.get("grade") if self.session else None
-        self.effective_grade = query_grade or intent_grade or self.ui_grade or session_grade
+        self.effective_grade = (
+            query_grade
+            or intent_grade
+            or param_grade
+            or rewrite_grade
+            or self.ui_grade
+            or session_grade
+        )
         self.scope_grade_source = self._first_scope_source(
             ("query", query_grade),
             ("intent", intent_grade),
+            ("param", param_grade),
+            ("rewrite", rewrite_grade),
             ("ui", self.ui_grade),
             ("session", session_grade),
         )
-        if self.effective_grade and self.session and (query_grade or intent_grade or self.ui_grade or not session_grade):
+        if (
+            self.effective_grade
+            and self.session
+            and (query_grade or intent_grade or param_grade or rewrite_grade or self.ui_grade or not session_grade)
+        ):
             self.session.metadata["grade"] = self.effective_grade
         self._refresh_scope_metadata()
 
@@ -149,7 +174,7 @@ class RequestContext:
         else:
             self.scope_source = "mixed"
 
-        has_hard_scope = bool(sources.intersection({"query", "intent"}))
+        has_hard_scope = bool(sources.intersection({"query", "intent", "param"}))
         self.scope_is_soft = not has_hard_scope and "ui" in sources
         self.requested_scope = {
             "book": self.effective_book,
@@ -162,9 +187,17 @@ class RequestContext:
         if not text:
             return None
         text_lower = text.lower()
-        match = re.search(r'(?:lớp|lop|tin|grade)\s*(10|11|12)', text_lower)
+        match = re.search(r'(?:lớp|lop|tin(?:\s*học)?|grade)\s*(10|11|12)', text_lower)
         if match:
             return match.group(1)
+        return None
+
+    @classmethod
+    def _extract_grade_from_texts(cls, texts: List[Optional[str]]) -> Optional[str]:
+        for text in texts:
+            grade = cls._extract_grade(text)
+            if grade:
+                return grade
         return None
 
     @staticmethod
@@ -191,6 +224,7 @@ class RequestContext:
             "scope_fallback_used": self.scope_fallback_used,
             "requested_scope": self.requested_scope,
             "actual_scope": self.actual_scope,
+            "extracted_params": self.extracted_params,
             "steps": self.debug_steps,
         }
 
