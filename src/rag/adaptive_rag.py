@@ -71,9 +71,9 @@ class QueryClassifier:
     ]
 
     GRADE_PATTERNS = {
-        "10": ["lớp 10", "tin 10", "grade 10", "lớp mười "],
-        "11": ["lớp 11", "tin 11", "grade 11", "lớp mười một"],
-        "12": ["lớp 12", "tin 12", "grade 12", "lớp mười hai"],
+        "10": ["lớp 10", "tin 10", "tin học 10", "grade 10", "lớp mười "],
+        "11": ["lớp 11", "tin 11", "tin học 11", "grade 11", "lớp mười một"],
+        "12": ["lớp 12", "tin 12", "tin học 12", "grade 12", "lớp mười hai"],
     }
 
     def classify(
@@ -176,15 +176,17 @@ class AdaptiveRAGAgent:
     ) -> RAGResult:
         t0 = time.time()
 
-        # === Pre-compute book-scoped indices (if book provided) ===
-        book_indices = self._get_book_indices(book) if book else None
-
         # === OBSERVE — tích hợp signals từ IntentRouter ===
         profile = self.classifier.classify(
             query,
             intent_hint=intent_hint,
             grade_hint=grade_hint,
             topic_hint=topic_hint,
+        )
+        scope_indices = (
+            self._get_scope_indices(book=book, grade=profile.grade)
+            if book or profile.grade
+            else None
         )
 
         # === ACT ===
@@ -195,18 +197,18 @@ class AdaptiveRAGAgent:
             chunks = self._broad_retrieval(query, profile, book=book)
             # Fallback: nếu broad trả về < 3 chunks → bổ sung standard
             if len(chunks) < 3:
-                standard = self._standard_retrieval(query, book_indices=book_indices)
+                standard = self._standard_retrieval(query, book_indices=scope_indices)
                 chunks = self._merge_deduplicate(chunks, standard)
 
         elif profile.strategy == RAGStrategy.HIERARCHICAL:
-            chunks = self._hierarchical_retrieval(query, profile, book_indices=book_indices)
+            chunks = self._hierarchical_retrieval(query, profile, book_indices=scope_indices)
             # Fallback: nếu HRAG < 3 chunks → bổ sung standard
-            if len(chunks) < 3 and not self._is_scoped_topic_search(profile, book_indices):
-                standard = self._standard_retrieval(query, book_indices=book_indices)
+            if len(chunks) < 3 and not self._is_scoped_topic_search(profile, scope_indices):
+                standard = self._standard_retrieval(query, book_indices=scope_indices)
                 chunks = self._merge_deduplicate(chunks, standard)
 
         else:  # STANDARD
-            chunks = self._standard_retrieval(query, book_indices=book_indices)
+            chunks = self._standard_retrieval(query, book_indices=scope_indices)
 
         total_time = time.time() - t0
 
@@ -358,8 +360,10 @@ class AdaptiveRAGAgent:
 
         if scoped_topic:
             if not topic_parent_indices:
-                logger.info("HRAG result | no topic parents in scope -> 0 chunks")
-                return []
+                logger.info(
+                    "HRAG result | no topic parents in scope -> fallback standard scoped search"
+                )
+                return self._standard_retrieval(query, book_indices=book_indices)
             parent_indices = topic_parent_indices
 
         if not parent_indices:
@@ -448,10 +452,17 @@ class AdaptiveRAGAgent:
         return merged
 
     def _get_book_indices(self, book: str) -> List[int]:
+        return self._get_scope_indices(book=book, grade=None)
+
+    def _get_scope_indices(self, book: str = None, grade: str = None) -> List[int]:
         indices = []
         for i, chunk in enumerate(self.retriever.chunks):
-            if self._metadata_for_chunk(chunk).get("book") == book:
-                indices.append(i)
+            metadata = self._metadata_for_chunk(chunk)
+            if book and metadata.get("book") != book:
+                continue
+            if grade and metadata.get("grade") != grade:
+                continue
+            indices.append(i)
         return indices
 
     def _metadata_for_chunk(self, chunk: Dict) -> Dict:

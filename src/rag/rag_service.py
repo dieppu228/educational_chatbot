@@ -342,7 +342,7 @@ class RAGService:
         match = re.search(r'lớp\s*(10|11|12)', topic_lower)
         if match:
             return match.group(1)
-        match = re.search(r'(?:tin|grade)\s*(10|11|12)', topic_lower)
+        match = re.search(r'(?:tin(?:\s*học)?|grade)\s*(10|11|12)', topic_lower)
         if match:
             return match.group(1)
         return None
