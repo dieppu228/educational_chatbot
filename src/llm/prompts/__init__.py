@@ -125,7 +125,7 @@ SLIDE_QUIZ_TEMPLATE = create_prompt(
 SLIDE_MEDIA_TEMPLATE = create_prompt(
     name='slide_media',
     template=SLIDE_MEDIA_PROMPT,
-    required_vars=['topic', 'grade', 'book'],
+    required_vars=['topic', 'grade', 'book', 'slide_plan'],
     version='1.0',
     description='Agent 1: Suggest media captions for slide illustrations',
 )

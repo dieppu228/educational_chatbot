@@ -9,6 +9,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 
+from src.config.config import settings
 from src.llm.graphs.state import ContentSupervisorState
 from src.config.genai_client import create_genai_client
 from src.llm.graphs.tools import ALL_TOOLS, TOOL_STATE_MAPPING
@@ -22,7 +23,7 @@ from src.llm.prompts import (
 )
 from src.llm.services.slide_merger import SlideMerger
 from src.schemas.agent_protocol import AgentTask
-from src.schemas.slide_schemas import AgentResult
+from src.schemas.slide_schemas import AgentResult, classify_quality
 from src.schemas.agent_protocol import is_agent_task_result
 
 # ── Config ──
@@ -122,8 +123,6 @@ def preprocess_node(state: ContentSupervisorState) -> dict:
 
 
 def supervisor_node(state: ContentSupervisorState) -> dict:
-    from src.config.config import settings
-
     llm = ChatGoogleGenerativeAI(
         model=settings.LLM_MODEL,
         google_api_key=settings.GENAI_API_KEY,
@@ -222,6 +221,18 @@ def _latest_tool_name(state: ContentSupervisorState) -> Optional[str]:
 def reflection_decision_node(state: ContentSupervisorState) -> dict:
     review = state.get("quality_review")
     if not isinstance(review, dict):
+        verdict = classify_quality(
+            review,
+            has_deck=bool(state.get("merged_slides")),
+            hard_floor=settings.SLIDE_QUALITY_HARD_FLOOR,
+        )
+        if verdict == "warn":
+            return {
+                "status": "success",
+                "quality_blocked": False,
+                "revision_instruction": "Quality reviewer không trả về JSON hợp lệ.",
+                "error_message": None,
+            }
         return {
             "status": "failed",
             "quality_blocked": True,
@@ -273,11 +284,23 @@ def reflection_decision_node(state: ContentSupervisorState) -> dict:
             })
         return updates
 
+    verdict = classify_quality(
+        review,
+        has_deck=bool(state.get("merged_slides")),
+        hard_floor=settings.SLIDE_QUALITY_HARD_FLOOR,
+    )
+    if verdict == "block":
+        return {
+            "status": "failed",
+            "quality_blocked": True,
+            "revision_instruction": instruction,
+            "error_message": f"Quality review blocked output: {review.get('reason_fail') or action}",
+        }
     return {
-        "status": "failed",
-        "quality_blocked": True,
+        "status": "success",
+        "quality_blocked": False,
         "revision_instruction": instruction,
-        "error_message": f"Quality review blocked output: {review.get('reason_fail') or action}",
+        "error_message": None,
     }
 
 
@@ -333,6 +356,8 @@ def media_direct_node(state: ContentSupervisorState) -> dict:
             "topic": state.get("topic", ""),
             "grade": state.get("grade", ""),
             "book": state.get("book", ""),
+            "outline_payload": state.get("outline_payload") or {},
+            "content_payload": state.get("content_payload") or {},
         },
         constraints={
             "media_types": ["image", "gif"],
@@ -447,6 +472,8 @@ def quality_direct_node(state: ContentSupervisorState) -> dict:
 
 def route_after_reflection(state: ContentSupervisorState) -> str:
     if state.get("quality_blocked"):
+        return END
+    if state.get("status") == "success":
         return END
 
     review = state.get("quality_review")

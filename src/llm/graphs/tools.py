@@ -203,6 +203,8 @@ def generate_media(
             "topic": topic,
             "grade": grade,
             "book": book,
+            "outline_payload": state.get("outline_payload") or {},
+            "content_payload": state.get("content_payload") or {},
         },
         constraints={
             "media_types": ["image", "gif"],

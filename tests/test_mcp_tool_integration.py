@@ -208,6 +208,109 @@ def test_media_enrichment_limits_lookups_and_normalizes_type(monkeypatch):
     assert payload["hero_media"][0]["type"] == "image"
 
 
+def test_media_enrichment_parallel_populates_all_items(monkeypatch):
+    class FakeClient:
+        def search_media(self, **kwargs):
+            query = kwargs["query"]
+            slug = query.lower().replace(" ", "-")
+            return SimpleNamespace(
+                success=True,
+                data={
+                    "media_items": [
+                        {
+                            "url": f"https://example.edu/{slug}.png",
+                            "media_type": kwargs["media_types"][0],
+                            "source_url": f"https://example.edu/source/{slug}",
+                            "source_title": query,
+                        }
+                    ]
+                },
+            )
+
+    monkeypatch.setattr(media_research, "get_mcp_client", lambda: FakeClient())
+    payload = {
+        "hero_media": [
+            {"caption": "Media Alpha", "type": "image", "url": None},
+            {"caption": "Media Beta", "type": "gif", "url": None},
+        ],
+        "inline_media": [
+            {"caption": "Media Gamma", "type": "diagram", "url": None},
+            {"caption": "Media Delta", "type": "infographic", "url": None},
+        ],
+    }
+
+    touched = MediaResearchAgent()._enrich_media_urls(
+        payload,
+        topic="Tin học",
+        grade="10",
+        book="KNTT",
+    )
+
+    all_items = payload["hero_media"] + payload["inline_media"]
+    assert touched is True
+    assert [item["url"] for item in all_items] == [
+        "https://example.edu/media-alpha.png",
+        "https://example.edu/media-beta.png",
+        "https://example.edu/media-gamma.png",
+        "https://example.edu/media-delta.png",
+    ]
+    assert [item["media_type"] for item in all_items] == [
+        "image",
+        "gif",
+        "diagram",
+        "infographic",
+    ]
+
+
+def test_media_enrichment_prioritizes_inline_and_skips_exercise(monkeypatch):
+    calls = []
+
+    class FakeClient:
+        def search_media(self, **kwargs):
+            calls.append(kwargs["query"])
+            slug = kwargs["query"].lower().replace(" ", "-")
+            return SimpleNamespace(
+                success=True,
+                data={
+                    "media_items": [
+                        {
+                            "url": f"https://example.edu/{slug}.png",
+                            "media_type": kwargs["media_types"][0],
+                        }
+                    ]
+                },
+            )
+
+    monkeypatch.setattr(media_research, "get_mcp_client", lambda: FakeClient())
+    payload = {
+        "hero_media": [
+            {"caption": "Hero Alpha", "type": "image", "url": None},
+            {"caption": "Hero Beta", "type": "image", "url": None},
+        ],
+        "inline_media": [
+            {"caption": "Content Alpha", "type": "image", "for_slide_type": "content", "url": None},
+            {"caption": "Exercise Alpha", "type": "image", "for_slide_type": "exercise", "url": None},
+            {"caption": "Content Beta", "type": "image", "for_slide_type": "content", "url": None},
+            {"caption": "Content Gamma", "type": "image", "for_slide_type": "content", "url": None},
+        ],
+    }
+
+    touched = MediaResearchAgent()._enrich_media_urls(
+        payload,
+        topic="Tin học",
+        grade="10",
+        book="KNTT",
+    )
+
+    assert touched is True
+    assert len(calls) == 4
+    assert "Exercise Alpha" not in calls
+    assert payload["inline_media"][0]["url"]
+    assert payload["inline_media"][1]["url"] is None
+    assert payload["inline_media"][2]["url"]
+    assert payload["inline_media"][3]["url"]
+
+
 def test_slide_merger_preserves_enriched_media_fields():
     slides = SlideMerger().merge(
         outline_result=AgentResult(
@@ -258,6 +361,109 @@ def test_slide_merger_preserves_enriched_media_fields():
     assert media.type == "animation"
     assert media.media_type == "animation"
     assert media.source_url == "https://example.edu/loop"
+
+
+def test_slide_merger_matches_media_by_slide_id_without_reuse():
+    slides = SlideMerger().merge(
+        outline_result=AgentResult(
+            agent="outline",
+            status="success",
+            latency_ms=0,
+            payload={
+                "lesson_title": "Máy tính",
+                "slides": [
+                    {"slide_id": "s1", "slide_type": "title", "title": "Mở đầu"},
+                    {"slide_id": "s2", "slide_type": "content", "title": "CPU"},
+                    {"slide_id": "s3", "slide_type": "content", "title": "Internet"},
+                    {"slide_id": "s4", "slide_type": "exercise", "title": "Bài tập"},
+                ],
+            },
+        ),
+        content_result=AgentResult(
+            agent="content",
+            status="success",
+            latency_ms=0,
+            payload={
+                "slides": [
+                    {"slide_id": "s2", "title": "CPU", "bullets": ["Xử lí nhanh"]},
+                    {"slide_id": "s3", "title": "Internet", "bullets": ["Kết nối"]},
+                    {"slide_id": "s4", "title": "Bài tập", "bullets": ["Câu hỏi"]},
+                ]
+            },
+        ),
+        media_result=AgentResult(
+            agent="media",
+            status="success",
+            latency_ms=0,
+            payload={
+                "hero_media": [],
+                "inline_media": [
+                    {
+                        "for_slide_id": "s2",
+                        "caption": "CPU",
+                        "url": "https://example.edu/cpu.png",
+                    },
+                    {
+                        "for_slide_id": "s3",
+                        "caption": "Internet",
+                        "url": "https://example.edu/internet.png",
+                    },
+                    {
+                        "for_slide_id": "s4",
+                        "caption": "Không nên dùng cho bài tập",
+                        "url": "https://example.edu/exercise.png",
+                    },
+                ],
+            },
+        ),
+        quiz_result=AgentResult(agent="quiz", status="failed", latency_ms=0, payload={}),
+    )
+
+    assert [media.url for media in slides[1].media] == ["https://example.edu/cpu.png"]
+    assert [media.url for media in slides[2].media] == ["https://example.edu/internet.png"]
+    assert slides[3].media == []
+
+
+def test_slide_merger_does_not_reuse_legacy_inline_media_url():
+    slides = SlideMerger().merge(
+        outline_result=AgentResult(
+            agent="outline",
+            status="success",
+            latency_ms=0,
+            payload={
+                "lesson_title": "Máy tính",
+                "slides": [
+                    {"slide_id": "s1", "slide_type": "content", "title": "CPU"},
+                    {"slide_id": "s2", "slide_type": "content", "title": "Internet"},
+                ],
+            },
+        ),
+        content_result=AgentResult(
+            agent="content",
+            status="success",
+            latency_ms=0,
+            payload={"slides": []},
+        ),
+        media_result=AgentResult(
+            agent="media",
+            status="success",
+            latency_ms=0,
+            payload={
+                "hero_media": [],
+                "inline_media": [
+                    {
+                        "caption": "Generic",
+                        "for_slide_type": "content",
+                        "url": "https://example.edu/generic.png",
+                    }
+                ],
+            },
+        ),
+        quiz_result=AgentResult(agent="quiz", status="failed", latency_ms=0, payload={}),
+    )
+
+    assert [media.url for media in slides[0].media] == ["https://example.edu/generic.png"]
+    assert slides[1].media == []
 
 
 def test_slide_export_embeds_downloaded_image(monkeypatch):

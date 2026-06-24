@@ -111,9 +111,18 @@ class AgentResult(BaseModel):
 
 class MediaItem(BaseModel):
     url: Optional[str] = None
-    type: Literal["image", "gif"] = "image"
+    type: Literal["image", "gif", "animation", "diagram", "infographic"] = "image"
     caption: str = ""
     for_slide_type: Optional[str] = None  # "title" | "content" | "image"
+    for_slide_id: Optional[str] = None
+    query: Optional[str] = None
+    required: bool = False
+    media_type: Optional[Literal[
+        "image", "gif", "animation", "diagram", "infographic"
+    ]] = None
+    source_url: str = ""
+    source_title: str = ""
+    relevance_score: Optional[float] = None
 
 
 class MediaPayload(BaseModel):
@@ -227,6 +236,7 @@ class QuizPayload(BaseModel):
 class MergedSlide(BaseModel):
     slide_id: str
     slide_type: Literal["title", "content", "exercise", "summary", "image"]
+    layout: Optional[str] = None
     title: str
     bullets: List[str] = Field(default_factory=list)
     notes: Optional[str] = None
@@ -289,7 +299,82 @@ class QualityReviewResult(BaseModel):
             requires_human_review=True,
         )
 
+_HARD_REASONS = {"UNSAFE", "UNGROUNDED", "HALLUCINATION", "UNSAFE_CONTENT"}
 
+
+def _is_media_issue(issue: dict) -> bool:
+    target = str((issue or {}).get("target") or "").lower()
+    case = str((issue or {}).get("case") or "").lower()
+    message = str((issue or {}).get("message") or "").lower()
+    return (
+        "media" in target
+        or "image" in target
+        or "gif" in target
+        or "media" in case
+        or "image" in case
+        or "gif" in case
+        or "hình ảnh" in message
+        or "ảnh" in message
+        or "gif" in message
+    )
+
+
+def classify_quality(review: Optional[dict], has_deck: bool, *, hard_floor: float) -> str:
+    """Return approve, warn, or block for a quality review result."""
+    if not has_deck:
+        return "block"
+    if not isinstance(review, dict):
+        return "warn"
+    if review.get("passed") and review.get("reflection_action") == "approve":
+        return "approve"
+
+    reason = (review.get("reason_fail") or "").upper()
+    if reason == "FORMAT_INVALID":
+        return "warn"
+
+    issues = review.get("issues") or []
+    critical_issues = [
+        issue for issue in issues
+        if (issue or {}).get("severity") == "critical"
+    ]
+    if any(not _is_media_issue(issue) for issue in critical_issues):
+        return "block"
+
+    if reason in _HARD_REASONS:
+        return "block"
+
+    try:
+        if float(review.get("score") or 0.0) < hard_floor:
+            return "block"
+    except (TypeError, ValueError):
+        pass
+    return "warn"
+
+
+def build_quality_warnings(review: Optional[dict]) -> list[str]:
+    if not isinstance(review, dict):
+        return ["Chưa kiểm định được chất lượng tự động, bạn nên rà soát lại nội dung trước khi dùng."]
+
+    warnings = []
+    for issue in review.get("issues") or []:
+        if not isinstance(issue, dict):
+            continue
+        message = str(issue.get("message") or "").strip()
+        suggestion = str(issue.get("suggestion") or "").strip()
+        if not message:
+            continue
+        warnings.append(f"{message} Gợi ý: {suggestion}" if suggestion else message)
+        if len(warnings) >= 3:
+            break
+
+    if warnings:
+        return warnings
+
+    for key in ("summary", "revision_instruction", "reason_fail"):
+        value = str(review.get(key) or "").strip()
+        if value:
+            return [value]
+    return ["Có một số điểm nên rà soát và chỉnh sửa thêm trước khi sử dụng."]
 
 
 __all__ = [
@@ -301,4 +386,5 @@ __all__ = [
     "SlideQuizItem", "QuizPayload",
     "MergedSlide",
     "QualityIssue", "QualityReviewResult",
+    "classify_quality", "build_quality_warnings",
 ]

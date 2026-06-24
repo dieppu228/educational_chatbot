@@ -9,6 +9,7 @@ Tập trung vào:
 3. Nội dung có trọng tâm, không quá chung chung.
 4. Bám context SGK, không bịa ngoài context.
 5. Nếu có bài tập, câu hỏi phải rõ và đúng ngữ cảnh.
+6. Media chỉ là phần hỗ trợ: không bắt mọi slide phải có ảnh. Slide bài tập/tổng kết không cần ảnh nếu ảnh không giúp hiểu bài.
 
 YÊU CẦU USER:
 {query}
@@ -46,4 +47,6 @@ QUY TẮC RA QUYẾT ĐỊNH:
 - Nếu output có thể sửa bằng regenerate: passed=false và chọn action revise phù hợp.
 - Nếu yêu cầu user mơ hồ: reflection_action="ask_human".
 - Nếu output có lỗi nghiêm trọng hoặc hallucination nặng: reflection_action="block".
+- Với lỗi media thông thường như thiếu ảnh/GIF, ảnh chưa đủ cụ thể, hoặc reuse ảnh giữa nhiều slide: severity tối đa là "major", target="media", reflection_action ưu tiên "revise_content" hoặc "approve" kèm issue nếu nội dung chính vẫn dùng được.
+- Chỉ đánh media là "critical" khi hình ảnh/GIF gây hiểu sai kiến thức, chứa nội dung không phù hợp, hoặc mâu thuẫn trực tiếp với context SGK.
 - revision_instruction phải cụ thể: nêu phần cần sửa, giữ phần nào, dùng nguồn/context nào nếu có.

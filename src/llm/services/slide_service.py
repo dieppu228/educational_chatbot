@@ -6,8 +6,13 @@ import logging
 import re
 from typing import Generator, Optional, Dict, Any, AsyncGenerator
 
+from src.config.config import settings
 from src.schemas.context import RequestContext
-from src.schemas.slide_schemas import ContentPipelineInput
+from src.schemas.slide_schemas import (
+    ContentPipelineInput,
+    build_quality_warnings,
+    classify_quality,
+)
 from src.llm.memory import Session, QuestionRecord
 from src.llm.handlers.question.scorer import QuestionScorer
 from src.rag.rag_service import RAGService
@@ -34,6 +39,41 @@ class SlideService:
             return False
         action = quality_review.get("reflection_action")
         return action in ("block", "ask_human")
+
+    @staticmethod
+    def _quality_block_user_message(task_type: str) -> str:
+        task_label = "giáo án" if task_type == "lesson_plan" else "slide"
+        return (
+            f"Mình chưa tạo được {task_label} đạt chất lượng ở lần này. "
+            "Bạn thử nói rõ hơn bài/chủ đề cần bám theo, hoặc giảm bớt yêu cầu minh họa để mình tạo lại nhé."
+        )
+
+    @staticmethod
+    def _has_merged_deck(merged: Any) -> bool:
+        if isinstance(merged, dict):
+            slides = merged.get("slides")
+            return isinstance(slides, list) and bool(slides)
+        return isinstance(merged, list) and bool(merged)
+
+    @staticmethod
+    def _format_quality_warning(warnings: list[str]) -> str:
+        if not warnings:
+            return ""
+        lines = [
+            "\n\n⚠️ Slide đã tạo nhưng còn vài điểm nên chỉnh sửa thêm:",
+            *[f"- {warning}" for warning in warnings],
+            "📌 Bạn có thể tải file và bổ sung trực tiếp các phần này.",
+        ]
+        return "\n".join(lines)
+
+    @staticmethod
+    def _clear_hitl_state(slide_state) -> None:
+        if not slide_state or not isinstance(slide_state.slide_output, dict):
+            return
+        slide_state.slide_output["_interrupt"] = False
+        slide_state.slide_output.pop("_hitl", None)
+        slide_state.slide_output.pop("_graph_thread_id", None)
+        slide_state.slide_output.pop("_graph_config", None)
 
     def _attach_export_if_needed(
         self,
@@ -311,8 +351,22 @@ class SlideService:
         reflection_attempts = int(result.get("reflection_attempts") or 0)
         lesson_title = outline.get("lesson_title", "") if isinstance(outline, dict) else ""
         agent_results_summary = self._summarize_agent_results(result.get("agent_results"))
+        has_deck = self._has_merged_deck(merged)
+        quality_verdict = classify_quality(
+            quality_review,
+            has_deck=has_deck,
+            hard_floor=settings.SLIDE_QUALITY_HARD_FLOOR,
+        )
+        quality_warnings = (
+            build_quality_warnings(quality_review)
+            if quality_verdict == "warn"
+            else []
+        )
 
-        if result.get("quality_blocked") or self.should_block_by_quality(quality_review):
+        if (
+            quality_verdict == "block"
+            and (result.get("quality_blocked") or self.should_block_by_quality(quality_review))
+        ):
             reason = (
                 quality_review.get("reason_fail")
                 if isinstance(quality_review, dict)
@@ -324,7 +378,14 @@ class SlideService:
                 else result.get("error_message", "Quality review failed")
             )
             instruction = result.get("revision_instruction") or summary
-            yield f"Không thể tạo {task_label}: quality review failed ({reason}). {instruction}"
+            logger.info(
+                "Quality review blocked %s | reason=%s instruction=%s",
+                task_type,
+                reason,
+                str(instruction)[:500],
+            )
+            self._clear_hitl_state(session.slide_state)
+            yield self._quality_block_user_message(task_type)
             ctx.add_debug_step(
                 "QualityReviewer",
                 target=task_type,
@@ -341,8 +402,9 @@ class SlideService:
             )
             return
 
-        if not merged or status == "failed":
+        if not has_deck or (status == "failed" and quality_verdict == "block"):
             error_msg = result.get("error_message", "Pipeline không trả về kết quả")
+            self._clear_hitl_state(session.slide_state)
             yield f"Không thể tạo {task_label}: {error_msg}"
             ctx.add_debug_step(
                 "Handler", action=action_name, status="failed",
@@ -363,6 +425,8 @@ class SlideService:
             "slides": slides_data,
             "total_slides": total_slides,
             "quality_review": quality_review,
+            "quality_verdict": quality_verdict,
+            "quality_warnings": quality_warnings,
             "reflection_attempts": reflection_attempts,
             "agent_results": agent_results_summary,
             "_interrupt": False,
@@ -401,6 +465,9 @@ class SlideService:
         yield "\n\n" + display
         if export_metadata:
             yield "\n\n📎 File PPTX đã sẵn sàng để tải xuống."
+        warning_text = self._format_quality_warning(quality_warnings)
+        if warning_text:
+            yield warning_text
 
         if task_type == "slide" and slide_state.has_exercises:
             yield f"\n📝 Slide có {slide_state.total_exercises} câu hỏi bài tập. Bạn có thể trả lời ngay!"
@@ -412,6 +479,8 @@ class SlideService:
             lesson_title=lesson_title,
             exercises_extracted=exercise_count,
             agent_results=len(agent_results_summary),
+            quality_verdict=quality_verdict,
+            quality_warnings=quality_warnings,
         )
         if isinstance(quality_review, dict):
             ctx.add_debug_step(
@@ -743,8 +812,22 @@ class SlideService:
         quality_review = result.get("quality_review")
         reflection_attempts = int(result.get("reflection_attempts") or 0)
         lesson_title = outline.get("lesson_title", "") if isinstance(outline, dict) else ""
+        has_deck = self._has_merged_deck(merged)
+        quality_verdict = classify_quality(
+            quality_review,
+            has_deck=has_deck,
+            hard_floor=settings.SLIDE_QUALITY_HARD_FLOOR,
+        )
+        quality_warnings = (
+            build_quality_warnings(quality_review)
+            if quality_verdict == "warn"
+            else []
+        )
 
-        if result.get("quality_blocked") or self.should_block_by_quality(quality_review):
+        if (
+            quality_verdict == "block"
+            and (result.get("quality_blocked") or self.should_block_by_quality(quality_review))
+        ):
             reason = (
                 quality_review.get("reason_fail")
                 if isinstance(quality_review, dict)
@@ -756,7 +839,14 @@ class SlideService:
                 else result.get("error_message", "Quality review failed")
             )
             instruction = result.get("revision_instruction") or summary
-            yield f"Không thể tạo {task_label}: quality review failed ({reason}). {instruction}"
+            logger.info(
+                "Quality review blocked %s | reason=%s instruction=%s",
+                task_type,
+                reason,
+                str(instruction)[:500],
+            )
+            self._clear_hitl_state(session.slide_state)
+            yield self._quality_block_user_message(task_type)
             ctx.add_debug_step(
                 "QualityReviewer",
                 target=task_type,
@@ -773,8 +863,9 @@ class SlideService:
             )
             return
 
-        if not merged or status == "failed":
+        if not has_deck or (status == "failed" and quality_verdict == "block"):
             error_msg = result.get("error_message", "Pipeline không trả về kết quả")
+            self._clear_hitl_state(session.slide_state)
             yield f"Không thể tạo {task_label}: {error_msg}"
             ctx.add_debug_step(
                 "Handler", action=action_name, status="failed",
@@ -795,6 +886,8 @@ class SlideService:
             "slides": slides_data,
             "total_slides": total_slides,
             "quality_review": quality_review,
+            "quality_verdict": quality_verdict,
+            "quality_warnings": quality_warnings,
             "reflection_attempts": reflection_attempts,
             "_interrupt": False,
             "_task_type": task_type,
@@ -832,6 +925,9 @@ class SlideService:
         yield "\n\n" + display
         if export_metadata:
             yield "\n\n📎 File PPTX đã sẵn sàng để tải xuống."
+        warning_text = self._format_quality_warning(quality_warnings)
+        if warning_text:
+            yield warning_text
 
         if task_type == "slide" and slide_state.has_exercises:
             yield f"\n📝 Slide có {slide_state.total_exercises} câu hỏi bài tập. Bạn có thể trả lời ngay!"
@@ -842,6 +938,8 @@ class SlideService:
             total_slides=total_slides,
             lesson_title=lesson_title,
             exercises_extracted=exercise_count,
+            quality_verdict=quality_verdict,
+            quality_warnings=quality_warnings,
         )
         if isinstance(quality_review, dict):
             ctx.add_debug_step(

@@ -56,12 +56,14 @@ class SlideMerger:
 
         # 5. Build merged slides
         merged = []
+        used_media_keys = set()
         for outline_slide in outline_payload.slides:
             merged_slide = self._merge_single_slide(
                 outline_slide=outline_slide,
                 content_data=content_map.get(outline_slide.slide_id),
                 media_payload=media_payload,
                 quiz_items=quiz_items,
+                used_media_keys=used_media_keys,
             )
             merged.append(merged_slide)
 
@@ -82,11 +84,17 @@ class SlideMerger:
             )
             merged.insert(summary_idx, exercise_slide)
 
+        media_attached = sum(len(slide.media) for slide in merged)
+        unique_media_urls = len({
+            media.url for slide in merged for media in slide.media if media.url
+        })
         logger.info(
             f"Merged: {len(merged)} slides, "
             f"content={len(content_map)}, "
             f"media={'yes' if media_payload else 'no'}, "
-            f"quiz={len(quiz_items)}"
+            f"quiz={len(quiz_items)}, "
+            f"media_attached={media_attached}, "
+            f"unique_media_urls={unique_media_urls}"
         )
         return merged
 
@@ -96,6 +104,7 @@ class SlideMerger:
         content_data: Optional[dict],
         media_payload: Optional[MediaPayload],
         quiz_items: List[SlideQuizItem],
+        used_media_keys: set,
     ) -> MergedSlide:
 
         # Base từ outline
@@ -138,13 +147,14 @@ class SlideMerger:
 
         # Gắn media
         if media_payload:
-            slide.media = self._match_media(slide, media_payload)
+            slide.media = self._match_media(slide, media_payload, used_media_keys)
 
         # Gắn quiz vào exercise slides
         if outline_slide.slide_type == "exercise" and quiz_items:
             slide.questions = list(quiz_items)
             slide.bullets = ["Trả lời các câu hỏi trắc nghiệm sau"]
 
+        slide.layout = self._resolve_layout(slide)
         return slide
 
     @staticmethod
@@ -158,19 +168,64 @@ class SlideMerger:
         return parsed
 
     def _match_media(
-        self, slide: MergedSlide, media_payload: MediaPayload
+        self, slide: MergedSlide, media_payload: MediaPayload, used_media_keys: set
     ) -> List[MediaItem]:
-        matched = []
-
+        if slide.slide_type in ("exercise", "summary"):
+            return []
         if slide.slide_type == "title":
-            matched.extend(media_payload.hero_media)
-        elif slide.slide_type in ("content", "image"):
-            for item in media_payload.inline_media:
-                if item.for_slide_type in (slide.slide_type, None):
-                    matched.append(item)
-                    break  # Max 1 inline media per slide
+            return self._pick_one_media(
+                slide=slide,
+                candidates=media_payload.hero_media,
+                used_media_keys=used_media_keys,
+            )
+        if slide.slide_type in ("content", "image"):
+            return self._pick_one_media(
+                slide=slide,
+                candidates=media_payload.inline_media,
+                used_media_keys=used_media_keys,
+            )
 
-        return matched
+        return []
+
+    def _pick_one_media(
+        self,
+        slide: MergedSlide,
+        candidates: List[MediaItem],
+        used_media_keys: set,
+    ) -> List[MediaItem]:
+        exact = [
+            item for item in candidates
+            if item.for_slide_id and item.for_slide_id == slide.slide_id
+        ]
+        legacy = [
+            item for item in candidates
+            if not item.for_slide_id and item.for_slide_type in (slide.slide_type, None)
+        ]
+        for item in exact + legacy:
+            key = self._media_key(item)
+            if not key or key in used_media_keys:
+                continue
+            used_media_keys.add(key)
+            return [item]
+        return []
+
+    @staticmethod
+    def _media_key(item: MediaItem) -> Optional[str]:
+        if not item.url:
+            return None
+        return item.url.strip()
+
+    @staticmethod
+    def _resolve_layout(slide: MergedSlide) -> str:
+        if slide.slide_type == "title":
+            return "title"
+        if slide.slide_type == "exercise" or slide.questions:
+            return "exercise"
+        if slide.slide_type == "summary":
+            return "section"
+        if slide.media:
+            return "content_media"
+        return "content"
 
 
 # ============================================================
