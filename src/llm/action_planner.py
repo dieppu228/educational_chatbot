@@ -60,8 +60,11 @@ REVIEW_KEYWORDS = [
 # Keywords for explain question (specific question, not general concept)
 EXPLAIN_QUESTION_KEYWORDS = [
     r"giải\s*thích\s*câu", r"giai\s*thich\s*cau",
+    r"giải\s*thích\s*(?:giúp|cho)?", r"giai\s*thich\s*(?:giup|cho)?",
     r"tại\s*sao\s*câu", r"tai\s*sao\s*cau",
+    r"tại\s*sao\s*đáp\s*án", r"tai\s*sao\s*dap\s*an",
     r"vì\s*sao\s*đáp\s*án", r"vi\s*sao\s*dap\s*an",
+    r"vì\s*sao", r"vi\s*sao",
     r"câu\s*\d+\s*(là|sao|thế)", r"cau\s*\d+",
 ]
 

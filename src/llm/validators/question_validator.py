@@ -33,7 +33,7 @@ class QuestionValidator(BaseHandler):
             return ValidationResult.from_json_string(response)
         except Exception as e:
             # Fallback nếu validator lỗi JSON: coi như không pass để đảm bảo an toàn
-            self._handle_error(f"Lỗi parse Validation JSON: {e}")
+            self._handle_error(f"Lỗi parse Validation JSON: {e}", raise_error=False)
             return ValidationResult(all_valid=False, validations=[], approved_questions=[])
     
     async def validate_async(
@@ -61,7 +61,7 @@ class QuestionValidator(BaseHandler):
             return ValidationResult.from_json_string(response)
         except Exception as e:
             # Fallback nếu validator lỗi JSON: coi như không pass để đảm bảo an toàn
-            self._handle_error(f"Lỗi parse Validation JSON: {e}")
+            self._handle_error(f"Lỗi parse Validation JSON: {e}", raise_error=False)
             return ValidationResult(all_valid=False, validations=[], approved_questions=[])
             
     def handle(self, query: str, **kwargs):

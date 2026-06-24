@@ -47,3 +47,24 @@ def test_safe_execute_async_generator_hides_raw_exception():
     assert "Lỗi tạo slide" in output
     assert "giới hạn tần suất" in output
     assert "raw payload" not in output
+
+
+def test_base_handler_handle_error_string():
+    import pytest
+    from src.llm.handlers.base_handler import BaseHandler
+    from unittest.mock import patch
+
+    class DummyHandler(BaseHandler):
+        def handle(self, **kwargs) -> str:
+            return "dummy"
+
+    with patch("src.llm.handlers.base_handler.create_genai_client") as mock_client:
+        handler = DummyHandler(api_key="dummy-key")
+        
+        # Test default raise_error=True with a string error
+        with pytest.raises(RuntimeError) as exc_info:
+            handler._handle_error("Some string error", raise_error=True)
+        assert "Some string error" in str(exc_info.value)
+        
+        # Test raise_error=False with a string error (should not raise)
+        handler._handle_error("Some string error", raise_error=False)

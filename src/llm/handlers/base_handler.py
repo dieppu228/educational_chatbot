@@ -96,9 +96,16 @@ class BaseHandler(ABC):
         except Exception as e:
             self._handle_error(e)
     
-    def _handle_error(self, error: Exception) -> None:
+    def _handle_error(self, error: Any, raise_error: bool = True) -> None:
+        import logging
+        logger = logging.getLogger(f"chatbot.{self.__class__.__name__.lower()}")
         error_msg = f"Error in {self.__class__.__name__}: {str(error)}"
-        raise RuntimeError(error_msg) from error
+        logger.error(error_msg)
+        if raise_error:
+            if isinstance(error, BaseException):
+                raise RuntimeError(error_msg) from error
+            else:
+                raise RuntimeError(error_msg)
     
     def _validate_json_response(self, response: str) -> bool:
         try:

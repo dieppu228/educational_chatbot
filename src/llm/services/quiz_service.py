@@ -12,7 +12,7 @@ from src.llm.validators.question_validator import QuestionValidator
 from src.llm.handlers.explain_handler import ExplainHandler
 from src.llm.services.quality_reviewer import get_quality_reviewer
 from src.llm.student_tracker import StudentTracker
-from src.llm.utils import extract_num_questions
+from src.llm.utils import extract_num_questions, extract_question_index_from_query
 from src.llm.prompts import QUIZ_REVISION_QUERY_PROMPT
 from src.rag.context_builder import ContextBuilder
 from src.rag.rag_service import RAGService
@@ -84,7 +84,12 @@ class QuizService:
             query=query, chunks=contexts, action="generate_quiz"
         )
         handler = self.question_handlers.get(task_type, self.question_handlers["mcq"])
-        num_q = extract_num_questions(query) or 3
+        num_q = (
+            ctx.extracted_params.get("question_count")
+            or extract_num_questions(ctx.query)
+            or extract_num_questions(query)
+            or 3
+        )
         logger.info(f"Generate: type={task_type}, num={num_q}")
 
         yield f"Đang soạn {num_q} câu hỏi {task_type.upper()}..."
@@ -436,6 +441,18 @@ class QuizService:
             yield None
             return
 
+        stored_response = self._stored_question_explanation(original_query, all_questions)
+        if stored_response:
+            session.add_message("assistant", stored_response)
+            ctx.add_debug_step(
+                "Handler", action="explain_question", status="success",
+                source="stored_explanation",
+                questions_available=len(all_questions),
+                response_length=len(stored_response),
+            )
+            yield "\n\n" + stored_response
+            return
+
         q_context = "\n".join(
             f"Câu {i+1}: {q.content.get('question', q.content.get('statement', ''))}"
             for i, q in enumerate(all_questions[-5:])
@@ -499,7 +516,12 @@ class QuizService:
             query=query, chunks=contexts, action="generate_quiz"
         )
         handler = self.question_handlers.get(task_type, self.question_handlers["mcq"])
-        num_q = extract_num_questions(query) or 3
+        num_q = (
+            ctx.extracted_params.get("question_count")
+            or extract_num_questions(ctx.query)
+            or extract_num_questions(query)
+            or 3
+        )
         logger.info(f"Generate: type={task_type}, num={num_q}")
 
         yield f"Đang soạn {num_q} câu hỏi {task_type.upper()}..."
@@ -1099,6 +1121,18 @@ class QuizService:
             yield None
             return
 
+        stored_response = self._stored_question_explanation(original_query, all_questions)
+        if stored_response:
+            session.add_message("assistant", stored_response)
+            ctx.add_debug_step(
+                "Handler", action="explain_question", status="success",
+                source="stored_explanation",
+                questions_available=len(all_questions),
+                response_length=len(stored_response),
+            )
+            yield "\n\n" + stored_response
+            return
+
         q_context = "\n".join(
             f"Câu {i+1}: {q.content.get('question', q.content.get('statement', ''))}"
             for i, q in enumerate(all_questions[-5:])
@@ -1117,6 +1151,49 @@ class QuizService:
             response_length=len(response),
         )
         yield "\n\n" + response
+
+    @staticmethod
+    def _stored_question_explanation(
+        original_query: str,
+        questions: List[QuestionRecord],
+    ) -> Optional[str]:
+        if not questions:
+            return None
+
+        question_index = extract_question_index_from_query(original_query)
+        if question_index is not None:
+            if question_index < 1 or question_index > len(questions):
+                return None
+            record = questions[question_index - 1]
+            display_index = question_index
+        else:
+            record = questions[-1]
+            display_index = len(questions)
+
+        content = record.content or {}
+        explanation = str(content.get("explanation") or "").strip()
+        if not explanation:
+            return None
+
+        question_text = (
+            content.get("question")
+            or content.get("statement")
+            or content.get("prompt")
+            or ""
+        )
+        correct_answer = (
+            content.get("correct_answer")
+            or content.get("answer")
+            or content.get("correct")
+        )
+
+        lines = [f"**Giải thích câu {display_index}:**"]
+        if question_text:
+            lines.append(str(question_text).strip())
+        if correct_answer:
+            lines.append(f"Đáp án đúng: {correct_answer}")
+        lines.append(explanation)
+        return "\n\n".join(lines)
 
 
 __all__ = ["QuizService"]

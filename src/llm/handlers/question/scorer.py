@@ -42,7 +42,7 @@ class QuestionScorer(BaseHandler):
             return result
             
         except Exception as e:
-            self._handle_error(f"Lỗi chấm điểm: {e}")
+            self._handle_error(f"Lỗi chấm điểm: {e}", raise_error=False)
             return ScoringOutput(status="ambiguous", explanation="Không thể chấm điểm.")
 
     async def handle_async(
@@ -78,7 +78,7 @@ class QuestionScorer(BaseHandler):
             return result
             
         except Exception as e:
-            self._handle_error(f"Lỗi chấm điểm: {e}")
+            self._handle_error(f"Lỗi chấm điểm: {e}", raise_error=False)
             return ScoringOutput(status="ambiguous", explanation="Không thể chấm điểm.")
 
     def _score_essay(self, user_answer: str, item: TaskItem, initial_result: ScoringOutput) -> ScoringOutput:
