@@ -1,5 +1,20 @@
 # Plan viết lại đồ án theo hướng nghiên cứu giải pháp
 
+## 0. Trạng thái hiện tại của bản thảo
+
+Cập nhật theo nội dung LaTeX hiện tại:
+
+| Phần | Trạng thái | Ghi chú |
+|---|---|---|
+| Chương 2 | Đã viết lại xong bản đầu | Đã theo đúng bốn mục: Phạm vi nghiên cứu, Tổng quan về bài toán, Khảo sát các giải pháp liên quan, Cơ sở lý thuyết và hướng tiếp cận. |
+| Chương 3.1 | Đã viết | Tổng quan kiến trúc hệ thống, bài toán/yêu cầu, kiến trúc tổng thể và công nghệ nền. |
+| Chương 3.2 | Đã viết | Nền tảng tri thức: nguồn SGK, metadata, chunking theo tiêu đề, embedding và Qdrant. |
+| Chương 3.3 | Đã viết | RAG core: BM25/dense retrieval, RRF, reranking bằng cross-encoder và Adaptive RAG. |
+| Chương 3.4 | Đã viết | Tầng điều phối tác tử: intent routing, context analysis, query rewriting, action planning và execution loop. |
+| Chương 3.5 | Chưa viết xong | Đang là skeleton cho tầng sinh nội dung đa tác tử. |
+| Chương 3.6 | Chưa viết xong | Đang là skeleton cho phương pháp đánh giá retrieval/generation. |
+| Chương 4 trở đi | Chưa cập nhật theo bản research mới | Giữ plan hiện tại, sẽ chỉnh sau khi chốt Chương 3 và kết quả rerank. |
+
 ## 1. Mục tiêu tái tổ chức nội dung
 
 Đồ án cần được viết theo hướng nghiên cứu và đánh giá giải pháp chatbot giáo dục dựa trên RAG, thay vì trình bày như một tài liệu thiết kế web app. Trục nội dung chính của báo cáo là:
@@ -44,21 +59,63 @@ Các đóng góp chính nên được nhấn mạnh:
 - So sánh chất lượng giữa các cấu hình truy xuất hoặc các service liên quan nếu có dữ liệu thực nghiệm.
 - Phân tích lỗi để chỉ ra nguyên nhân ảnh hưởng đến chất lượng câu trả lời.
 
-## 4. Chương 2: Cơ sở lý thuyết, khảo sát và đề xuất giải pháp
+## 4. Chương 2: Tổng quan và cơ sở nghiên cứu
+
+Trạng thái: **đã viết lại xong bản đầu trong `latex/Chuong/2_Khao_sat.tex`**. Nội dung hiện tại đã theo đúng bốn đầu mục chính dưới đây. Các ghi chú trong mục này được giữ lại để phục vụ rà soát văn phong, bổ sung citation nếu cần và kiểm tra sự liên kết với Chương 3.
 
 ### 4.1. Mục tiêu chương
 
 Chương 2 cần đặt nền tảng cho hướng nghiên cứu. Sau chương này, người đọc phải hiểu:
 
+- Phạm vi và trọng tâm nghiên cứu của đồ án là gì.
 - Bài toán chatbot giáo dục có đặc thù gì.
-- Vì sao LLM trực tiếp chưa đủ cho dữ liệu SGK.
-- RAG giải quyết vấn đề nào trong hỏi đáp dựa trên tài liệu.
-- Các hướng hiện có trên thị trường hoặc trong kỹ thuật có ưu nhược điểm gì.
-- Đồ án đề xuất giải pháp nào và giải pháp đó giải quyết khoảng trống nào.
+- Các hướng giải pháp hiện có trên thị trường và trong kỹ thuật có ưu nhược điểm gì.
+- Vì sao LLM trực tiếp chưa đủ cho dữ liệu SGK và RAG giải quyết vấn đề nào.
+- Đồ án đề xuất giải pháp nào và giải pháp đó lấp khoảng trống nào.
 
-### 4.2. Cấu trúc đề xuất
+### 4.2. Cấu trúc chương: 4 đầu mục chính
 
-#### 2.1. Tổng quan bài toán chatbot giáo dục
+Chương 2 được tổ chức theo **4 đầu mục chính**, đánh số 2.1 đến 2.4:
+
+| Đầu mục | Tên | Vai trò |
+|---|---|---|
+| 2.1 | Phạm vi nghiên cứu | Khoanh vùng đối tượng, ranh giới và trọng tâm nghiên cứu |
+| 2.2 | Tổng quan về bài toán | Bối cảnh, đặc thù dữ liệu và yêu cầu của bài toán hỏi đáp giáo dục |
+| 2.3 | Khảo sát các giải pháp liên quan | Phân tích đối thủ, thị trường và các hướng kỹ thuật hiện có |
+| 2.4 | Cơ sở lý thuyết và hướng tiếp cận | Nền tảng kỹ thuật (LLM, embedding, RAG, adaptive retrieval, evaluation) và khoảng trống đồ án giải quyết |
+
+---
+
+### 2.1. Phạm vi nghiên cứu
+
+Trạng thái: **đã viết**.
+
+Mục này khoanh vùng rõ đồ án nghiên cứu cái gì và không nghiên cứu cái gì, để định hướng toàn bộ các chương sau.
+
+Nội dung cần viết:
+
+- **Đối tượng nghiên cứu:** hệ thống hỏi đáp (document-grounded QA) trên dữ liệu SGK Tin học THPT, dựa trên kiến trúc Retrieval-Augmented Generation.
+- **Phạm vi dữ liệu:** SGK Tin học lớp 10-12, bộ Cánh Diều (CD) và Kết Nối Tri Thức (KNTT).
+- **Đối tượng sử dụng:** học sinh, giáo viên và người tự học môn Tin học THPT.
+- **Trọng tâm nghiên cứu:** thiết kế và đánh giá pipeline retrieval và generation; trong đó retrieval là phần đánh giá định lượng chính, generation đánh giá bằng rubric thủ công.
+- **Ngoài phạm vi (giới hạn rõ):**
+  - không đi sâu thiết kế UI/frontend như một sản phẩm thương mại;
+  - không tập trung tối ưu hạ tầng triển khai/DevOps;
+  - các tác vụ phụ (quiz, slide, giáo án) chỉ trình bày ở mức điều phối, không phải trọng tâm đánh giá;
+  - graph/hybrid retrieval chỉ coi là hướng mở rộng nếu chưa có thực nghiệm đầy đủ.
+- **Câu hỏi nghiên cứu chính:** làm sao truy xuất đúng ngữ cảnh từ SGK và sinh câu trả lời bám tài liệu, đồng thời đánh giá được chất lượng của từng bước.
+
+Điểm cần tránh: không mô tả frontend, API, login hoặc các tính năng web app ở phần này.
+
+---
+
+### 2.2. Tổng quan về bài toán
+
+Trạng thái: **đã viết**.
+
+Mục này trình bày bối cảnh và đặc thù của bài toán hỏi đáp trên tài liệu giáo dục, làm rõ vì sao đây là một bài toán đáng nghiên cứu.
+
+#### 2.2.1. Bài toán chatbot giáo dục
 
 Nội dung cần viết:
 
@@ -75,7 +132,7 @@ Nội dung cần viết:
 
 Điểm cần tránh: không mô tả frontend, API, login hoặc các tính năng web app ở phần này.
 
-#### 2.2. Hệ thống hỏi đáp dựa trên tài liệu
+#### 2.2.2. Hệ thống hỏi đáp dựa trên tài liệu
 
 Nội dung cần viết:
 
@@ -89,7 +146,65 @@ Nội dung cần viết:
   - trả câu trả lời kèm nguồn nếu có.
 - Lý do đồ án thuộc nhóm document-grounded QA.
 
-#### 2.3. Large Language Model và hạn chế khi dùng trực tiếp
+#### 2.2.3. Thách thức đặc thù của dữ liệu SGK Tin học
+
+Nội dung cần viết:
+
+- Nội dung dài, phân cấp nhiều tầng (bộ sách > lớp > chủ đề > bài > mục).
+- Cùng một chủ đề xuất hiện ở nhiều lớp/bộ sách, dễ gây nhầm phạm vi.
+- Thuật ngữ tiếng Việt chuyên ngành Tin học, cần embedding tiếng Việt phù hợp.
+- Một bài học gồm cả lý thuyết, ví dụ và bài tập với vai trò khác nhau.
+- Hệ quả: cần cơ chế truy xuất có xét phạm vi và đánh giá tách bạch retrieval/generation.
+
+---
+
+### 2.3. Khảo sát các giải pháp liên quan
+
+Trạng thái: **đã viết**.
+
+Mục này phân tích các hướng giải pháp hiện có trên thị trường và trong kỹ thuật, chỉ ra ưu/nhược điểm của từng nhóm để định vị giải pháp của đồ án.
+
+#### 2.3.1. Các nhóm giải pháp hiện có
+
+Nội dung cần viết:
+
+- Nhóm chatbot rule-based.
+- Nhóm FAQ/keyword search.
+- Nhóm semantic search.
+- Nhóm chatbot gọi LLM trực tiếp.
+- Nhóm RAG chatbot.
+- Nhóm hybrid/adaptive RAG nếu có khảo sát.
+
+#### 2.3.2. Bảng so sánh các nhóm giải pháp
+
+Bảng so sánh nên có các tiêu chí:
+
+| Nhóm giải pháp | Hiểu câu hỏi tự nhiên | Dùng dữ liệu riêng | Giảm hallucination | Khả năng mở rộng | Phù hợp với SGK |
+|---|---|---|---|---|---|
+| Rule-based | Thấp | Trung bình | Cao nếu luật đủ | Thấp | Thấp |
+| FAQ/keyword search | Thấp-Trung bình | Có | Trung bình | Trung bình | Trung bình |
+| LLM trực tiếp | Cao | Thấp nếu không nạp context | Thấp | Cao | Thấp-Trung bình |
+| RAG | Cao | Cao | Trung bình-Cao | Cao | Cao |
+| Adaptive/hybrid RAG | Cao | Cao | Cao hơn nếu retrieval tốt | Trung bình-Cao | Cao |
+
+#### 2.3.3. Nhận xét và định vị giải pháp đồ án
+
+Nội dung cần viết:
+
+- Các giải pháp đơn giản (rule-based, FAQ) không hiểu câu hỏi tự nhiên và khó mở rộng.
+- LLM trực tiếp mạnh về ngôn ngữ nhưng yếu về dữ liệu riêng và dễ hallucination.
+- RAG là hướng phù hợp nhất với dữ liệu SGK, nhưng các triển khai hiện có thường chưa đánh giá tách bạch retrieval/generation.
+- Đồ án định vị ở nhóm **adaptive/hybrid RAG** có xét phạm vi sách/lớp/chủ đề và có quy trình đánh giá riêng cho từng bước.
+
+---
+
+### 2.4. Cơ sở lý thuyết và hướng tiếp cận
+
+Trạng thái: **đã viết**.
+
+Đây là phần *tự do*, trình bày các nền tảng kỹ thuật cần thiết để hiểu giải pháp, kết thúc bằng khoảng trống và đề xuất của đồ án. Các kiến thức ở đây được rút ngược từ thiết kế chương 3.
+
+#### 2.4.1. Large Language Model và hạn chế khi dùng trực tiếp
 
 Nội dung cần viết:
 
@@ -104,7 +219,7 @@ Nội dung cần viết:
 
 Kết luận cần đạt: cần một cơ chế cung cấp ngữ cảnh đáng tin cậy trước khi sinh câu trả lời.
 
-#### 2.4. Embedding và tìm kiếm ngữ nghĩa
+#### 2.4.2. Embedding và tìm kiếm ngữ nghĩa
 
 Nội dung cần viết:
 
@@ -116,7 +231,7 @@ Nội dung cần viết:
 
 Nếu muốn gắn với hiện trạng dự án, có thể nhắc ở mức tổng quan rằng hệ thống dùng embedding tiếng Việt phù hợp hơn với dữ liệu SGK tiếng Việt. Chi tiết model cụ thể nên để chương 4.
 
-#### 2.5. Retrieval-Augmented Generation
+#### 2.4.3. Retrieval-Augmented Generation
 
 Nội dung cần viết:
 
@@ -141,7 +256,7 @@ Nội dung cần viết:
   - context nhiễu làm câu trả lời thiếu chính xác;
   - việc đánh giá cần tách riêng retrieval và generation.
 
-#### 2.6. Adaptive retrieval, reranking và query rewriting
+#### 2.4.4. Adaptive retrieval, reranking và query rewriting
 
 Nội dung cần viết:
 
@@ -153,7 +268,7 @@ Nội dung cần viết:
 
 Phần này cần chuẩn bị nền cho các thành phần đang có trong dự án như ContextAnalyzer, QueryRewriter, AdaptiveRAGAgent, Reranker.
 
-#### 2.7. Multi-intent và điều phối yêu cầu học tập
+#### 2.4.5. Multi-intent và điều phối yêu cầu học tập
 
 Nội dung cần viết vừa đủ:
 
@@ -162,7 +277,7 @@ Nội dung cần viết vừa đủ:
 - Phân biệt rõ: đây là lớp điều phối hệ thống, không phải đóng góp nghiên cứu chính về retrieval.
 - Liên hệ với hệ thống hiện tại: Orchestrator, IntentRouter, ActionPlanner và ExecutionDispatcher có vai trò điều phối pipeline.
 
-#### 2.8. Đánh giá hệ thống RAG
+#### 2.4.6. Đánh giá hệ thống RAG
 
 Nội dung cần viết:
 
@@ -188,28 +303,7 @@ Nội dung cần viết:
   - tỷ lệ câu hỏi ngoài phạm vi được xử lý đúng;
   - khả năng truy vết lỗi qua log/debug.
 
-#### 2.9. Khảo sát giải pháp liên quan và thị trường
-
-Nội dung cần viết:
-
-- Nhóm chatbot rule-based.
-- Nhóm FAQ/keyword search.
-- Nhóm semantic search.
-- Nhóm chatbot gọi LLM trực tiếp.
-- Nhóm RAG chatbot.
-- Nhóm hybrid/adaptive RAG nếu có khảo sát.
-
-Bảng so sánh nên có các tiêu chí:
-
-| Nhóm giải pháp | Hiểu câu hỏi tự nhiên | Dùng dữ liệu riêng | Giảm hallucination | Khả năng mở rộng | Phù hợp với SGK |
-|---|---|---|---|---|---|
-| Rule-based | Thấp | Trung bình | Cao nếu luật đủ | Thấp | Thấp |
-| FAQ/keyword search | Thấp-Trung bình | Có | Trung bình | Trung bình | Trung bình |
-| LLM trực tiếp | Cao | Thấp nếu không nạp context | Thấp | Cao | Thấp-Trung bình |
-| RAG | Cao | Cao | Trung bình-Cao | Cao | Cao |
-| Adaptive/hybrid RAG | Cao | Cao | Cao hơn nếu retrieval tốt | Trung bình-Cao | Cao |
-
-#### 2.10. Khoảng trống và đề xuất giải pháp của đồ án
+#### 2.4.7. Khoảng trống và đề xuất giải pháp của đồ án
 
 Nội dung cần viết:
 
@@ -228,498 +322,174 @@ Kết chương 2 cần dẫn sang chương 3: chương sau sẽ thiết kế chi
 
 ### 5.1. Mục tiêu chương
 
-Chương 3 là chương trọng tâm về nghiên cứu/giải pháp. Chương này cần mô tả:
+Chương 3 là chương trọng tâm về phương pháp đề xuất. Chương này cần trả lời câu hỏi hệ thống được thiết kế như thế nào để giải quyết bài toán hỏi đáp và sinh nội dung dựa trên SGK Tin học THPT. Nội dung chương không trình bày theo hướng liệt kê package phần mềm, mà tổ chức theo các tầng xử lý chính của giải pháp: kiến trúc tổng quan, nền tảng tri thức, RAG core, tầng điều phối tác tử, tầng sinh nội dung đa tác tử và phương pháp đánh giá.
 
-- Kiến trúc pipeline được đề xuất.
-- Thiết kế chi tiết từng node.
-- Input/output của từng node.
-- Tham số hoặc quyết định kỹ thuật quan trọng.
-- Cách đánh giá các node trọng tâm, đặc biệt là retrieval và generation.
-- Các node còn lại như intent routing, query rewriting, context building và validate được mô tả về vai trò, input/output và kiểm thử chức năng. Không bắt buộc phải đánh giá định lượng sâu nếu không phải trọng tâm nghiên cứu.
+Trạng thái hiện tại: các mục 3.1 đến 3.4 đã được viết vào LaTeX ở mức bản thảo đầu. Mục 3.5 và 3.6 hiện mới có skeleton, cần viết tiếp sau khi chốt nội dung multi-agent và kết quả đánh giá retrieval/generation.
 
 Phạm vi đánh giá chính trong chương 3:
 
-| Node | Vai trò trong evaluation | Cách đánh giá chính |
-|---|---|---|
-| Retrieve | Node đánh giá định lượng chính | Chạy test nhiều chiến lược search và so sánh metric |
-| Rerank | Node phụ nhưng có thể đánh giá cùng retrieve | So sánh trước/sau rerank |
-| LLM generate | Node đánh giá chất lượng câu trả lời | Con người chấm theo rubric |
-| Validate | Node hỗ trợ kiểm soát runtime | Mô tả cơ chế và test chức năng, không dùng làm evaluator chính |
+| Node | Vai trò trong evaluation | Cách đánh giá chính | Trạng thái |
+|---|---|---|---|
+| Retrieve | Node đánh giá định lượng chính | Chạy benchmark retrieval và so sánh metric | Đã có benchmark/script, cần viết mô tả vào 3.6 |
+| Rerank | Node phụ nhưng quan trọng trong RAG core | So sánh trước/sau rerank | Chờ kết quả chạy đầy đủ với rerank |
+| LLM generate | Node đánh giá chất lượng câu trả lời | Dùng kết quả RAGAS đã có và/hoặc rubric thủ công | Chưa viết vào 3.6 |
+| Validate | Node hỗ trợ kiểm soát runtime | Mô tả cơ chế, không dùng làm evaluator chính | Chưa viết sâu |
 
-### 5.2. Cấu trúc đề xuất
+### 5.2. Cấu trúc chương 3 hiện tại
 
-#### 3.1. Mục tiêu thiết kế
+Chương 3 trong LaTeX hiện được tổ chức theo 7 mục chính, đánh số 3.1 đến 3.7 nếu tính cả Kết chương:
 
-Nội dung cần viết:
+| Mục | Tên trong LaTeX | Trạng thái | Vai trò |
+|---|---|---|---|
+| 3.1 | Tổng quan kiến trúc hệ thống | Đã viết | Giới thiệu bài toán, kiến trúc tổng thể, luồng xử lý và công nghệ nền. |
+| 3.2 | Nền tảng tri thức: tiền xử lý, chunking và lập chỉ mục | Đã viết | Mô tả cách biến SGK thành kho chunk có metadata, embedding và chỉ mục Qdrant. |
+| 3.3 | Cơ chế truy hồi ngữ cảnh (RAG core) | Đã viết | Trình bày keyword search/BM25, vector search, RRF, reranking và Adaptive RAG. |
+| 3.4 | Tầng điều phối tác tử | Đã viết | Trình bày Orchestration Agent, intent routing, context analysis, query rewriting, action planning và execution loop. |
+| 3.5 | Tầng sinh nội dung đa tác tử | Chưa viết xong | Cần mô tả content multi-agent cho slide/giáo án, supervisor-specialist, artifact và quality loop. |
+| 3.6 | Phương pháp đánh giá | Chưa viết xong | Cần mô tả benchmark retrieval, metric, before/after rerank và đánh giá generation. |
+| 3.7 | Kết chương | Chưa viết xong | Tổng kết các thành phần đã thiết kế và dẫn sang Chương 4. |
 
-- Hệ thống cần trả lời câu hỏi dựa trên SGK Tin học.
-- Câu trả lời cần đúng, đủ, dễ hiểu và có căn cứ từ context.
-- Pipeline cần hỗ trợ nhiều loại yêu cầu học tập.
-- Thiết kế phải phục vụ cả vận hành và đánh giá thực nghiệm.
+### 5.3. Nội dung đã viết xong trong Chương 3
 
-#### 3.2. Kiến trúc tổng thể
+#### 3.1. Tổng quan kiến trúc hệ thống
 
-Nội dung cần viết:
+Trạng thái: **đã viết bản đầu**.
 
-- Sơ đồ tổng quan hệ thống.
-- Chia thành hai pipeline:
-  - offline/indexing pipeline;
-  - online/question-answering pipeline.
-- Các khối chính:
-  - API/frontend;
-  - Orchestrator;
-  - ContextAnalyzer/QueryRewriter;
-  - IntentRouter;
-  - ActionPlanner;
-  - ExecutionDispatcher;
-  - RAGService/AdaptiveRAGAgent;
-  - Retriever;
-  - Reranker;
-  - LLM generation;
-  - Evaluation/logging.
+Nội dung đã khớp với bản thảo hiện tại:
 
-Chú ý: phần API/frontend chỉ mô tả như lớp giao tiếp, không đi sâu thiết kế UI.
+- Bài toán và yêu cầu của hệ thống: chatbot Tin học THPT trên dữ liệu SGK CD/KNTT lớp 10-12, hỗ trợ hỏi đáp, sinh slide và soạn giáo án.
+- Kiến trúc tổng thể theo hướng hai tầng: tầng điều phối tác tử và tầng sinh nội dung đa tác tử, vận hành trên nền RAG.
+- Luồng xử lý một yêu cầu từ input người dùng đến phân tích context/intent, lập kế hoạch, gọi service, truy xuất tri thức, sinh nội dung, kiểm soát chất lượng và trả kết quả.
+- Công nghệ nền được nêu ở mức phương pháp: LangGraph, Gemini, Qdrant, embedding model và reranker. Chi tiết cài đặt cụ thể sẽ để Chương 4.
+- Đã có sơ đồ tổng quan kiến trúc hệ thống và phần mô tả sau hình.
 
-#### 3.3. Thiết kế dữ liệu đầu vào
+Việc cần rà soát sau: cân chỉnh bố cục trang và bảo đảm mọi hình trong mục 3.1 đều được tham chiếu, mô tả bằng đoạn văn ngay trước/sau hình.
 
-Nội dung cần viết:
+#### 3.2. Nền tảng tri thức: tiền xử lý, chunking và lập chỉ mục
 
-- Nguồn dữ liệu: SGK Tin học THPT lớp 10-12, bộ Cánh Diều và Kết Nối Tri Thức.
-- Cấu trúc phân cấp: bộ sách, lớp, chủ đề, bài học, mục.
-- Metadata cần lưu:
-  - book;
-  - grade;
-  - topic;
-  - lesson;
-  - section;
-  - chunk_id;
-  - source file;
-  - page nếu có.
-- Các vấn đề dữ liệu:
-  - nội dung dài;
-  - cùng chủ đề xuất hiện ở nhiều lớp/bộ sách;
-  - thuật ngữ tiếng Việt chuyên ngành Tin học;
-  - nội dung bài học có cả lý thuyết, ví dụ và bài tập.
+Trạng thái: **đã viết bản đầu**.
 
-#### 3.4. Thiết kế tiền xử lý tài liệu
+Nội dung đã khớp với bản thảo hiện tại:
 
-Viết theo format:
+- Nguồn SGK, cấu trúc phân cấp và lược đồ metadata.
+- Bảng phân bố chunk theo loại nội dung và bảng mô tả metadata.
+- Quy trình tiền xử lý tài liệu và chunking theo heading.
+- Ví dụ prototype về một document có nhiều mức heading và cách sinh chunk tương ứng.
+- Biểu diễn vector tiếng Việt và lưu trữ Qdrant.
+- Đã loại bỏ các mô tả về quan hệ cha-con nếu hệ thống không lưu tường minh, tránh viết những phần không triển khai.
 
-- Mục đích.
-- Input.
-- Output.
-- Cách xử lý.
-- Lỗi có thể gặp.
-- Cách kiểm tra.
+Việc cần rà soát sau: nếu có số liệu chunk mới sau khi embedding lại full corpus, cần cập nhật bảng thống kê để khớp dữ liệu thực tế.
 
-Các bước nên trình bày:
+#### 3.3. Cơ chế truy hồi ngữ cảnh (RAG core)
 
-- đọc dữ liệu nguồn;
-- chuẩn hóa ký tự và encoding;
-- loại bỏ đoạn rỗng hoặc nhiễu;
-- giữ lại heading/section;
-- gắn metadata theo bộ sách, lớp, chủ đề, bài;
-- chuẩn hóa cấu trúc để phục vụ chunking.
+Trạng thái: **đã viết bản đầu**.
 
-#### 3.5. Thiết kế chunking
+Nội dung đã khớp với bản thảo hiện tại:
 
-Nội dung cần viết:
+- Giải thích tìm kiếm từ khóa (keyword search) và tìm kiếm ngữ nghĩa theo vector (vector search), sau đó dùng thuật ngữ chuyên ngành BM25, dense retrieval và cosine similarity.
+- Trình bày công thức TF, IDF, BM25, cosine similarity, RRF và score rerank.
+- Mỗi công thức có nhãn tham chiếu và giải thích tham số theo dạng "Trong đó:".
+- Trình bày cơ chế hợp nhất BM25 + dense bằng Reciprocal Rank Fusion.
+- Trình bày reranking bằng cross-encoder và vai trò đưa breadcrumb vào cặp query-document.
+- Mục Adaptive RAG đã đặt sơ đồ đúng vị trí và mô tả các strategy ở phần sau hình, tránh duplicate với phần tổng quan.
 
-- Vì sao không đưa toàn bộ tài liệu vào LLM.
-- Vì sao cần chia chunk cho retrieval.
-- Chiến lược chunking:
-  - chunk theo cấu trúc bài học nếu có;
-  - chunk theo độ dài;
-  - overlap để giảm mất ngữ cảnh;
-  - loại bỏ chunk quá ngắn hoặc không có nội dung.
-- Tham số cần báo cáo:
-  - chunk size;
-  - overlap;
-  - min/max length;
-  - separator.
-- Ảnh hưởng của chunking:
-  - chunk quá ngắn có thể thiếu ý;
-  - chunk quá dài có thể gây nhiễu;
-  - overlap quá lớn làm tăng trùng lặp.
-- Cách đánh giá:
-  - kiểm tra phân phối độ dài chunk;
-  - kiểm tra metadata;
-  - kiểm tra một số câu hỏi mẫu có truy xuất đúng chunk chứa đáp án không.
+Việc cần rà soát sau: khi có kết quả rerank cuối cùng, phần này có thể thêm một câu dẫn rằng hiệu quả thực nghiệm được báo cáo ở Chương 4, không đưa số liệu vào Chương 3 nếu chưa cần.
 
-#### 3.6. Thiết kế embedding và indexing
+#### 3.4. Tầng điều phối tác tử
 
-Nội dung cần viết:
+Trạng thái: **đã viết bản đầu**.
 
-- Input: nội dung chunk.
-- Output: vector embedding và payload metadata.
-- Lý do dùng embedding tiếng Việt.
-- Cách lưu index phục vụ similarity search.
-- Các payload quan trọng:
-  - text;
-  - book;
-  - grade;
-  - topic;
-  - lesson;
-  - source;
-  - chunk_id.
-- Rủi ro:
-  - embedding không bắt tốt thuật ngữ chuyên ngành;
-  - metadata sai làm filter sai;
-  - index không đồng bộ khi dữ liệu thay đổi.
+Nội dung đã khớp với bản thảo hiện tại:
 
-#### 3.7. Thiết kế phân tích ngữ cảnh và rewrite query
+- Lý do cần orchestration agent thay vì pipeline tuyến tính.
+- Intent routing bằng LLM, xử lý multi-intent và trích xuất scope như book/grade/topic.
+- ContextAnalyzer và QueryRewriter để xử lý câu hỏi phụ thuộc hội thoại, query mơ hồ và scope thiếu.
+- State management như nền của tầng điều phối: mô hình `Session`, `QuizState`, `SlideState`, luật vòng đời session trong `SessionManager.resolve_session()` và cách `get_context_messages()` được inject vào intent detection cùng query rewriting.
+- ActionPlanner, Dispatcher và execution loop kiểu OBSERVE--DECIDE--ACT.
+- Đã có các sơ đồ về intent routing, action planning và execution loop.
 
-Nội dung cần viết:
+Việc cần rà soát sau: cân bằng lại thuật ngữ tiếng Anh/tiếng Việt nếu đọc quá nặng tiếng Anh, nhưng vẫn nên giữ các thuật ngữ chuyên ngành như intent routing, query rewriting, action planning, dispatcher và execution loop.
 
-- Mục đích: xử lý câu hỏi phụ thuộc hội thoại hoặc thiếu thông tin.
-- Input: câu hỏi hiện tại, session/context trước đó.
-- Output:
-  - enriched query;
-  - danh sách query phụ cho retrieval;
-  - thông tin debug.
-- Các trường hợp cần rewrite:
-  - câu hỏi dùng đại từ hoặc tham chiếu như "phần này", "bài đó";
-  - câu hỏi thiếu chủ đề;
-  - câu hỏi cần mở rộng từ khóa.
-- Cách đánh giá:
-  - kiểm tra query rewrite có giữ đúng ý định không;
-  - so sánh retrieval trước và sau rewrite.
+### 5.4. Phần Chương 3 chưa viết xong
 
-#### 3.8. Thiết kế intent routing và action planning
+#### 3.5. Tầng sinh nội dung đa tác tử
 
-Nội dung cần viết:
+Trạng thái: **chưa viết xong, đang là skeleton trong LaTeX**.
 
-- Mục đích: xác định yêu cầu của người dùng để gọi đúng service.
-- Intent chính:
-  - hỏi đáp/giải thích;
-  - tạo quiz;
-  - chấm câu trả lời;
-  - sinh slide;
-  - sinh giáo án;
-  - fallback/out-of-scope.
-- Input: query đã enrich.
-- Output: intent result, task type, book/grade/topic nếu có.
-- Action planning:
-  - chuyển intent thành hành động cụ thể;
-  - hỗ trợ multi-intent nếu một câu có nhiều yêu cầu.
-- Vai trò trong nghiên cứu: bảo đảm request được đưa vào đúng pipeline, không phải trọng tâm đánh giá retrieval.
+Nội dung cần viết tiếp:
 
-#### 3.9. Thiết kế retrieval service
+- Mô hình Supervisor--Specialist và lý do lựa chọn so với single-agent.
+- Giao thức giao tiếp giữa các agent: `AgentTask`, `AgentTaskResult`, artifact, confidence, constraint và source grounding.
+- Content Supervisor và thứ tự delegate: outline -> content -> media/quiz -> merge -> quality.
+- Các specialist agent chính:
+  - PedagogyPlannerAgent: lập dàn ý sư phạm;
+  - ContentDraftingAgent: sinh nội dung bám nguồn;
+  - MediaResearchAgent: gợi ý học liệu minh họa;
+  - ContentAssessmentAgent: sinh câu hỏi hoặc hoạt động đánh giá nhúng.
+- Tổng hợp kết quả bằng service tất định như SlideMerger/SlideExportService, không mô tả merger như một agent tự trị nếu code không triển khai như agent.
+- QualityReviewerAgent, reflection loop và quality gate.
+- Human-in-the-loop (HITL) tại bước duyệt outline, cơ chế interrupt-resume.
+- Tái sử dụng kiến trúc cho slide và giáo án thông qua `task_type`, artifact schema và ContextBuilder/token budgeting.
 
-Viết từng retriever theo format:
+Các sơ đồ nên có hoặc tận dụng:
 
-- Mục đích.
-- Input.
-- Output.
-- Cách hoạt động.
-- Tham số.
-- Ưu điểm.
-- Hạn chế.
-- Cách đánh giá.
+- Sơ đồ Supervisor--Specialist cho content multi-agent.
+- Sơ đồ giao thức `AgentTask -> Specialist -> AgentTaskResult -> Artifact store/workflow state` nếu cần làm rõ communication protocol.
+- Sơ đồ quality loop và HITL nếu phần text dài.
 
-Các service/nút cần mô tả:
+#### 3.6. Phương pháp đánh giá
 
-##### 3.9.1. Vector Retriever
+Trạng thái: **chưa viết xong, đang là skeleton trong LaTeX**.
 
-- Nhận query hoặc rewritten queries.
-- Tạo embedding cho query.
-- Search top-k chunk gần nhất.
-- Áp dụng filter theo book/grade/topic nếu có.
-- Trả về danh sách candidate context.
+Nội dung cần viết tiếp:
 
-##### 3.9.2. Adaptive Retriever
+- Tách rõ đánh giá retrieval và đánh giá generation.
+- Retrieval là đánh giá định lượng chính, có benchmark single-gold theo lesson key và có thể tính Hit@k, Recall@k, Precision@k, MRR@k, nDCG@k.
+- Cần trình bày vì sao benchmark dùng single-gold lesson key trong bộ câu hỏi hiện tại, và cách tính metric dựa trên lesson key của retrieved chunk.
+- Cần mô tả hai cấu hình chính:
+  - no rerank: đo chất lượng retriever trước reranking;
+  - with rerank: đo chất lượng sau khi reranker sắp xếp lại candidate.
+- Cần báo cáo rằng benchmark hiện đã có khoảng 600 query, phân bố theo book/grade và có kết quả no-rerank sơ bộ tốt; số liệu với rerank sẽ cập nhật sau khi chạy xong.
+- Generation dùng kết quả RAGAS đã có hoặc rubric thủ công, không gọi lại LLM để đánh giá nếu chi phí không phù hợp.
+- Node validate bằng LLM trong pipeline chỉ là cơ chế kiểm soát runtime, không thay thế ground truth đánh giá generation.
 
-- Xác định chiến lược truy xuất dựa trên query, intent và scope.
-- Có thể điều chỉnh filter theo sách/lớp/chủ đề.
-- Có thể mở rộng query hoặc lấy nhiều nhóm context.
-- Trả về context có debug strategy.
+Logic benchmark retrieval cần giữ trong Chương 3/4:
 
-##### 3.9.3. Hybrid/graph retriever nếu có
-
-- Chỉ viết nếu hệ thống có cài đặt hoặc có kết quả thực nghiệm.
-- Trình bày rõ vai trò của graph hoặc hybrid retrieval.
-- Không phóng đại nếu graph chỉ là extension point hoặc chưa hoàn thiện.
-
-#### 3.10. Thiết kế reranking
-
-Nội dung cần viết:
-
-- Vì sao top-k ban đầu cần được rerank.
-- Input: query và danh sách candidate chunks.
-- Output: top-n context đã sắp xếp lại.
-- Tham số:
-  - số candidate trước rerank;
-  - số context sau rerank;
-  - model reranker.
-- Đánh đổi:
-  - tăng chất lượng context;
-  - tăng latency;
-  - tăng chi phí tính toán.
-- Cách đánh giá:
-  - so sánh Hit@k/MRR trước và sau rerank;
-  - kiểm tra các case rerank đưa chunk đúng lên vị trí cao hơn.
-
-#### 3.11. Thiết kế context building và context combining
-
-Nội dung cần viết:
-
-- Mục đích: biến retrieved chunks thành context đưa vào prompt.
-- Cách loại trùng hoặc ghép context.
-- Cách giữ metadata/source.
-- Cách kiểm soát độ dài context.
-- Rủi ro:
-  - context quá dài;
-  - context nhiễu;
-  - mất nguồn sau khi ghép.
-
-#### 3.12. Thiết kế generation service
-
-Nội dung cần viết:
-
-- Input:
-  - câu hỏi;
-  - context;
-  - prompt;
-  - metadata/source;
-  - lịch sử hội thoại nếu cần.
-- Output:
-  - câu trả lời cuối cùng;
-  - nguồn hoặc ngữ cảnh liên quan nếu có;
-  - thông tin debug.
-- Yêu cầu prompt:
-  - trả lời dựa trên context;
-  - không bịa khi context không đủ;
-  - diễn giải phù hợp với học sinh THPT;
-  - giữ thuật ngữ đúng.
-- Các lỗi cần dự phòng:
-  - context đúng nhưng trả lời sai;
-  - context thiếu dẫn tới trả lời thiếu;
-  - model suy diễn ngoài tài liệu;
-  - câu trả lời không phù hợp cấp học.
-
-#### 3.13. Thiết kế evaluation service
-
-Đây là phần cần làm nổi bật.
-
-Nội dung cần viết:
-
-- Mục tiêu:
-  - đánh giá retrieval bằng các metric tự động;
-  - đánh giá generation bằng rubric do con người chấm;
-  - so sánh cấu hình;
-  - phân tích lỗi pipeline.
-- Input:
-  - bộ câu hỏi đánh giá;
-  - expected answer;
-  - expected source/context;
-  - output của từng service;
-  - retrieved chunks;
-  - generated answer.
-- Output:
-  - file kết quả;
-  - bảng metric;
-  - log chi tiết;
-  - nhận xét lỗi.
-- Phạm vi:
-  - retrieval là phần evaluation định lượng chính;
-  - generation là phần evaluation định tính/bán định lượng do người đánh giá chấm;
-  - validate node chỉ được xem là bước kiểm soát chất lượng trong pipeline, không thay thế đánh giá thủ công của generation.
-
-#### 3.14. Thiết kế bộ câu hỏi đánh giá
-
-Nội dung cần viết:
-
-- Cách tạo tập câu hỏi từ SGK. Riêng benchmark cho **node Retrieve** dùng logic sinh từ chunk Level 1-2 và định nghĩa relevance đa nhãn mô tả ở mục 3.15bis.
-- Benchmark được sinh bằng LLM từ nội dung SGK/chunk đã có, sau đó cần kiểm tra thủ công một phần hoặc toàn bộ để bảo đảm câu hỏi, expected answer và expected context không lệch tài liệu.
-- Vai trò của LLM trong bước này là hỗ trợ tạo dữ liệu đánh giá ban đầu, không phải chấm điểm generation cuối cùng.
-- Quy trình tạo benchmark đề xuất:
-  - chọn phạm vi dữ liệu theo sách, lớp, chủ đề, bài;
-  - đưa nội dung chunk/bài học vào prompt sinh câu hỏi;
-  - yêu cầu LLM trả về question, expected answer, expected keywords, expected source metadata và question type;
-  - lọc bỏ câu hỏi trùng, quá mơ hồ hoặc không trả lời được từ tài liệu;
-  - kiểm tra thủ công các mẫu benchmark trước khi dùng để tính metric.
-- Các nhóm câu hỏi:
-  - định nghĩa;
-  - liệt kê;
-  - so sánh;
-  - quy trình;
-  - vận dụng;
-  - multi-hop nếu có;
-  - ngoài phạm vi tài liệu.
-- Mỗi sample nên có:
-  - question;
-  - expected_answer;
-  - expected_book;
-  - expected_grade;
-  - expected_topic;
-  - expected_lesson/section;
-  - expected_chunk_id nếu có;
-  - expected_keywords;
-  - source_chunk_text hoặc source_preview nếu cần kiểm tra lại;
-  - difficulty;
-  - question_type.
-
-#### 3.15. Thiết kế đánh giá retrieval
-
-Nội dung cần viết:
-
-- Định nghĩa retrieval đúng: retrieved context chứa thông tin cần thiết để trả lời câu hỏi.
-- Metrics:
+- Mỗi query gắn với một bài học gold thông qua `gold_lesson_key`.
+- Một retrieved chunk được xem là đúng nếu có cùng `(book, grade, topic_name, lesson_name)` với gold.
+- Metrics tính với k ∈ {1, 3, 5, 10}:
   - Hit@k;
   - Recall@k;
   - Precision@k;
-  - MRR;
-  - nDCG nếu có nhãn relevance.
-- Các cấu hình cần so sánh:
-  - top-k khác nhau;
-  - có/không query rewriting;
-  - có/không filter scope;
-  - trước/sau reranking;
-  - các retriever khác nếu có.
-- Các cách search có thể đưa vào thí nghiệm:
-  - vector search cơ bản;
-  - vector search có filter theo sách/lớp/chủ đề;
-  - vector search với rewritten query;
-  - vector search nhiều query rồi merge kết quả;
-  - vector search + rerank;
-  - adaptive retrieval nếu có chiến lược khác với vector search thường.
-- Cách phân tích:
-  - theo loại câu hỏi;
-  - theo lớp/bộ sách;
-  - theo chủ đề;
-  - theo lỗi thường gặp.
+  - MRR@k;
+  - nDCG@k.
+- Kết quả cần tách theo overall và theo nhóm book-grade, ví dụ CD-10, CD-11, CD-12, KNTT-10, KNTT-11, KNTT-12.
+- Output evaluation nên lưu raw per-query để phân tích lỗi.
 
-> Lưu ý về metric: với mỗi câu hỏi chỉ có **một** đơn vị gold thì Hit@k và Recall@k cho ra cùng một giá trị, còn Precision@k bị chặn trần ở 1/k. Để bốn metric ở trên đều có ý nghĩa độc lập, đồ án dùng định nghĩa gold **đa nhãn ở mức chunk-trong-bài** mô tả ở mục 3.15bis.
+Kết quả no-rerank hiện có thể dùng làm mốc sơ bộ cho Chương 4 sau này:
 
-#### 3.15bis. Đánh giá node Retrieve bằng benchmark sinh từ chunk Level 1-2 (chi tiết triển khai)
+| Nhóm | Hit@1 | Hit@10 | MRR@10 |
+|---|---:|---:|---:|
+| CD-10 | 0.700 | 0.970 | 0.809 |
+| CD-11 | 0.900 | 0.990 | 0.937 |
+| CD-12 | 0.770 | 0.980 | 0.843 |
+| KNTT-10 | 0.740 | 0.980 | 0.842 |
+| KNTT-11 | 0.700 | 1.000 | 0.813 |
+| KNTT-12 | 0.760 | 0.970 | 0.848 |
 
-Đây là phương án triển khai cụ thể cho việc đánh giá định lượng node Retrieve của đồ án. Mục này chốt rõ logic sinh benchmark, định nghĩa relevance và cách tính metric để dùng trực tiếp cho chương 4.
+Các số liệu trên là kết quả no-rerank trên 600 query, chưa dùng để kết luận cuối cùng cho reranker. Khi có kết quả with-rerank, cần cập nhật bảng so sánh trước/sau rerank ở Chương 4.
 
-**a. Đối tượng và phạm vi đánh giá**
+#### 3.7. Kết chương
 
-- Đánh giá **chất lượng truy xuất** của hệ thống RAG (Vector Retriever, Adaptive/Hierarchical Retriever, có/không rerank), không đánh giá generation.
-- Đơn vị "document" được chốt là **một bài học (lesson)**, khóa định danh: `(book, grade, topic_name, lesson_name)`, tương đương một file `bai*.md` trong dữ liệu nguồn.
-
-**b. Logic sinh benchmark từ chunk Level 1-2**
-
-- Dùng các **chunk Level 1 (Bài) và Level 2 (mục/section/objective)** trong `data/rag_chunks_v2.json` làm seed sinh câu hỏi, vì hai mức này bao quát nội dung của cả bài.
-- Field `level` (độ sâu heading) đã được export thật vào `rag_chunks_v2.json` (không còn suy ra từ breadcrumb). Quy mô seed thực tế: **Level 1 = 32 chunk, Level 2 = 1229 chunk → 1261 seed**, phủ 185 bài học. Phân bố level toàn bộ: `{1:32, 2:1229, 3:921, 4:137, 5:26, 6:3}`.
-- Với mỗi seed, LLM sinh câu hỏi tự nhiên kiểu **học sinh hỏi**, có thể trả lời được bằng nội dung của bài chứa seed đó.
-- Yêu cầu sinh query để **tránh data leakage**:
-  - cấm chép lại nguyên cụm từ tiêu đề/breadcrumb của chunk (vì `full_content` có nhúng breadcrumb, dễ làm BM25 match trivial);
-  - đa dạng cách diễn đạt và độ khó;
-  - câu hỏi phải trả lời được bằng **nội dung bài**, không chỉ bằng tên bài.
-
-**c. Định nghĩa relevance (đa nhãn ở mức chunk-trong-bài)**
-
-- Gold của một câu hỏi = **tập tất cả chunk cùng `(book, grade, topic_name, lesson_name)`** với chunk seed (gồm cả L1/L2 lẫn các chunk con Level 3+ của bài đó).
-- Lý do dùng đa nhãn:
-  - HRAG trả về chunk Level 3+ (không bao giờ trả đúng chunk L1/L2 seed) nên **không được so khớp theo `chunk_id`** của seed; phải so khớp theo lesson key.
-  - Đa nhãn làm Recall@k và Precision@k trở thành tín hiệu độc lập, thay vì trùng với Hit@k.
-- Một chunk được retrieve coi là **đúng** nếu lesson key của nó trùng lesson key của gold.
-
-**d. Tách hai trục đánh giá**
-
-- **(A) Pure retrieval**: ép chạy đúng một chiến lược (`_standard_retrieval`, `_hierarchical_retrieval`...) để đo chất lượng truy xuất thuần, loại trừ ảnh hưởng của routing.
-- **(B) Adaptive end-to-end**: chạy full `AdaptiveRAGAgent.retrieve()` và **breakdown metric theo `strategy_used`**, đồng thời báo cáo tỉ lệ mỗi strategy được chọn (để tách lỗi routing khỏi lỗi retrieval).
-
-**e. Metrics**
-
-- Tính với **k ∈ {1, 3, 5, 10}** (canh k theo `RETRIEVER_TOP_K`/`RERANKER_TOP_N` thực tế):
-  - Hit@k;
-  - Recall@k;
-  - Precision@k;
-  - MRR;
-  - nDCG@k (chuẩn cho ranking đa nhãn).
-- Báo cáo kèm **latency/query** (lấy từ `RAGResult.total_time_s`).
-
-**f. Lấy mẫu phân tầng (stratified)**
-
-- Phân bố câu hỏi đều theo **grade (10/11/12) × book (CD/KNTT) × topic × type (theory/exercise/application/objective)**.
-- In bảng phân bố tập benchmark vào báo cáo để chứng minh tính đại diện.
-
-**g. Quy trình kiểm tra chất lượng benchmark**
-
-- Validate tự động: dùng một LLM khác (hoặc chính retriever + spot-check tay ~10-20%) xác nhận bài gold thực sự trả lời được câu hỏi; loại câu hỏi rác/mơ hồ/không trả lời được.
-- Loại câu hỏi trùng và câu hỏi leak từ vựng quá nặng.
-
-**h. Schema file benchmark**
-
-```json
-{
-  "query_id": "...",
-  "query": "câu hỏi học sinh (đã validate, không leak)",
-  "gold_lesson_key": {"book": "KNTT", "grade": "10", "topic": "...", "lesson": "Bài 3"},
-  "gold_chunk_ids": ["...", "..."],
-  "source_level": 1,
-  "question_type": "definition | list | compare | process | application",
-  "gen_meta": {"model": "gemini-...", "validated_by": "..."}
-}
-```
-
-**i. Output cho chương 4**
-
-- Bảng metric theo từng cấu hình retrieval (xem mục 4.9).
-- Bảng breakdown theo grade/book/topic/question_type.
-- File raw kết quả từng query để phân tích lỗi.
-
-#### 3.16. Thiết kế đánh giá generation
-
-Nội dung cần viết:
-
-- Định nghĩa câu trả lời tốt:
-  - đúng;
-  - đủ;
-  - bám context;
-  - dễ hiểu;
-  - không hallucination.
-- Rubric gợi ý thang 1-5:
-  - 5: đúng, đủ, bám context rõ ràng;
-  - 4: đúng ý chính, thiếu chi tiết nhỏ;
-  - 3: đúng một phần hoặc thiếu căn cứ;
-  - 2: nhiều lỗi, thiếu hoặc lệch context;
-  - 1: sai hoặc bịa.
-- Có thể chấm theo các tiêu chí:
-  - correctness;
-  - faithfulness;
-  - completeness;
-  - clarity;
-  - citation/source use nếu có.
-- Phương pháp chấm:
-  - người đánh giá đọc câu hỏi, expected answer, retrieved context và generated answer;
-  - chấm theo rubric cố định để giảm tính chủ quan;
-  - mỗi câu trả lời nên ghi thêm lỗi chính nếu điểm thấp;
-  - nếu có nhiều người chấm, lấy trung bình hoặc thảo luận lại các mẫu lệch điểm lớn.
-- Không dùng LLM-as-judge làm phương pháp chính ở giai đoạn này để tránh tăng chi phí. Node validate bằng LLM nếu đã có trong pipeline chỉ dùng như cơ chế kiểm tra nội bộ, không được xem là ground truth đánh giá chất lượng generation.
-- Cần phân biệt lỗi do retrieval và lỗi do generation.
-
-#### 3.17. Thiết kế logging, trace và debug
-
-Nội dung cần viết:
-
-- Mục tiêu: hỗ trợ tái lập thí nghiệm và phân tích lỗi.
-- Mỗi request nên ghi:
-  - request id;
-  - user query;
-  - enriched query;
-  - intent;
-  - action plan;
-  - scope;
-  - retrieved chunks;
-  - rerank scores;
-  - prompt hoặc prompt metadata;
-  - generated answer;
-  - evaluation score nếu có.
-- Liên hệ với SessionStore, TraceService và debug_steps.
-
-#### 3.18. Kết chương 3
+Trạng thái: **chưa viết xong**.
 
 Kết chương cần tóm tắt:
 
-- Đã thiết kế pipeline RAG/adaptive retrieval.
-- Đã xác định vai trò từng node.
-- Đã đề xuất phương pháp đánh giá retrieval và generation.
-- Chương 4 sẽ trình bày cài đặt và kết quả thực nghiệm.
+- Đã trình bày kiến trúc tổng thể và luồng xử lý chính.
+- Đã mô tả nền tảng tri thức và RAG core.
+- Đã mô tả tầng điều phối tác tử và tầng sinh nội dung đa tác tử.
+- Đã xác định phương pháp đánh giá retrieval/generation.
+- Chương 4 sẽ trình bày cài đặt, kiểm thử và kết quả thực nghiệm.
 
 ## 6. Chương 4: Cài đặt, kiểm thử và kết quả thực nghiệm
 
@@ -849,7 +619,7 @@ Bảng test case gợi ý:
 
 #### 4.9. Kết quả đánh giá retrieval
 
-Bảng kết quả gợi ý (k ∈ {1,3,5,10}, gold đa nhãn mức lesson theo mục 3.15bis):
+Bảng kết quả gợi ý (k ∈ {1,3,5,10}, benchmark single-gold theo lesson key như mô tả ở mục 3.6):
 
 | Cấu hình | Hit@5 | Recall@5 | Precision@5 | MRR | nDCG@5 | Latency(s) | Nhận xét |
 |---|---:|---:|---:|---:|---:|---:|---|
@@ -1004,35 +774,32 @@ Nội dung nên tổ chức theo các nhóm:
 - Hỗ trợ học tập cá nhân hóa theo tiến độ.
 - Tích hợp phản hồi giáo viên vào vòng cải thiện nội dung.
 
-## 9. Thứ tự triển khai viết báo cáo
+## 9. Thứ tự triển khai tiếp theo
 
-Nên viết theo thứ tự sau để tránh bị loạn:
+Thứ tự triển khai hiện tại được cập nhật theo trạng thái đã viết của bản thảo:
 
-1. Chốt mục tiêu nghiên cứu và phạm vi đóng góp.
-2. Chốt pipeline ở chương 3 bằng sơ đồ và danh sách node.
-3. Viết chương 3 trước ở dạng skeleton kỹ thuật.
-4. Từ chương 3 rút ngược lại các kiến thức cần đưa vào chương 2.
-5. Viết chương 2 theo hướng: lý thuyết -> khảo sát -> khoảng trống -> đề xuất.
-6. Chạy hoặc tổng hợp evaluation để có số liệu cho chương 4.
-7. Viết chương 4 theo kết quả thực nghiệm thực tế.
-8. Viết chương 5 và 6 sau cùng.
-9. Quay lại chỉnh phần Tổng quan/Kết chương để các chương liên kết mạch lạc.
-10. Đối chiếu guideline trong `docs/latex_writing_guidelines_vi.md`.
+1. Rà soát nhanh Chương 2 sau khi compile PDF: văn phong, độ dài, bảng so sánh và liên kết dẫn sang Chương 3.
+2. Hoàn thiện Chương 3.5 về tầng sinh nội dung đa tác tử, ưu tiên Supervisor--Specialist, giao thức agent, artifact, quality loop và HITL.
+3. Hoàn thiện Chương 3.6 về phương pháp đánh giá, bao gồm retrieval benchmark, metric, no-rerank/with-rerank và generation evaluation.
+4. Cập nhật kết chương 3 để tóm tắt đúng các phần đã viết và dẫn sang Chương 4.
+5. Khi có kết quả rerank đầy đủ, viết Chương 4 theo kết quả thực nghiệm thực tế.
+6. Sau Chương 4, chỉnh lại Chương 5 và Chương 6 để tổng kết đúng đóng góp, hạn chế và hướng phát triển.
+7. Quay lại rà soát toàn bộ văn phong theo guideline: không bullet tùy tiện, mọi bảng/hình/công thức đều được tham chiếu và giải thích.
 
-## 10. Checklist trước khi chuyển sang LaTeX
+## 10. Checklist rà soát hiện tại
 
-- Chương 2 đã giải thích đủ vì sao cần RAG chưa.
-- Chương 2 có khảo sát và khoảng trống rõ ràng chưa.
-- Chương 3 đã mô tả input/output của từng node chưa.
-- Chương 3 có phương pháp đánh giá retrieval và generation chưa.
-- Chương 4 có kết quả thực nghiệm thật hoặc bảng dự kiến cần điền số liệu chưa.
-- Chương 4 có phân tích lỗi thay vì chỉ liệt kê test case chưa.
-- Chương 5 có nêu đóng góp đúng mức, không phóng đại chưa.
-- Chương 6 có hướng phát triển bám theo hạn chế chưa.
-- Các phần web app/package/API có bị viết quá dài so với phần nghiên cứu không.
-- Các thuật ngữ như RAG, embedding, reranking, hallucination, faithfulness được giải thích trước khi dùng chưa.
-- Các bảng metric có định nghĩa rõ cách tính chưa.
-- Có câu nào mang tính quảng bá hoặc cảm tính cần bỏ không.
+| Mục kiểm tra | Trạng thái | Ghi chú |
+|---|---|---|
+| Chương 2 đã giải thích đủ vì sao cần RAG/adaptive retrieval | Đã xong bản đầu | Cần rà văn phong và citation nếu muốn bổ sung sau. |
+| Chương 2 có khảo sát và khoảng trống rõ ràng | Đã xong bản đầu | Đã có bảng so sánh và định vị giải pháp. |
+| Chương 3.1-3.4 đã có nội dung | Đã xong bản đầu | Cần rà bố cục hình và mức độ thuật ngữ. |
+| Chương 3.5 đã mô tả content multi-agent | Chưa xong | Đây là phần cần viết tiếp. |
+| Chương 3.6 đã mô tả phương pháp đánh giá | Chưa xong | Cần viết retrieval/generation evaluation. |
+| Chương 4 có kết quả thực nghiệm thật | Chưa cập nhật | Đang chờ kết quả rerank đầy đủ. |
+| Các phần web app/package/API không lấn át phần nghiên cứu | Đang kiểm soát | Tiếp tục giữ ở mức cài đặt/chứng minh hệ thống chạy được. |
+| Thuật ngữ RAG, embedding, reranking, hallucination, faithfulness được giải thích trước khi dùng | Đã có nền ở Chương 2 | Cần giữ nhất quán ở Chương 3-4. |
+| Các bảng metric có định nghĩa rõ cách tính | Chưa xong | Sẽ viết trong Chương 3.6 và Chương 4. |
+| Văn phong tránh quảng bá/cảm tính | Đang rà soát | Ưu tiên văn phong khoa học, mô tả dựa trên thiết kế và kết quả. |
 
 ## 11. Deliverable cần có
 

@@ -302,3 +302,17 @@ Generated evaluation results used in the thesis are stored in:
 - This repository contains both research artifacts and runnable application code.
 - Some notebooks and helper scripts are exploratory and were used during development; they should not be treated as the canonical runtime path.
 - The current prototype is single-node and local-first. Full multi-user deployment, production-grade user management, and cross-subject expansion are future-work items, not completed features.
+
+## E2E Run Commands
+
+FastAPI:
+
+```bash
+source venv/bin/activate && python app/api.py
+```
+
+UI:
+
+```bash
+cd app/frontend && npm run dev
+```
