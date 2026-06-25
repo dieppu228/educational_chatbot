@@ -109,7 +109,11 @@ class RAGService:
         task_type: Optional[str],
         debug_node: str,
     ) -> List[Dict]:
-        weighted_queries = self._build_weighted_queries(ctx, queries, book, grade_hint)
+        lesson_reference = ctx.intent_result.lesson_reference if ctx.intent_result else None
+        lesson_context = self._lookup_lesson_context(book, grade_hint, lesson_reference)
+        weighted_queries = self._build_weighted_queries(
+            ctx, queries, book, grade_hint, lesson_context=lesson_context
+        )
         if len(weighted_queries) <= 1:
             query = weighted_queries[0] if weighted_queries else (ctx.query, 1.0)
             result = self.rag_agent.retrieve(
@@ -118,6 +122,9 @@ class RAGService:
                 topic_hint=topic_hint,
                 grade_hint=grade_hint,
                 book=book,
+                task_type=task_type,
+                lesson_reference=lesson_reference,
+                lesson_context=lesson_context,
             )
             ctx.add_debug_step(
                 debug_node,
@@ -128,6 +135,17 @@ class RAGService:
                 time_s=result.total_time_s,
                 filter=result.metadata_filter,
                 reason=result.reason,
+                standard_candidates=result.debug_stats.get("standard_candidates"),
+                broad_candidates=result.debug_stats.get("broad_candidates"),
+                hrag_candidates=result.debug_stats.get("hrag_candidates"),
+                lesson_scoped_candidates=result.debug_stats.get("lesson_scoped_candidates"),
+                merged_candidates=result.debug_stats.get("merged_candidates"),
+                pre_rerank_candidates=result.debug_stats.get("pre_rerank_candidates"),
+                pre_rerank_cap_applied=result.debug_stats.get("pre_rerank_cap_applied"),
+                lesson_scoped=result.debug_stats.get("lesson_scoped"),
+                lesson_context=result.debug_stats.get("lesson_context"),
+                hrag_enabled=result.debug_stats.get("hrag_enabled"),
+                hrag_reason=result.debug_stats.get("hrag_reason"),
             )
             return self._rerank_and_filter(query[0], result.chunks, task_type)
 
@@ -159,6 +177,8 @@ class RAGService:
         seen_doc_ids = set()
         strategies = []
         query_time_sum = 0.0
+        lesson_reference = ctx.intent_result.lesson_reference if ctx.intent_result else None
+        lesson_context = self._lookup_lesson_context(book, grade_hint, lesson_reference)
 
         def retrieve_one(item: Tuple[str, float]):
             q, weight = item
@@ -168,6 +188,9 @@ class RAGService:
                 topic_hint=topic_hint,
                 grade_hint=grade_hint,
                 book=book,
+                task_type=task_type,
+                lesson_reference=lesson_reference,
+                lesson_context=lesson_context,
             )
 
         max_workers = min(len(weighted_queries), 4)
@@ -197,6 +220,15 @@ class RAGService:
             query_time_sum_s=round(query_time_sum, 2),
             filter={"grade": grade_hint, "topic": topic_hint, "book": book},
             reason=f"Multi-query search ({len(weighted_queries)} queries)",
+            retrieval_debug=[
+                {
+                    "query": q,
+                    "weight": weight,
+                    "strategy": result.strategy_used.value,
+                    **(result.debug_stats or {}),
+                }
+                for q, weight, result in results
+            ],
         )
         return self._rerank_and_filter(
             [q for q, _ in weighted_queries],
@@ -244,9 +276,12 @@ class RAGService:
         queries: List[str],
         book: Optional[str],
         grade: Optional[str],
+        lesson_context: Optional[Dict[str, str]] = None,
     ) -> List[Tuple[str, float]]:
         base_queries = queries or [ctx.query]
         weighted = [(q, 1.0) for q in base_queries if q]
+        if lesson_context:
+            return weighted
         lesson_reference = ctx.intent_result.lesson_reference if ctx.intent_result else None
         if not (book and grade and lesson_reference and weighted):
             return weighted
@@ -265,6 +300,20 @@ class RAGService:
         if contextual_query not in {q for q, _ in weighted}:
             weighted.append((contextual_query, 0.75))
         return weighted
+
+    def _lookup_lesson_context(
+        self,
+        book: Optional[str],
+        grade: Optional[str],
+        lesson_reference: Optional[str],
+    ) -> Optional[Dict[str, str]]:
+        if not (book and grade and lesson_reference):
+            return None
+        return self.knowledge_map.lookup_lesson_context(
+            book,
+            lesson_reference,
+            grade_hint=grade,
+        )
 
     @staticmethod
     def _should_fallback_scope(

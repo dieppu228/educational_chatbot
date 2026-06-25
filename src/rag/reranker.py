@@ -11,6 +11,7 @@ class Reranker:
     def __init__(self, model_name: Optional[str] = None, device: Optional[str] = None):
         self.model_name = model_name or settings.RERANKER_MODEL
         self.device = device or settings.RERANKER_DEVICE or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.batch_size = int(getattr(settings, "RERANKER_BATCH_SIZE", 8) or 8)
         self._model = None  # Lazy load
         self._load_failed = False
     
@@ -48,7 +49,7 @@ class Reranker:
             pairs = [[query, self._rerank_text(r)] for r in results]
 
             # Cross-encoder scoring
-            scores = self._model.predict(pairs)
+            scores = self._model.predict(pairs, batch_size=self.batch_size)
 
             # Gắn score vào results
             for i, score in enumerate(scores):
@@ -80,7 +81,10 @@ class Reranker:
             self._load_model()
             docs = [self._rerank_text(r) for r in results]
             pairs = [[q, doc] for q in queries for doc in docs]
-            scores = np.asarray(self._model.predict(pairs), dtype=np.float32)
+            scores = np.asarray(
+                self._model.predict(pairs, batch_size=self.batch_size),
+                dtype=np.float32,
+            )
             scores = scores.reshape(len(queries), len(results))
             if query_weights and len(query_weights) == len(queries):
                 weights = np.asarray(query_weights, dtype=np.float32).reshape(len(queries), 1)

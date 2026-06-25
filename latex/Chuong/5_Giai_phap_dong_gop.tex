@@ -1,111 +1,111 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Các chương trước đã trình bày nền tảng lý thuyết, phương pháp đề xuất và kết quả thực nghiệm của hệ thống. Chương này tập trung phân tích các giải pháp và đóng góp nổi bật của đồ án dưới góc nhìn thiết kế kỹ thuật. Trọng tâm không nằm ở việc mô tả lại từng mô-đun (module), mà làm rõ những quyết định thiết kế có ý nghĩa thực tiễn, các vấn đề khó phát sinh khi xây dựng trợ lý giáo dục dựa trên LLM và cách hệ thống giải quyết các vấn đề đó bằng một kiến trúc có thể kiểm soát, dễ mở rộng và phù hợp với dữ liệu sách giáo khoa.
+Các chương trước đã trình bày nền tảng lý thuyết, phương pháp đề xuất và kết quả thực nghiệm của hệ thống. Chương này tập trung phân tích các giải pháp và đóng góp của đồ án dưới góc nhìn thiết kế kỹ thuật. Trọng tâm không nằm ở việc mô tả lại từng mô-đun, mà làm rõ những quyết định thiết kế có ý nghĩa thực tiễn, các vấn đề phát sinh khi xây dựng trợ lý giáo dục dựa trên LLM và cách hệ thống giải quyết các vấn đề đó bằng một kiến trúc có thể kiểm soát, mở rộng và phù hợp với dữ liệu sách giáo khoa.
 
-Các đóng góp chính gồm xây dựng nền tảng tri thức cho SGK phân cấp, kết hợp hybrid truy xuất (retrieval) với adaptive truy xuất cho truy vấn giáo dục, thiết kế tầng điều phối hỗ trợ multi-ý định (intent) và hội thoại đa lượt, tổ chức luồng xử lý (pipeline) sinh nội dung đa tác tử có kiểm soát, và đưa ra một số quyết định thiết kế giúp hệ thống đạt được tính thực dụng trong triển khai.
+Các đóng góp chính gồm xây dựng nền tảng tri thức phân cấp cho SGK, kết hợp truy xuất lai với truy xuất thích ứng cho truy vấn giáo dục, thiết kế tầng điều phối hỗ trợ đa ý định và hội thoại đa lượt, tổ chức luồng xử lý sinh nội dung đa tác tử có kiểm soát, và đưa ra một số quyết định thiết kế phục vụ triển khai thực tế.
 
-\section{Xây dựng nền tảng tri thức dựa trên phân đoạn (chunk) phân cấp và siêu dữ liệu (metadata)}
-
-\subsection{Vấn đề cần giải quyết}
-
-Khác với nhiều bài toán hỏi đáp trên văn bản số hóa sẵn, dữ liệu đầu vào của đồ án là các tệp PDF sách giáo khoa. Đây không phải là nguồn văn bản sạch có thể đưa trực tiếp vào bước phân đoạn (chunking) và lập chỉ mục. Nếu quá trình chuyển đổi PDF sang text làm sai nội dung, sai tiêu đề (heading) hoặc mất cấu trúc bài học, chất lượng của toàn bộ các bước phía sau như phân đoạn, truy xuất và sinh văn bản (generation) đều bị ảnh hưởng.
-
-Khó khăn lớn ở bước này là đặc thù của SGK Tin học THPT. Tài liệu chứa văn bản lý thuyết, tiêu đề phân cấp, bảng, sơ đồ, câu hỏi cuối bài và nhiều đoạn mã nguồn minh họa. Trong quá trình thử nghiệm ban đầu, một số hướng OCR self-host cho tiếng Việt cho kết quả chưa ổn định: sai ký tự, sai cấu trúc tiêu đề, xử lý kém với bảng và sơ đồ, đồng thời khó chuyển các đoạn mã nguồn sang dạng văn bản phù hợp với luồng xử lý truy xuất. Vì vậy, bài toán ở đây không chỉ là nhận dạng ký tự, mà là chuẩn hóa được một tập ngữ liệu (corpus) có cấu trúc để phục vụ tầng tri thức.
-
-\subsection{Giải pháp}
-
-Đồ án tổ chức bước tiền xử lý dữ liệu theo hai pha. Pha thứ nhất chuyển từng trang PDF sang Markdown thô bằng một mô hình thị giác-ngôn ngữ có năng lực OCR mạnh hơn trên tiếng Việt. Trong câu lệnh (prompt) OCR, đầu ra được ràng buộc theo hướng giữ nguyên nội dung văn bản, loại bỏ ảnh và yếu tố trang trí, chuẩn hóa tiêu đề ở mức cơ bản, đồng thời thay các đoạn mã nguồn bằng mô tả chức năng ngắn gọn. Cách làm này phù hợp với định hướng của đồ án là truy xuất trên văn bản, không truy xuất trực tiếp trên ảnh.
-
-Pha thứ hai chuẩn hóa lại Markdown thô để thu được cấu trúc tiêu đề nhất quán cho toàn bộ SGK. Ở bước này, các phần như mục chính, mục con, tóm tắt bài học, luyện tập và vận dụng được đưa về các cấp tiêu đề xác định; đồng thời watermark, header/footer và các dấu vết OCR được loại bỏ. Sau khi có văn bản sạch, hệ thống mới thực hiện phân đoạn theo tiêu đề, gắn siêu dữ liệu như bộ sách, lớp, chủ đề, bài học, \texttt{level}, \texttt{breadcrumb} và \texttt{lesson\_key}, rồi mới chuyển sang bước embedding và indexing.
-
-Việc dùng mô hình bên thứ ba ở bước OCR là một quyết định thực dụng hơn là một đóng góp thuật toán. Thành phần này mang tính black-box và không phải trọng tâm nghiên cứu của đồ án. Tuy nhiên, nó giải quyết được yêu cầu quan trọng nhất của dữ liệu đầu vào là bảo toàn đủ nội dung và cấu trúc để các bước xử lý phía sau hoạt động ổn định. Do đó, phần đóng góp của đồ án không nằm ở chính mô hình OCR, mà ở cách tổ chức luồng xử lý chuyển đổi PDF sang tập ngữ liệu Markdown có thể đưa vào hệ tri thức một cách nhất quán.
-
-\subsection{Đóng góp đạt được}
-
-Đóng góp nổi bật của phần này là biến một nguồn dữ liệu SGK ban đầu ở dạng PDF không đồng nhất thành một tập ngữ liệu có cấu trúc đủ tốt để phục vụ toàn bộ luồng xử lý RAG. Việc đầu tư cho bước PDF-to-Markdown giúp giảm lỗi lan truyền xuống các tầng sau, đặc biệt là lỗi sai phạm vi bài học, sai tiêu đề và sai quan hệ giữa nội dung với siêu dữ liệu.
-
-Bên cạnh đó, cách kết hợp giữa văn bản đã chuẩn hóa, phân đoạn phân cấp và siêu dữ liệu thống nhất tạo ra một nền tảng tri thức có thể mở rộng. Đây là tiền đề để cùng một cơ sở dữ liệu có thể phục vụ đồng thời truy xuất cho hỏi đáp, sinh quiz, sinh slide và sinh giáo án, thay vì phải xây dựng nhiều nguồn dữ liệu tách rời cho từng chức năng.
-
-\section{Kết hợp hybrid truy xuất, xếp hạng lại (reranking) và adaptive truy xuất}
+\section{Xây dựng nền tảng tri thức dựa trên phân đoạn phân cấp và siêu dữ liệu}
 
 \subsection{Vấn đề cần giải quyết}
 
-Dữ liệu sách giáo khoa có đặc điểm khác với dữ liệu web mở. Nhiều khái niệm quan trọng được trình bày ngắn, có thuật ngữ chuyên ngành, tên lệnh, tên bài học hoặc cấu trúc chương mục rõ ràng. Nếu chỉ dùng tìm kiếm ngữ nghĩa, hệ thống có thể bỏ sót các đoạn có từ khóa chính xác. Nếu chỉ dùng tìm kiếm từ khóa, hệ thống khó xử lý câu hỏi diễn đạt tự nhiên khác với văn bản trong sách.
+Khác với nhiều bài toán hỏi đáp trên văn bản số hóa sẵn, dữ liệu đầu vào của đồ án là các tệp PDF sách giáo khoa. Đây không phải là nguồn văn bản sạch có thể đưa trực tiếp vào bước phân đoạn và lập chỉ mục. Nếu quá trình chuyển đổi PDF sang văn bản làm sai nội dung, sai tiêu đề hoặc mất cấu trúc bài học, chất lượng của toàn bộ các bước phía sau như phân đoạn, truy xuất và sinh văn bản đều bị ảnh hưởng.
 
-Ngoài ra, không phải câu hỏi nào cũng cần cùng một cách truy xuất. Câu hỏi ``giải thích khái niệm cơ sở dữ liệu'' cần đoạn nội dung chi tiết, trong khi câu hỏi ``lớp 12 có những chủ đề nào'' cần tổng hợp cấu trúc chương trình. Một luồng xử lý RAG cố định dễ hoặc lấy thiếu ngữ cảnh, hoặc tốn chi phí không cần thiết.
+Vấn đề chính ở bước này là đặc thù của SGK Tin học THPT. Tài liệu chứa văn bản lý thuyết, tiêu đề phân cấp, bảng, sơ đồ, câu hỏi cuối bài và nhiều đoạn mã nguồn minh họa. Trong quá trình thử nghiệm ban đầu, một số hướng OCR tự triển khai cho tiếng Việt cho kết quả chưa ổn định: sai ký tự, sai cấu trúc tiêu đề, xử lý kém với bảng và sơ đồ, đồng thời chưa chuyển được các đoạn mã nguồn sang dạng văn bản phù hợp với luồng xử lý truy xuất. Vì vậy, bài toán ở đây không chỉ là nhận dạng ký tự, mà là chuẩn hóa được một tập ngữ liệu có cấu trúc để phục vụ tầng tri thức.
 
 \subsection{Giải pháp}
 
-Hệ thống sử dụng truy xuất lai gồm tìm kiếm từ khóa BM25-like, tìm kiếm ngữ nghĩa bằng embedding tiếng Việt, hợp nhất thứ hạng bằng RRF và xếp hạng lại bằng bộ xếp hạng lại (reranker). BM25 giúp giữ độ nhạy với thuật ngữ chính xác, còn embedding giúp bắt được các câu hỏi diễn đạt theo cách tự nhiên. RRF được dùng để hợp nhất hai danh sách kết quả mà không yêu cầu điểm số của chúng nằm trên cùng một thang đo. Các quyết định này bám theo các hướng truy hồi và xếp hạng lại đã được chứng minh trong truy hồi thông tin hiện đại \cite{robertson2009bm25,reimers2019sbert,cormack2009rrf,nogueira2019passage}.
+Đồ án tổ chức bước tiền xử lý dữ liệu theo hai pha. Pha thứ nhất chuyển từng trang PDF sang Markdown thô bằng một mô hình thị giác-ngôn ngữ có năng lực OCR phù hợp với tiếng Việt. Trong câu lệnh OCR, đầu ra được ràng buộc theo hướng giữ nguyên nội dung văn bản, loại bỏ ảnh và yếu tố trang trí, chuẩn hóa tiêu đề ở mức cơ bản, đồng thời thay các đoạn mã nguồn bằng mô tả chức năng ngắn gọn. Cách làm này phù hợp với định hướng của đồ án là truy xuất trên văn bản, không truy xuất trực tiếp trên ảnh.
 
-Trên lớp truy xuất cơ sở, đồ án xây dựng \texttt{AdaptiveRAGAgent}. Thành phần này chọn chiến lược (strategy) dựa trên \texttt{QueryClassifier} heuristic, không dùng LLM để ra quyết định. Bốn chiến lược chính gồm \texttt{STANDARD}, \texttt{BROAD}, \texttt{CURRICULUM} và \texttt{HIERARCHICAL}. \texttt{STANDARD} dùng cho truy vấn cụ thể nhưng thiếu phạm vi rõ. \texttt{BROAD} dùng cho câu hỏi tổng quan. \texttt{CURRICULUM} ưu tiên siêu dữ liệu chương trình học. \texttt{HIERARCHICAL} dùng khi có đủ tín hiệu lớp/chủ đề để truy xuất theo cấp bài học rồi mới đi vào phân đoạn chi tiết.
+Pha thứ hai chuẩn hóa lại Markdown thô để thu được cấu trúc tiêu đề nhất quán cho toàn bộ SGK. Ở bước này, các phần như mục chính, mục con, tóm tắt bài học, luyện tập và vận dụng được đưa về các cấp tiêu đề xác định; đồng thời dấu bản quyền, đầu trang, chân trang và các dấu vết OCR được loại bỏ. Sau khi có văn bản sạch, hệ thống mới thực hiện phân đoạn theo tiêu đề, gắn siêu dữ liệu như bộ sách, lớp, chủ đề, bài học, \texttt{level}, \texttt{breadcrumb} và \texttt{lesson\_key}, rồi mới chuyển sang bước nhúng văn bản và lập chỉ mục.
 
-Hệ thống còn bổ sung phạm vi (scope) fallback. Khi phạm vi sách/lớp chỉ đến từ UI và không đủ phân đoạn phù hợp, RAGService có thể mở rộng phạm vi tìm kiếm, đồng thời ghi lại \texttt{actual\_scope}, \texttt{scope\_fallback\_notice} và debug step tương ứng. Nhờ vậy, hệ thống không trả lời rỗng quá sớm nhưng vẫn minh bạch về phạm vi dữ liệu đã dùng.
+Việc dùng mô hình bên thứ ba ở bước OCR là một quyết định triển khai, không phải một đóng góp thuật toán. Thành phần này được xem như một hộp đen và không phải trọng tâm nghiên cứu của đồ án. Tuy nhiên, nó đáp ứng yêu cầu của dữ liệu đầu vào là bảo toàn đủ nội dung và cấu trúc để các bước xử lý phía sau hoạt động ổn định. Do đó, phần đóng góp của đồ án không nằm ở chính mô hình OCR, mà ở cách tổ chức luồng xử lý chuyển đổi PDF sang tập ngữ liệu Markdown có thể đưa vào hệ tri thức một cách nhất quán.
 
 \subsection{Đóng góp đạt được}
 
-Đóng góp ở đây không chỉ là ghép nhiều kỹ thuật truy xuất, mà là đặt chúng trong một cơ chế chọn chiến lược theo loại câu hỏi. Cách làm này phù hợp với bài toán giáo dục vì câu hỏi của học sinh và giáo viên có mức độ cụ thể rất khác nhau. Adaptive RAG giúp hệ thống cân bằng giữa độ chính xác, độ bao phủ và chi phí truy xuất.
+Đóng góp của phần này là biến một nguồn dữ liệu SGK ban đầu ở dạng PDF không đồng nhất thành một tập ngữ liệu có cấu trúc đủ để phục vụ toàn bộ luồng xử lý RAG. Việc đầu tư cho bước chuyển đổi PDF sang Markdown giúp giảm lỗi lan truyền xuống các tầng sau, đặc biệt là lỗi sai phạm vi bài học, sai tiêu đề và sai quan hệ giữa nội dung với siêu dữ liệu.
 
-Việc QueryClassifier là heuristic cũng là một quyết định có chủ đích. Thay vì gọi LLM thêm một lượt để chọn chiến lược truy xuất, hệ thống giữ bước này nhanh, có thể kiểm thử và có thể giải thích. Đây là điểm quan trọng trong một hệ thống cần ổn định hơn là thể hiện khả năng suy luận tự do.
+Bên cạnh đó, cách kết hợp giữa văn bản đã chuẩn hóa, phân đoạn phân cấp và siêu dữ liệu thống nhất tạo ra một nền tảng tri thức có thể mở rộng. Đây là tiền đề để cùng một cơ sở dữ liệu có thể phục vụ đồng thời truy xuất cho hỏi đáp, sinh bài luyện tập, sinh bản trình chiếu và soạn giáo án, thay vì phải xây dựng nhiều nguồn dữ liệu tách rời cho từng chức năng.
 
-\section{Thiết kế tầng điều phối cho multi-ý định và multi-turn conversation}
+\section{Kết hợp truy xuất lai, xếp hạng lại và truy xuất thích ứng}
 
 \subsection{Vấn đề cần giải quyết}
 
-Trong giao diện hội thoại, người dùng không luôn đưa ra một yêu cầu đơn lẻ. Một câu có thể chứa nhiều ý định, ví dụ yêu cầu tạo slide rồi thêm câu hỏi luyện tập, hoặc vừa giải thích kiến thức vừa sinh bài tập. Nếu hệ thống chỉ chọn một ý định duy nhất, một phần yêu cầu sẽ bị bỏ qua. Ngược lại, nếu để LLM tự thực thi toàn bộ chuỗi hành động, hệ thống dễ sinh ra luồng không nhất quán với các dịch vụ (service) đang có.
+Dữ liệu sách giáo khoa có đặc điểm khác với dữ liệu Internet mở. Nhiều khái niệm cốt lõi được trình bày ngắn, có thuật ngữ chuyên ngành, tên lệnh, tên bài học hoặc cấu trúc chương mục rõ ràng. Nếu chỉ dùng tìm kiếm ngữ nghĩa, hệ thống có thể bỏ sót các đoạn có từ khóa chính xác. Nếu chỉ dùng tìm kiếm từ khóa, hệ thống hạn chế trong việc xử lý câu hỏi diễn đạt tự nhiên khác với văn bản trong sách.
+
+Ngoài ra, không phải câu hỏi nào cũng cần cùng một cách truy xuất. Câu hỏi ``giải thích khái niệm cơ sở dữ liệu'' cần đoạn nội dung chi tiết, trong khi câu hỏi ``lớp 12 có những chủ đề nào'' cần tổng hợp cấu trúc chương trình. Một luồng xử lý RAG cố định có thể lấy thiếu ngữ cảnh hoặc tốn chi phí không cần thiết.
 
 \subsection{Giải pháp}
 
-\texttt{IntentRouter.detect\_multi()} phân tích tối đa ba ý định trong một câu hỏi. Mỗi ý định gồm nhóm ý định chính, loại nhiệm vụ, chủ đề, lớp, bộ sách và một số siêu dữ liệu cần thiết. Sau đó, \texttt{ActionPlanner.plan\_all()} chuyển danh sách ý định thành danh sách hành động (action) cụ thể như sinh quiz, sinh slide, sinh giáo án, chấm câu trả lời, ôn câu sai hoặc giải thích khái niệm.
+Hệ thống sử dụng truy xuất lai gồm tìm kiếm từ khóa theo hướng BM25, tìm kiếm ngữ nghĩa bằng vector nhúng tiếng Việt, hợp nhất thứ hạng bằng RRF và xếp hạng lại bằng bộ xếp hạng lại. BM25 giúp giữ độ nhạy với thuật ngữ chính xác, còn vector nhúng giúp bắt được các câu hỏi diễn đạt theo cách tự nhiên. RRF được dùng để hợp nhất hai danh sách kết quả mà không yêu cầu điểm số của chúng nằm trên cùng một thang đo. Các quyết định này bám theo các hướng truy hồi và xếp hạng lại đã được chứng minh trong truy hồi thông tin hiện đại \cite{robertson2009bm25,reimers2019sbert,cormack2009rrf,nogueira2019passage}.
 
-Việc giới hạn số ý định là một quyết định thực tế. Nó đủ để xử lý các câu lệnh ghép thường gặp, nhưng tránh để một câu nhập mơ hồ sinh ra quá nhiều hành động và làm phình trạng thái (state). Sau bước lập kế hoạch, \texttt{ExecutionDispatcher} chịu trách nhiệm gọi đúng dịch vụ hoặc trình xử lý (handler) theo hành động đã xác định.
+Trên lớp truy xuất cơ sở, đồ án xây dựng \texttt{AdaptiveRAGAgent}. Thành phần này chọn chiến lược dựa trên \texttt{QueryClassifier} theo luật xác định, không dùng LLM để ra quyết định. Bốn chiến lược chính gồm \texttt{STANDARD}, \texttt{BROAD}, \texttt{CURRICULUM} và \texttt{HIERARCHICAL}. \texttt{STANDARD} dùng cho truy vấn cụ thể nhưng thiếu phạm vi rõ. \texttt{BROAD} dùng cho câu hỏi tổng quan. \texttt{CURRICULUM} ưu tiên siêu dữ liệu chương trình học. \texttt{HIERARCHICAL} dùng khi có đủ tín hiệu lớp/chủ đề để truy xuất theo cấp bài học rồi mới đi vào phân đoạn chi tiết.
+
+Hệ thống còn bổ sung cơ chế mở rộng phạm vi dự phòng. Khi phạm vi sách/lớp chỉ đến từ giao diện và không đủ phân đoạn phù hợp, \texttt{RAGService} có thể mở rộng phạm vi tìm kiếm, đồng thời ghi lại \texttt{actual\_scope}, \texttt{scope\_fallback\_notice} và bước theo dõi tương ứng. Nhờ vậy, hệ thống không trả lời rỗng quá sớm nhưng vẫn minh bạch về phạm vi dữ liệu đã dùng.
 
 \subsection{Đóng góp đạt được}
 
-Cơ chế này giúp hệ thống xử lý yêu cầu tự nhiên tốt hơn mà vẫn giữ được tính quyết định của backend. LLM được dùng để hiểu câu nói của người dùng, nhưng kế hoạch thực thi cuối cùng được đưa về cấu trúc hành động rõ ràng. Điều này tạo ra một ranh giới cần thiết giữa năng lực ngôn ngữ của LLM và logic nghiệp vụ của phần mềm.
+Đóng góp ở đây không chỉ là ghép nhiều kỹ thuật truy xuất, mà là đặt chúng trong một cơ chế chọn chiến lược theo loại câu hỏi. Cách làm này phù hợp với bài toán giáo dục vì câu hỏi của học sinh và giáo viên có mức độ cụ thể khác nhau. Truy xuất thích ứng giúp hệ thống cân bằng giữa độ chính xác, độ bao phủ và chi phí truy xuất.
 
-\section{Triển khai kiến trúc supervisor--specialist trong sinh nội dung}
+Việc \texttt{QueryClassifier} dựa trên luật xác định cũng là một quyết định thiết kế có chủ đích. Thay vì gọi LLM thêm một lượt để chọn chiến lược truy xuất, hệ thống giữ bước này nhanh, có thể kiểm thử và có thể giải thích. Điều này phù hợp với một hệ thống cần ưu tiên tính ổn định hơn khả năng suy luận tự do của mô hình.
+
+\section{Thiết kế tầng điều phối cho đa ý định và hội thoại đa lượt}
 
 \subsection{Vấn đề cần giải quyết}
 
-Sinh câu hỏi luyện tập có thể xuất hiện trong hai bối cảnh khác nhau. Bối cảnh thứ nhất là quiz độc lập (standalone), nơi người dùng tạo bộ câu hỏi, trả lời, được chấm điểm, xem lại câu sai và theo dõi tiến độ. Bối cảnh thứ hai là đánh giá (assessment) nhúng trong slide hoặc giáo án, nơi câu hỏi chỉ là một sản phẩm đầu ra (artifact) phụ để củng cố bài giảng.
-
-Nếu gộp hai bối cảnh này vào cùng một tác tử (agent) hoặc cùng một luồng xử lý, hệ thống sẽ khó quản lý trạng thái. Quiz độc lập cần lưu từng lượt làm bài, từng câu hỏi, câu trả lời của người dùng, số lần thử và kết quả chấm. Đánh giá trong slide lại chủ yếu cần nội dung phù hợp với bài học và format trình bày.
+Trong giao diện hội thoại, người dùng không luôn đưa ra một yêu cầu đơn lẻ. Một câu có thể chứa nhiều ý định, ví dụ yêu cầu tạo bản trình chiếu rồi thêm câu hỏi luyện tập, hoặc vừa giải thích kiến thức vừa sinh bài tập. Nếu hệ thống chỉ chọn một ý định duy nhất, một phần yêu cầu sẽ bị bỏ qua. Ngược lại, nếu để LLM tự thực thi toàn bộ chuỗi hành động, hệ thống có nguy cơ sinh ra luồng không nhất quán với các dịch vụ đang có.
 
 \subsection{Giải pháp}
 
-Đồ án giữ \texttt{QuizService} là một dịch vụ độc lập cho quiz tương tác. Dịch vụ này quản lý vòng đời sinh câu hỏi, kiểm tra chất lượng, lưu \texttt{QuizRound}, lưu \texttt{QuestionRecord}, chấm câu trả lời, review câu sai và thống kê tiến độ. Các trình xử lý câu hỏi như trắc nghiệm, tự luận, điền khuyết và đúng/sai được giữ trong luồng xử lý quiz riêng.
+\texttt{IntentRouter.detect\_multi()} phân tích tối đa ba ý định trong một câu hỏi. Mỗi ý định gồm nhóm ý định chính, loại nhiệm vụ, chủ đề, lớp, bộ sách và một số siêu dữ liệu cần thiết. Sau đó, \texttt{ActionPlanner.plan\_all()} chuyển danh sách ý định thành danh sách hành động cụ thể như sinh bài luyện tập, sinh bản trình chiếu, sinh giáo án, chấm câu trả lời, ôn câu sai hoặc giải thích khái niệm.
 
-Trong nội dung (content) multi-tác tử luồng xử lý, \texttt{ContentAssessmentAgent} chỉ sinh đánh giá nhúng cho slide hoặc giáo án. Tác tử này không thay thế \texttt{QuizService} và không quản lý trạng thái làm bài của học sinh. Cách tách này giúp tránh nhầm lẫn giữa một bài kiểm tra tương tác và một phần hoạt động trong tài liệu giảng dạy.
+Việc giới hạn số ý định là một quyết định thực tế. Nó đủ để xử lý các câu lệnh ghép thường gặp, nhưng tránh để một câu nhập mơ hồ sinh ra quá nhiều hành động và làm phình trạng thái. Sau bước lập kế hoạch, \texttt{ExecutionDispatcher} chịu trách nhiệm gọi đúng dịch vụ hoặc trình xử lý theo hành động đã xác định.
 
 \subsection{Đóng góp đạt được}
 
-Đây là một đóng góp kiến trúc quan trọng vì nó giữ đúng ranh giới nghiệp vụ. Quiz độc lập có thể phát triển thêm các chức năng học tập cá nhân hóa mà không ảnh hưởng đến luồng xử lý sinh slide. Ngược lại, luồng xử lý sinh slide/giáo án có thể tối ưu cho sản phẩm đầu ra dài mà không phải mang theo toàn bộ logic chấm điểm và theo dõi attempt.
+Cơ chế này giúp hệ thống xử lý yêu cầu tự nhiên mà vẫn giữ được tính quyết định của tầng xử lý phía sau. LLM được dùng để hiểu câu nói của người dùng, nhưng kế hoạch thực thi cuối cùng được đưa về cấu trúc hành động rõ ràng. Điều này tạo ra một ranh giới cần thiết giữa năng lực ngôn ngữ của LLM và quy tắc nghiệp vụ của phần mềm.
 
-\section{Đóng góp thiết kế trong việc nâng cao tính kiểm soát, khả năng mở rộng và tính thực dụng của hệ thống}
+\section{Triển khai kiến trúc điều phối--chuyên trách trong sinh nội dung}
+
 \subsection{Vấn đề cần giải quyết}
 
-Tạo slide và giáo án là tác vụ dài hơn nhiều so với hỏi đáp hoặc sinh một bộ câu hỏi ngắn. Hệ thống phải xác định mục tiêu học tập, lập dàn ý, viết nội dung chi tiết, gợi ý đa phương tiện (media), thêm đánh giá, ghép kết quả và kiểm tra chất lượng. Nếu giao toàn bộ tác vụ này cho một câu lệnh duy nhất, đầu ra dễ thiếu cấu trúc, bỏ sót phần quan trọng hoặc khó sửa khi người dùng muốn thay đổi dàn ý. Đồng thời, nếu mọi năng lực đều được nhúng trực tiếp vào một tác tử trung tâm, hệ thống sẽ khó kiểm soát, khó mở rộng và khó theo dõi lỗi khi đưa vào vận hành thực tế.
+Sinh câu hỏi luyện tập có thể xuất hiện trong hai bối cảnh khác nhau. Bối cảnh thứ nhất là bài luyện tập độc lập, nơi người dùng tạo bộ câu hỏi, trả lời, được chấm điểm, xem lại câu sai và theo dõi tiến độ. Bối cảnh thứ hai là đánh giá nhúng trong bản trình chiếu hoặc giáo án, nơi câu hỏi chỉ là một sản phẩm đầu ra phụ để củng cố bài giảng.
+
+Nếu gộp hai bối cảnh này vào cùng một tác tử hoặc cùng một luồng xử lý, hệ thống sẽ khó quản lý trạng thái. Bài luyện tập độc lập cần lưu từng lượt làm bài, từng câu hỏi, câu trả lời của người dùng, số lần thử và kết quả chấm. Đánh giá trong bản trình chiếu lại chủ yếu cần nội dung phù hợp với bài học và định dạng trình bày.
 
 \subsection{Giải pháp}
 
-Đồ án dùng LangGraph cho phạm vi nội dung luồng xử lý của slide và giáo án. Ở cấp hệ thống, Orchestrator vẫn là controller mã nguồn; LangGraph chỉ điều phối luồng sinh nội dung dài. \texttt{ContentSupervisor} gọi các công cụ (tool) adapter tương ứng với các specialist tác tử như \texttt{PedagogyPlannerAgent}, \texttt{ContentDraftingAgent}, \texttt{MediaResearchAgent}, \texttt{ContentAssessmentAgent} và \texttt{QualityReviewerAgent}. Cách tổ chức này phù hợp với xu hướng phân tách vai trò trong hệ đa tác tử dựa trên LLM \cite{guo2024multiagents,park2023generativeagents}.
+Đồ án giữ \texttt{QuizService} là một dịch vụ độc lập cho bài luyện tập tương tác. Dịch vụ này quản lý vòng đời sinh câu hỏi, kiểm tra chất lượng, lưu \texttt{QuizRound}, lưu \texttt{QuestionRecord}, chấm câu trả lời, xem lại câu sai và thống kê tiến độ. Các trình xử lý câu hỏi như trắc nghiệm, tự luận, điền khuyết và đúng/sai được giữ trong luồng xử lý bài luyện tập riêng.
 
-Các tác tử không trao đổi tự do mà đi qua contract A2A-lite. Supervisor tạo \texttt{AgentTask}, specialist tác tử trả \texttt{AgentTaskResult}. Task chứa mục tiêu, đầu vào, ràng buộc, ngữ cảnh (context) refs và sản phẩm đầu ra mong đợi. Kết quả chứa trạng thái, sản phẩm đầu ra, confidence, warnings, used tools và latency. Contract này giúp mỗi kết quả trung gian có chủ sở hữu rõ ràng và dễ ghi debug. Sau khi các sản phẩm đầu ra được tạo, \texttt{merge\_results} ghép dàn ý (outline), nội dung, đa phương tiện và đánh giá thành kết quả thống nhất; kết quả sau đó được đưa qua \texttt{QualityReviewerAgent} và reflection loop để quyết định approve, revise hoặc block.
-
-Song song với đó, hệ thống đặt HITL tại bước duyệt dàn ý nhằm đưa người dùng vào đúng điểm quyết định có ảnh hưởng lớn nhất. Về mặt vận hành, \texttt{SessionStore}, \texttt{TraceService} và các quality path riêng cho quiz, slide, giáo án được bổ sung để lưu trạng thái đa lượt, quan sát tiến trình xử lý và hỗ trợ kiểm thử. Một điểm mở rộng quan trọng khác là khả năng theo dõi tiến trình học tập thông qua việc quản lý \texttt{student profile} như một phần của trạng thái. Trạng thái của hệ thống có thể giữ các lượt làm quiz, câu trả lời sai và mức độ hoàn thành theo chủ đề cho các lượt tương tác tiếp theo. Ngoài ra, một công cụ layer in-process được tổ chức như điểm mở rộng có kiểm soát để tích hợp truy xuất, nội dung formatting, đa phương tiện search và export sản phẩm đầu ra; định hướng này tương đồng với xu hướng chuẩn hóa lớp công cụ cho tác tử LLM như Model Context Protocol \cite{anthropic2024mcp,ehtesham2025agentprotocols,lumer2025scalemcp}.
+Trong luồng xử lý nội dung đa tác tử, \texttt{ContentAssessmentAgent} chỉ sinh đánh giá nhúng cho bản trình chiếu hoặc giáo án. Tác tử này không thay thế \texttt{QuizService} và không quản lý trạng thái làm bài của học sinh. Cách tách này giúp tránh nhầm lẫn giữa một bài kiểm tra tương tác và một phần hoạt động trong tài liệu giảng dạy.
 
 \subsection{Đóng góp đạt được}
 
-Đóng góp chính của phần này là tổ chức tác vụ sinh nội dung dài thành các bước có sản phẩm đầu ra rõ ràng, đồng thời giữ được tính kiểm soát ở nhiều mức: kiểm soát cấu trúc sinh nội dung, kiểm soát vòng đời hội thoại, kiểm soát trạng thái học tập của người dùng và kiểm soát điểm mở rộng của hệ thống. Hệ thống không chỉ sinh một đoạn văn lớn, mà có dàn ý, nội dung, đa phương tiện siêu dữ liệu, đánh giá và review; người dùng cũng có thể can thiệp tại bước dàn ý thay vì chỉ nhận kết quả cuối.
+Đây là một đóng góp kiến trúc vì nó giữ đúng ranh giới nghiệp vụ. Bài luyện tập độc lập có thể phát triển thêm các chức năng học tập cá nhân hóa mà không ảnh hưởng đến luồng xử lý sinh bản trình chiếu. Ngược lại, luồng xử lý sinh bản trình chiếu hoặc giáo án có thể tối ưu cho sản phẩm đầu ra dài mà không phải mang theo toàn bộ quy tắc chấm điểm và theo dõi lượt làm bài.
 
-A2A-lite, HITL, quality path, phiên (session), hồ sơ học sinh (student profile), vết thực thi (trace) và công cụ layer không phải các thành phần tách rời, mà cùng tạo nên một kiến trúc có khả năng mở rộng và vận hành thực tế. Đây là điểm khác biệt quan trọng của đồ án: kiến trúc được tổ chức theo hướng có thể kiểm soát, quan sát, điều chỉnh và mở rộng khi số lượng tác vụ và độ phức tạp của quy trình làm việc (workflow) tăng lên. Việc theo dõi tiến trình học tập thông qua trạng thái cũng mở ra nền tảng cho các cơ chế hỗ trợ học tập cá nhân hóa ở các phiên bản tiếp theo.
+\section{Đóng góp thiết kế trong việc nâng cao tính kiểm soát, khả năng mở rộng và khả năng triển khai của hệ thống}
+\subsection{Vấn đề cần giải quyết}
+
+Tạo bản trình chiếu và giáo án là tác vụ dài hơn nhiều so với hỏi đáp hoặc sinh một bộ câu hỏi ngắn. Hệ thống phải xác định mục tiêu học tập, lập dàn ý, viết nội dung chi tiết, gợi ý học liệu minh họa, thêm đánh giá, ghép kết quả và kiểm tra chất lượng. Nếu giao toàn bộ tác vụ này cho một câu lệnh duy nhất, đầu ra có nguy cơ thiếu cấu trúc, bỏ sót phần cốt lõi hoặc khó sửa khi người dùng muốn thay đổi dàn ý. Đồng thời, nếu mọi năng lực đều được nhúng trực tiếp vào một tác tử trung tâm, hệ thống sẽ khó kiểm soát, khó mở rộng và khó theo dõi lỗi khi đưa vào vận hành thực tế.
+
+\subsection{Giải pháp}
+
+Đồ án dùng LangGraph cho phạm vi nội dung luồng xử lý của bản trình chiếu và giáo án. Ở cấp hệ thống, \texttt{Orchestrator} vẫn là bộ điều khiển trong mã nguồn; LangGraph chỉ điều phối luồng sinh nội dung dài. \texttt{ContentSupervisor} gọi các bộ chuyển đổi công cụ tương ứng với các tác tử chuyên trách như \texttt{PedagogyPlannerAgent}, \texttt{ContentDraftingAgent}, \texttt{MediaResearchAgent}, \texttt{ContentAssessmentAgent} và \texttt{QualityReviewerAgent}. Cách tổ chức này phù hợp với xu hướng phân tách vai trò trong hệ đa tác tử dựa trên LLM \cite{guo2024multiagents,park2023generativeagents}.
+
+Các tác tử không trao đổi tự do mà đi qua hợp đồng A2A-lite. Bộ điều phối tạo \texttt{AgentTask}, tác tử chuyên trách trả \texttt{AgentTaskResult}. Tác vụ chứa mục tiêu, đầu vào, ràng buộc, tham chiếu ngữ cảnh và sản phẩm đầu ra mong đợi. Kết quả chứa trạng thái, sản phẩm đầu ra, độ tin cậy, cảnh báo, công cụ đã dùng và độ trễ. Hợp đồng này giúp mỗi kết quả trung gian có chủ sở hữu rõ ràng và dễ ghi vết. Sau khi các sản phẩm đầu ra được tạo, \texttt{merge\_results} ghép dàn ý, nội dung, đa phương tiện và đánh giá thành kết quả thống nhất; kết quả sau đó được đưa qua \texttt{QualityReviewerAgent} và vòng phản tư để quyết định chấp nhận, sửa lại hoặc chặn.
+
+Song song với đó, hệ thống đặt HITL tại bước duyệt dàn ý nhằm đưa người dùng vào điểm quyết định có ảnh hưởng lớn tới cấu trúc đầu ra. Về mặt vận hành, \texttt{SessionStore}, \texttt{TraceService} và các đường xử lý chất lượng riêng cho bài luyện tập, bản trình chiếu, giáo án được bổ sung để lưu trạng thái đa lượt, quan sát tiến trình xử lý và hỗ trợ kiểm thử. Một điểm mở rộng khác là khả năng theo dõi tiến trình học tập thông qua việc quản lý hồ sơ học sinh như một phần của trạng thái. Trạng thái của hệ thống có thể giữ các lượt làm bài luyện tập, câu trả lời sai và mức độ hoàn thành theo chủ đề cho các lượt tương tác tiếp theo. Ngoài ra, một lớp công cụ chạy trong tiến trình được tổ chức như điểm mở rộng có kiểm soát để tích hợp truy xuất, định dạng nội dung, tìm kiếm đa phương tiện và xuất sản phẩm đầu ra; định hướng này tương đồng với xu hướng chuẩn hóa lớp công cụ cho tác tử LLM như Model Context Protocol \cite{anthropic2024mcp,ehtesham2025agentprotocols}.
+
+\subsection{Đóng góp đạt được}
+
+Đóng góp chính của phần này là tổ chức tác vụ sinh nội dung dài thành các bước có sản phẩm đầu ra rõ ràng, đồng thời giữ được tính kiểm soát ở nhiều mức: kiểm soát cấu trúc sinh nội dung, kiểm soát vòng đời hội thoại, kiểm soát trạng thái học tập của người dùng và kiểm soát điểm mở rộng của hệ thống. Hệ thống không chỉ sinh một đoạn văn lớn, mà có dàn ý, nội dung, siêu dữ liệu đa phương tiện, đánh giá và hậu kiểm; người dùng cũng có thể can thiệp tại bước dàn ý thay vì chỉ nhận kết quả cuối.
+
+A2A-lite, HITL, đường xử lý chất lượng, phiên, hồ sơ học sinh, vết thực thi và lớp công cụ không phải các thành phần tách rời, mà cùng tạo nên một kiến trúc có khả năng mở rộng và vận hành thực tế. Đây là điểm khác biệt của đồ án: kiến trúc được tổ chức theo hướng có thể kiểm soát, quan sát, điều chỉnh và mở rộng khi số lượng tác vụ và độ phức tạp của quy trình làm việc tăng lên. Việc theo dõi tiến trình học tập thông qua trạng thái cũng mở ra nền tảng cho các cơ chế hỗ trợ học tập cá nhân hóa ở các phiên bản tiếp theo.
 
 \section{Kết chương}
 
-Chương này đã hệ thống hóa các giải pháp và đóng góp chính của đồ án. Các đóng góp không nằm ở một thuật toán riêng lẻ, mà ở cách kết hợp LLM với các lớp điều phối, truy xuất, kiểm tra chất lượng, quản lý trạng thái và quan sát hệ thống. Thiết kế này giúp Educational Chatbot tránh phụ thuộc hoàn toàn vào khả năng sinh tự do của LLM, đồng thời giữ được tính mở rộng cho các chức năng giáo dục như quiz, slide và giáo án.
+Chương này đã hệ thống hóa các giải pháp và đóng góp chính của đồ án. Các đóng góp không nằm ở một thuật toán riêng lẻ, mà ở cách kết hợp LLM với các lớp điều phối, truy xuất, kiểm tra chất lượng, quản lý trạng thái và quan sát hệ thống. Thiết kế này giúp Educational Chatbot tránh phụ thuộc hoàn toàn vào khả năng sinh tự do của LLM, đồng thời giữ được tính mở rộng cho các chức năng giáo dục như bài luyện tập, bản trình chiếu và giáo án.
 
-Những đóng góp trên cho thấy các khó khăn chính của đề tài đã được xử lý theo hướng thực dụng: truy xuất thích nghi theo loại câu hỏi, điều phối kiểm soát nhiều ý định, quiz tương tác tách khỏi sản phẩm đầu ra sinh văn bản, multi-tác tử có contract rõ ràng, và người dùng được đưa vào vòng duyệt ở các điểm quyết định.
+Những đóng góp trên cho thấy các khó khăn chính của đề tài đã được xử lý theo hướng triển khai thực tế: truy xuất thích nghi theo loại câu hỏi, điều phối kiểm soát nhiều ý định, bài luyện tập tương tác tách khỏi sản phẩm đầu ra sinh văn bản, đa tác tử có hợp đồng rõ ràng, và người dùng được đưa vào vòng duyệt ở các điểm quyết định.
 
 \end{document}

@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     RERANKER_MIN_SCORE: float = 0.00
     RRF_K_WEIGHT: int = 60
     RAG_BROAD_MAX_CHUNKS: int = 30
+    RAG_PRE_RERANK_MAX_CANDIDATES: int = 25
+    RAG_PRE_RERANK_MAX_CANDIDATES_SLIDE: int = 28
+    RAG_PRE_RERANK_MAX_CANDIDATES_LESSON_PLAN: int = 34
+    RAG_PRE_RERANK_HRAG_QUOTA_SLIDE: int = 10
+    RAG_PRE_RERANK_HRAG_QUOTA_LESSON_PLAN: int = 12
 
     # ===== Question Generation / Scoring =====
     MIN_QUESTIONS: int = 1
@@ -55,6 +60,7 @@ class Settings(BaseSettings):
     EMBEDDING_BATCH_SIZE: int = 64
     RERANKER_MODEL: str = "AITeamVN/Vietnamese_Reranker"
     RERANKER_DEVICE: Optional[str] = None
+    RERANKER_BATCH_SIZE: int = 8
 
     # ===== File Paths =====
     DATA_DIR: str = "data"

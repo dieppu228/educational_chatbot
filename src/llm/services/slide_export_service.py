@@ -11,7 +11,9 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from PIL import Image
 from pptx import Presentation
-from pptx.enum.text import PP_ALIGN
+from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
 
 from src.config.config import project_path, settings
@@ -206,14 +208,81 @@ class SlideExportService:
                     str(exc)[:160],
                 )
 
-        text = caption if not url else f"{caption}\n{url}"
-        box = slide.shapes.add_textbox(Inches(8.4), Inches(1.55), Inches(3.6), Inches(3.8))
-        frame = box.text_frame
+        self._add_media_placeholder(slide, media, caption, placeholder_idx=placeholder_idx)
+        if url:
+            slide_data["__placeholder_media_url"] = url
+
+    def _add_media_placeholder(
+        self,
+        slide,
+        media: Dict[str, Any],
+        caption: str,
+        *,
+        placeholder_idx: int,
+    ) -> None:
+        """Render a tidy framed placeholder when the real image is unavailable."""
+        label = self._media_placeholder_label(media)
+        caption = self._shorten(caption or "Ảnh minh hoạ", 140)
+        left, top, width, height = self._media_region(slide, placeholder_idx)
+
+        shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, left, top, width, height)
+        shape.shadow.inherit = False
+        shape.fill.solid()
+        shape.fill.fore_color.rgb = RGBColor(0xF2, 0xF3, 0xF6)
+        shape.line.color.rgb = RGBColor(0xC4, 0xCB, 0xD6)
+        shape.line.width = Pt(1)
+
+        frame = shape.text_frame
         frame.word_wrap = True
-        frame.text = self._shorten(text, 260)
-        for paragraph in frame.paragraphs:
-            paragraph.alignment = PP_ALIGN.CENTER
-            paragraph.font.size = Pt(13)
+        frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+        badge = frame.paragraphs[0]
+        badge.text = f"◇  {label}"
+        badge.alignment = PP_ALIGN.CENTER
+        badge.font.size = Pt(13)
+        badge.font.bold = True
+        badge.font.color.rgb = RGBColor(0x7A, 0x82, 0x90)
+
+        caption_p = frame.add_paragraph()
+        caption_p.text = caption
+        caption_p.alignment = PP_ALIGN.CENTER
+        caption_p.font.size = Pt(12)
+        caption_p.font.color.rgb = RGBColor(0x3A, 0x3F, 0x4A)
+        caption_p.space_before = Pt(10)
+
+        hint = frame.add_paragraph()
+        hint.text = "Ảnh minh hoạ sẽ được bổ sung ở bản hoàn thiện"
+        hint.alignment = PP_ALIGN.CENTER
+        hint.font.size = Pt(9)
+        hint.font.italic = True
+        hint.font.color.rgb = RGBColor(0x9A, 0xA0, 0xAC)
+        hint.space_before = Pt(6)
+
+    @staticmethod
+    def _media_placeholder_label(media: Dict[str, Any]) -> str:
+        media_type = str(media.get("type") or media.get("media_type") or "image").lower()
+        return {
+            "gif": "ẢNH ĐỘNG",
+            "animation": "ẢNH ĐỘNG",
+            "diagram": "SƠ ĐỒ MINH HOẠ",
+            "infographic": "INFOGRAPHIC",
+        }.get(media_type, "HÌNH MINH HOẠ")
+
+    def _media_region(self, slide, placeholder_idx: int):
+        placeholder = self._placeholder(slide, placeholder_idx)
+        if placeholder is not None:
+            try:
+                left, top, width, height = (
+                    placeholder.left,
+                    placeholder.top,
+                    placeholder.width,
+                    placeholder.height,
+                )
+                if None not in (left, top, width, height):
+                    return left, top, width, height
+            except Exception:
+                logger.debug("Placeholder geometry unavailable; using default region", exc_info=True)
+        return Inches(8.4), Inches(1.55), Inches(3.6), Inches(3.8)
 
     def _pick_layout(self, prs, name: str):
         idx = self.LAYOUT_INDEX.get(name, self.LAYOUT_INDEX["content"])
@@ -406,6 +475,9 @@ class SlideExportService:
         overflow = self._overflow_notes(slide_data)
         if overflow:
             notes.append(overflow)
+        placeholder_url = slide_data.get("__placeholder_media_url")
+        if placeholder_url:
+            notes.append(f"Nguồn ảnh (placeholder): {placeholder_url}")
         sources = slide_data.get("source_chunk_ids") or []
         if sources:
             notes.append("Nguồn chunk: " + ", ".join(str(item) for item in sources))

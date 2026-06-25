@@ -19,6 +19,8 @@ class RAGStrategy(Enum):
     BROAD        = "broad"
     CURRICULUM   = "curriculum"
     HIERARCHICAL = "hierarchical"
+    LESSON_SCOPED = "lesson_scoped"
+    STANDARD_WITH_HRAG = "standard+hierarchical"
 
 
 @dataclass
@@ -37,6 +39,7 @@ class RAGResult:
     metadata_filter: dict
     total_time_s: float
     reason: str
+    debug_stats: Dict = field(default_factory=dict)
 
 
 # ============================================================
@@ -173,6 +176,9 @@ class AdaptiveRAGAgent:
         topic_hint: str = None,
         grade_hint: str = None,
         book: str = None,
+        task_type: str = None,
+        lesson_reference: str = None,
+        lesson_context: Dict = None,
     ) -> RAGResult:
         t0 = time.time()
 
@@ -189,35 +195,134 @@ class AdaptiveRAGAgent:
             else None
         )
 
+        debug_stats = {
+            "standard_candidates": 0,
+            "broad_candidates": 0,
+            "hrag_candidates": 0,
+            "lesson_scoped_candidates": 0,
+            "merged_candidates": 0,
+            "pre_rerank_candidates": 0,
+            "pre_rerank_cap_applied": False,
+            "hrag_enabled": False,
+            "hrag_reason": None,
+            "lesson_scoped": False,
+        }
+
         # === ACT ===
-        if profile.strategy == RAGStrategy.CURRICULUM:
+        lesson_scoped = self._lesson_scoped_retrieval(lesson_context)
+        if lesson_context and lesson_scoped:
+            chunks = self._cap_pre_rerank_candidates(lesson_scoped, task_type=task_type)
+            debug_stats.update({
+                "lesson_scoped": True,
+                "lesson_scoped_candidates": len(lesson_scoped),
+                "merged_candidates": len(lesson_scoped),
+                "pre_rerank_candidates": len(chunks),
+                "pre_rerank_cap_applied": len(chunks) < len(lesson_scoped),
+                "lesson_context": {
+                    "book": lesson_context.get("book"),
+                    "grade": lesson_context.get("grade"),
+                    "topic_ref": lesson_context.get("topic_ref"),
+                    "lesson_num": lesson_context.get("lesson_num"),
+                    "lesson_name": lesson_context.get("lesson_name"),
+                },
+            })
+
+        elif profile.strategy == RAGStrategy.CURRICULUM:
             chunks = self._curriculum_lookup(profile, book=book)
+            debug_stats["merged_candidates"] = len(chunks)
 
         elif profile.strategy == RAGStrategy.BROAD:
-            chunks = self._broad_retrieval(query, profile, book=book)
-            # Fallback: nếu broad trả về < 3 chunks → bổ sung standard
-            if len(chunks) < 3:
-                standard = self._standard_retrieval(query, book_indices=scope_indices)
-                chunks = self._merge_deduplicate(chunks, standard)
+            standard = self._standard_retrieval(query, book_indices=scope_indices)
+            broad = self._broad_retrieval(query, profile, book=book)
+            chunks = self._merge_weighted_results(
+                ("standard", standard, 1.0),
+                ("broad", broad, 0.5),
+            )
+            merged_count = len(chunks)
+            chunks = self._cap_pre_rerank_candidates(chunks, task_type=task_type)
+            debug_stats.update({
+                "standard_candidates": len(standard),
+                "broad_candidates": len(broad),
+                "merged_candidates": merged_count,
+                "pre_rerank_candidates": len(chunks),
+                "pre_rerank_cap_applied": len(chunks) < merged_count,
+            })
 
         elif profile.strategy == RAGStrategy.HIERARCHICAL:
-            chunks = self._hierarchical_retrieval(query, profile, book_indices=scope_indices)
-            # Fallback: nếu HRAG < 3 chunks → bổ sung standard
-            if len(chunks) < 3 and not self._is_scoped_topic_search(profile, scope_indices):
-                standard = self._standard_retrieval(query, book_indices=scope_indices)
-                chunks = self._merge_deduplicate(chunks, standard)
+            standard = self._standard_retrieval(query, book_indices=scope_indices)
+            hrag_enabled, hrag_reason = self._should_use_hrag(
+                query=query,
+                profile=profile,
+                book=book,
+                book_indices=scope_indices,
+                task_type=task_type,
+                lesson_reference=lesson_reference,
+            )
+            hrag = []
+            if hrag_enabled:
+                hrag = self._hierarchical_retrieval(query, profile, book_indices=scope_indices)
+            hrag_weight = self._hrag_weight(query, lesson_reference)
+            chunks = self._merge_weighted_results(
+                ("standard", standard, 1.0),
+                ("hrag", hrag, hrag_weight),
+            )
+            merged_count = len(chunks)
+            chunks = self._cap_pre_rerank_candidates(chunks, task_type=task_type)
+            debug_stats.update({
+                "standard_candidates": len(standard),
+                "hrag_candidates": len(hrag),
+                "merged_candidates": merged_count,
+                "pre_rerank_candidates": len(chunks),
+                "pre_rerank_cap_applied": len(chunks) < merged_count,
+                "hrag_enabled": hrag_enabled,
+                "hrag_reason": hrag_reason,
+                "hrag_weight": hrag_weight if hrag_enabled else 0.0,
+            })
 
         else:  # STANDARD
             chunks = self._standard_retrieval(query, book_indices=scope_indices)
+            debug_stats.update({
+                "standard_candidates": len(chunks),
+                "merged_candidates": len(chunks),
+                "pre_rerank_candidates": len(chunks),
+            })
 
         total_time = time.time() - t0
+        strategy_used = profile.strategy
+        if debug_stats.get("lesson_scoped"):
+            strategy_used = RAGStrategy.LESSON_SCOPED
+        elif profile.strategy == RAGStrategy.HIERARCHICAL:
+            strategy_used = (
+                RAGStrategy.STANDARD_WITH_HRAG
+                if debug_stats.get("hrag_enabled")
+                else RAGStrategy.STANDARD
+            )
+        elif profile.strategy == RAGStrategy.BROAD:
+            strategy_used = RAGStrategy.BROAD
+
+        reason = profile.reason
+        if debug_stats.get("lesson_scoped"):
+            reason = (
+                "Lesson-scoped retrieval from table_of_contents; "
+                f"lesson={lesson_context.get('lesson_name')} "
+                f"({lesson_context.get('book')} lớp {lesson_context.get('grade')})."
+            )
+        elif profile.strategy == RAGStrategy.HIERARCHICAL:
+            reason = (
+                "Standard-first retrieval; "
+                f"HRAG {'enabled' if debug_stats.get('hrag_enabled') else 'disabled'} "
+                f"({debug_stats.get('hrag_reason')}). Original classifier: {profile.reason}"
+            )
+        elif profile.strategy == RAGStrategy.BROAD:
+            reason = f"Standard-first broad retrieval; broad metadata merged. Original classifier: {profile.reason}"
 
         return RAGResult(
             chunks=chunks,
-            strategy_used=profile.strategy,
+            strategy_used=strategy_used,
             metadata_filter={"grade": profile.grade, "topic": profile.topic_hint, "book": book},
             total_time_s=round(total_time, 2),
-            reason=profile.reason,
+            reason=reason,
+            debug_stats=debug_stats,
         )
 
     # ============================================================
@@ -450,6 +555,269 @@ class AdaptiveRAGAgent:
                 merged.append(c)
                 seen_ids.add(c["doc_id"])
         return merged
+
+    def _lesson_scoped_retrieval(self, lesson_context: Optional[Dict]) -> List[Dict]:
+        if not lesson_context:
+            return []
+
+        results = []
+        for index, chunk in enumerate(self.retriever.chunks):
+            metadata = self._metadata_for_chunk(chunk)
+            if not self._matches_lesson_context(metadata, lesson_context):
+                continue
+            results.append({
+                "doc_id": chunk.get("chunk_id") or chunk.get("doc_id") or str(index),
+                "score": 1.0,
+                "content": chunk.get("content", ""),
+                "context": chunk.get("context") or chunk.get("breadcrumb", ""),
+                "metadata": metadata,
+                "retrieval_sources": ["lesson_scoped"],
+                "lesson_scoped_score": 1.0,
+                "retrieval_weight": 1.0,
+            })
+
+        logger.info(
+            "Lesson-scoped retrieval | book=%s grade=%s topic=%s lesson=%s chunks=%s",
+            lesson_context.get("book"),
+            lesson_context.get("grade"),
+            lesson_context.get("topic_name"),
+            lesson_context.get("lesson_name"),
+            len(results),
+        )
+        return results
+
+    def _matches_lesson_context(self, metadata: Dict, lesson_context: Dict) -> bool:
+        for meta_key, ctx_key in (("book", "book"), ("grade", "grade")):
+            expected = lesson_context.get(ctx_key)
+            if expected is not None and str(metadata.get(meta_key)) != str(expected):
+                return False
+
+        expected_topic_ref = str(lesson_context.get("topic_ref") or "").strip()
+        actual_topic_ref = str(
+            metadata.get("topic") or metadata.get("topic_ref") or ""
+        ).strip()
+        topic_ref_matched = False
+        if expected_topic_ref and actual_topic_ref:
+            if self._normalize_text(expected_topic_ref) != self._normalize_text(actual_topic_ref):
+                return False
+            topic_ref_matched = True
+
+        expected_lesson_num = str(lesson_context.get("lesson_num") or "").strip()
+        actual_lesson_label = str(metadata.get("lesson") or metadata.get("lesson_num") or "")
+        actual_lesson_num = self._extract_lesson_number(actual_lesson_label)
+        lesson_num_matched = False
+        if expected_lesson_num and actual_lesson_label:
+            if not actual_lesson_num or expected_lesson_num != actual_lesson_num:
+                return False
+            lesson_num_matched = True
+
+        structural_match = topic_ref_matched and lesson_num_matched
+
+        if not topic_ref_matched and not self._text_fields_match(
+            lesson_context.get("topic_name"),
+            metadata.get("topic_name"),
+            allow_one_way=False,
+        ):
+            return False
+
+        return self._text_fields_match(
+            lesson_context.get("lesson_name"),
+            metadata.get("lesson_name"),
+            allow_one_way=structural_match,
+        )
+
+    def _text_fields_match(
+        self,
+        expected_value: Optional[str],
+        actual_value: Optional[str],
+        allow_one_way: bool = False,
+    ) -> bool:
+        expected = str(expected_value or "")
+        actual = str(actual_value or "")
+        if not expected:
+            return True
+        if not actual:
+            return False
+
+        expected_norm = self._normalize_text(expected)
+        actual_norm = self._normalize_text(actual)
+        if expected_norm == actual_norm:
+            return True
+
+        expected_to_actual = self._token_overlap_ratio(expected, actual)
+        actual_to_expected = self._token_overlap_ratio(actual, expected)
+        if allow_one_way:
+            return max(expected_to_actual, actual_to_expected) >= 0.75
+
+        return expected_to_actual >= 0.75 and actual_to_expected >= 0.75
+
+    @staticmethod
+    def _extract_lesson_number(value: str) -> Optional[str]:
+        match = re.search(r"\b(?:bài|bai)?\s*(\d+)\b", str(value).lower())
+        return match.group(1) if match else None
+        return True
+
+    def _merge_weighted_results(self, *branches) -> List[Dict]:
+        merged_by_id: Dict[str, Dict] = {}
+        order: List[str] = []
+        for source, chunks, weight in branches:
+            for chunk in chunks or []:
+                doc_id = chunk.get("doc_id") or chunk.get("chunk_id")
+                if doc_id is None:
+                    continue
+                raw_score = float(chunk.get("score", 0.0) or 0.0)
+                weighted_score = raw_score * weight
+                if doc_id not in merged_by_id:
+                    item = dict(chunk)
+                    item["doc_id"] = doc_id
+                    item["score"] = weighted_score
+                    item["retrieval_sources"] = [source]
+                    item["retrieval_weight"] = weight
+                    item[f"{source}_score"] = raw_score
+                    merged_by_id[doc_id] = item
+                    order.append(doc_id)
+                    continue
+
+                item = merged_by_id[doc_id]
+                sources = item.setdefault("retrieval_sources", [])
+                if source not in sources:
+                    sources.append(source)
+                item[f"{source}_score"] = raw_score
+                item["retrieval_weight"] = max(float(item.get("retrieval_weight", 0.0)), weight)
+                item["score"] = max(float(item.get("score", 0.0) or 0.0), weighted_score)
+
+        return [merged_by_id[doc_id] for doc_id in order]
+
+    def _cap_pre_rerank_candidates(self, chunks: List[Dict], task_type: str = None) -> List[Dict]:
+        max_candidates = self._pre_rerank_max_candidates(task_type)
+        if max_candidates <= 0 or len(chunks) <= max_candidates:
+            return chunks
+
+        overlap = [
+            chunk for chunk in chunks
+            if len(chunk.get("retrieval_sources") or []) > 1
+        ]
+        selected: List[Dict] = []
+        selected_ids = set()
+
+        for item in self._sort_candidates(overlap):
+            if len(selected) >= max_candidates:
+                break
+            doc_id = item.get("doc_id") or item.get("chunk_id")
+            if doc_id not in selected_ids:
+                selected.append(item)
+                selected_ids.add(doc_id)
+
+        hrag_quota = self._pre_rerank_hrag_quota(task_type)
+        hrag_items = [
+            chunk for chunk in chunks
+            if "hrag" in (chunk.get("retrieval_sources") or [])
+        ]
+        hrag_selected = sum(
+            1 for chunk in selected
+            if "hrag" in (chunk.get("retrieval_sources") or [])
+        )
+        for item in self._sort_candidates(hrag_items):
+            if len(selected) >= max_candidates or hrag_selected >= hrag_quota:
+                break
+            doc_id = item.get("doc_id") or item.get("chunk_id")
+            if doc_id in selected_ids:
+                continue
+            selected.append(item)
+            selected_ids.add(doc_id)
+            hrag_selected += 1
+
+        standard_items = [
+            chunk for chunk in chunks
+            if "standard" in (chunk.get("retrieval_sources") or [])
+        ]
+        for item in self._sort_candidates(standard_items):
+            if len(selected) >= max_candidates:
+                break
+            doc_id = item.get("doc_id") or item.get("chunk_id")
+            if doc_id in selected_ids:
+                continue
+            selected.append(item)
+            selected_ids.add(doc_id)
+
+        for item in self._sort_candidates(chunks):
+            if len(selected) >= max_candidates:
+                break
+            doc_id = item.get("doc_id") or item.get("chunk_id")
+            if doc_id in selected_ids:
+                continue
+            selected.append(item)
+            selected_ids.add(doc_id)
+
+        return selected
+
+    @staticmethod
+    def _sort_candidates(chunks: List[Dict]) -> List[Dict]:
+        return sorted(
+            chunks,
+            key=lambda chunk: (
+                len(chunk.get("retrieval_sources") or []),
+                float(chunk.get("score", 0.0) or 0.0),
+            ),
+            reverse=True,
+        )
+
+    def _pre_rerank_max_candidates(self, task_type: str = None) -> int:
+        if task_type in ("slide", "slide_generate"):
+            return int(getattr(self.settings, "RAG_PRE_RERANK_MAX_CANDIDATES_SLIDE", 28))
+        if task_type in ("lesson_plan", "giao_an"):
+            return int(getattr(self.settings, "RAG_PRE_RERANK_MAX_CANDIDATES_LESSON_PLAN", 34))
+        return int(getattr(self.settings, "RAG_PRE_RERANK_MAX_CANDIDATES", 25))
+
+    def _pre_rerank_hrag_quota(self, task_type: str = None) -> int:
+        if task_type in ("lesson_plan", "giao_an"):
+            return int(getattr(self.settings, "RAG_PRE_RERANK_HRAG_QUOTA_LESSON_PLAN", 12))
+        if task_type in ("slide", "slide_generate"):
+            return int(getattr(self.settings, "RAG_PRE_RERANK_HRAG_QUOTA_SLIDE", 10))
+        return max(4, self._pre_rerank_max_candidates(task_type) // 3)
+
+    def _should_use_hrag(
+        self,
+        query: str,
+        profile: QueryProfile,
+        book: str = None,
+        book_indices: List[int] = None,
+        task_type: str = None,
+        lesson_reference: str = None,
+    ) -> tuple[bool, str]:
+        if lesson_reference:
+            return True, "lesson_reference present"
+        if self._has_explicit_structure_reference(query):
+            return True, "explicit lesson/chapter/topic reference in query"
+        if (
+            task_type in ("slide", "slide_generate", "lesson_plan", "giao_an")
+            and book
+            and profile.topic_hint
+        ):
+            if profile.grade:
+                return True, "structured generation with book+grade+topic"
+            return True, "structured generation with book+topic"
+        if profile.topic_hint and (profile.grade or book_indices is not None):
+            return False, "topic context is available but not strong enough for auxiliary HRAG"
+        return False, "no structural retrieval signal"
+
+    def _hrag_weight(self, query: str, lesson_reference: str = None) -> float:
+        if lesson_reference:
+            return 0.75
+        if self._has_explicit_structure_reference(query):
+            return 0.65
+        return 0.45
+
+    @staticmethod
+    def _has_explicit_structure_reference(query: str) -> bool:
+        q = query.lower()
+        return bool(
+            re.search(
+                r"\b(bài|bai|chương|chuong|mục|muc|phần|phan)\s*([0-9]+|[a-h])\b",
+                q,
+            )
+            or re.search(r"\b(chủ\s*đề|chu\s*de)\s*([0-9]+|[a-h])\b", q)
+        )
 
     def _get_book_indices(self, book: str) -> List[int]:
         return self._get_scope_indices(book=book, grade=None)

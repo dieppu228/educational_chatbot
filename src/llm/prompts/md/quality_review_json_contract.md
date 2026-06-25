@@ -21,7 +21,7 @@ Schema:
 }}
 
 QUY TẮC RA QUYẾT ĐỊNH:
-- Nếu score >= 8 và không có issue critical: passed=true, reflection_action="approve".
+- Nếu score >= 6.5 và không có issue critical: passed=true, reflection_action="approve".
 - Nếu output có thể sửa bằng regenerate: passed=false và chọn action revise phù hợp.
 - Nếu yêu cầu user mơ hồ: reflection_action="ask_human".
 - Nếu output có lỗi nghiêm trọng hoặc hallucination nặng: reflection_action="block".

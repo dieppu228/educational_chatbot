@@ -1,13 +1,13 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Chương 4 trình bày cách hiện thực hóa giải pháp đã đề xuất ở Chương 3, đồng thời báo cáo quy trình kiểm thử và các kết quả thực nghiệm đã thu được. Khác với Chương 3 vốn tập trung vào phương pháp, chương này chỉ giữ lại mức chi tiết cài đặt vừa đủ để chứng minh hệ thống đã được triển khai và vận hành trên dữ liệu thực. Trọng tâm của chương đặt vào hai node lõi của luồng xử lý (pipeline) là nút truy xuất (nút truy xuất (retrieve node)) và nút sinh văn bản (nút sinh văn bản (generate node)): cách hai node này được cài đặt, cách xây dựng hai bộ dữ liệu kiểm thử tương ứng, và kết quả đánh giá định lượng của từng node. Một phần được trình bày kỹ là quy trình tạo bộ dữ liệu kiểm thử, bởi tính tin cậy của mọi số liệu trong chương phụ thuộc trực tiếp vào việc bộ dữ liệu được sinh ra một cách có kiểm soát, truy vết được và không bịa.
+Chương 4 trình bày cách hiện thực hóa giải pháp đã đề xuất ở Chương 3, đồng thời báo cáo quy trình kiểm thử và các kết quả thực nghiệm đã thu được. Khác với Chương 3 vốn tập trung vào phương pháp, chương này chỉ giữ lại mức chi tiết cài đặt vừa đủ để chứng minh hệ thống đã được triển khai và vận hành trên dữ liệu thực. Trọng tâm của chương đặt vào hai nút lõi của luồng xử lý là nút truy xuất và nút sinh văn bản: cách hai nút này được cài đặt, cách xây dựng hai bộ dữ liệu kiểm thử tương ứng, và kết quả đánh giá định lượng của từng nút. Một phần được trình bày kỹ là quy trình tạo bộ dữ liệu kiểm thử, bởi tính tin cậy của mọi số liệu trong chương phụ thuộc trực tiếp vào việc bộ dữ liệu được sinh ra một cách có kiểm soát, truy vết được và không bịa.
 
 \section{Môi trường và cấu hình thực nghiệm}
 
-Hệ thống được cài đặt chủ yếu bằng Python. Tầng điều phối nội dung cho tác vụ sinh slide và giáo án được xây dựng trên LangGraph, trong khi các thành phần còn lại như xử lý ngữ cảnh, định tuyến ý định, lập kế hoạch hành động, truy xuất tri thức và ghi vết thực thi được hiện thực bằng logic xác định trong mã nguồn. Cách tổ chức này giúp giữ chi phí suy luận ở mức hợp lý và tạo điều kiện thuận lợi cho việc phân tích lỗi theo từng bước của luồng xử lý.
+Hệ thống được cài đặt chủ yếu bằng Python. Tầng điều phối nội dung cho tác vụ sinh bản trình chiếu và giáo án được xây dựng trên LangGraph, trong khi các thành phần còn lại như xử lý ngữ cảnh, định tuyến ý định, lập kế hoạch hành động, truy xuất tri thức và ghi vết thực thi được hiện thực bằng luật xác định trong mã nguồn. Cách tổ chức này giúp giữ chi phí suy luận ở mức hợp lý và tạo điều kiện thuận lợi cho việc phân tích lỗi theo từng bước của luồng xử lý.
 
-Về mô hình và hạ tầng tri thức, hệ thống sử dụng Google Gemini làm mô hình sinh ngôn ngữ, mô hình embedding tiếng Việt \texttt{dangvantuan/vietnamese-document-embedding} để biểu diễn phân đoạn (chunk), mô hình bộ xếp hạng lại (reranker) \texttt{AITeamVN/Vietnamese\_Reranker} cho bước xếp hạng lại và Qdrant làm vector database. Bên cạnh tìm kiếm vector (vector search), hệ thống còn duy trì một kênh tìm kiếm từ khóa (keyword search) dựa trên BM25 tự cài đặt, sau đó hợp nhất hai danh sách kết quả bằng Reciprocal Rank Fusion. Các kỹ thuật BM25, RRF và reranking đã được trình bày ở Chương 3 dựa trên các công trình nền tảng tương ứng \cite{robertson2009bm25,cormack2009rrf,nogueira2019passage}. Các thành phần cài đặt chính của môi trường thực nghiệm được liệt kê trong Bảng~\ref{tab:exp-environment}.
+Về mô hình và hạ tầng tri thức, hệ thống sử dụng Google Gemini làm mô hình sinh ngôn ngữ, mô hình nhúng tiếng Việt \texttt{dangvantuan/vietnamese-document-embedding} để biểu diễn phân đoạn, mô hình bộ xếp hạng lại \texttt{AITeamVN/Vietnamese\_Reranker} cho bước xếp hạng lại và Qdrant làm cơ sở dữ liệu vector. Bên cạnh tìm kiếm vector, hệ thống còn duy trì một kênh tìm kiếm từ khóa dựa trên BM25 tự cài đặt, sau đó hợp nhất hai danh sách kết quả bằng Reciprocal Rank Fusion. Các kỹ thuật BM25, RRF và xếp hạng lại đã được trình bày ở Chương 3 dựa trên các công trình nền tảng tương ứng \cite{robertson2009bm25,cormack2009rrf,nogueira2019passage}. Các thành phần cài đặt chính của môi trường thực nghiệm được liệt kê trong Bảng~\ref{tab:exp-environment}.
 
 \begin{table}[H]
     \centering
@@ -20,17 +20,17 @@ Về mô hình và hạ tầng tri thức, hệ thống sử dụng Google Gemin
         \hline
         Mô hình sinh ngôn ngữ & Google Gemini \texttt{gemini-2.5-flash-lite} \\
         \hline
-        Mô hình embedding & \texttt{dangvantuan/vietnamese-document-embedding} \\
+        Mô hình nhúng văn bản & \texttt{dangvantuan/vietnamese-document-embedding} \\
         \hline
         Mô hình bộ xếp hạng lại & \texttt{AITeamVN/Vietnamese\_Reranker} \\
         \hline
-        Vector database & Qdrant \\
+        Cơ sở dữ liệu vector & Qdrant \\
         \hline
         Luồng xử lý đa tác tử & LangGraph \\
         \hline
-        Retriever lexical & BM25 tự cài đặt \\
+        Bộ truy xuất từ khóa & BM25 tự cài đặt \\
         \hline
-        Retriever ngữ nghĩa & Dense truy xuất (retrieval) theo cosine similarity \\
+        Bộ truy xuất ngữ nghĩa & Truy xuất vector theo độ tương đồng cosine \\
         \hline
     \end{tabular}
     \vspace{0.2cm}
@@ -38,7 +38,7 @@ Về mô hình và hạ tầng tri thức, hệ thống sử dụng Google Gemin
     \label{tab:exp-environment}
 \end{table}
 
-Bảng~\ref{tab:exp-environment} cho thấy môi trường thực nghiệm được tổ chức nhất quán với kiến trúc đã mô tả ở Chương 3: lớp biểu diễn tri thức dùng embedding tiếng Việt và Qdrant, lớp truy xuất dùng đồng thời BM25 và dense truy xuất, còn lớp sinh nội dung dựa trên Gemini. Cấu hình này cho phép tách riêng vai trò của từng thành phần khi phân tích kết quả thực nghiệm ở các mục sau.
+Bảng~\ref{tab:exp-environment} cho thấy môi trường thực nghiệm được tổ chức nhất quán với kiến trúc đã mô tả ở Chương 3: lớp biểu diễn tri thức dùng mô hình nhúng tiếng Việt và Qdrant, lớp truy xuất dùng đồng thời BM25 và truy xuất vector, còn lớp sinh nội dung dựa trên Gemini. Cấu hình này cho phép tách riêng vai trò của từng thành phần khi phân tích kết quả thực nghiệm ở các mục sau.
 
 Để các thí nghiệm có thể tái lập, các tham số chạy chính được dùng thống nhất trong toàn bộ chương được trình bày trong Bảng~\ref{tab:exp-params}.
 
@@ -49,7 +49,7 @@ Bảng~\ref{tab:exp-environment} cho thấy môi trường thực nghiệm đư�
         \hline
         \textbf{Tham số} & \textbf{Giá trị} \\
         \hline
-        Kích thước search pool & 50 ứng viên (candidate) \\
+        Kích thước tập tìm kiếm & 50 ứng viên \\
         \hline
         Số ứng viên sau hợp nhất & 25 ứng viên \\
         \hline
@@ -61,58 +61,58 @@ Bảng~\ref{tab:exp-environment} cho thấy môi trường thực nghiệm đư�
         \hline
     \end{tabular}
     \vspace{0.2cm}
-\caption{Các tham số chạy chính dùng cho thực nghiệm truy xuất và sinh văn bản (generation)}
+\caption{Các tham số chạy chính dùng cho thực nghiệm truy xuất và sinh văn bản}
     \label{tab:exp-params}
 \end{table}
 
-Bảng~\ref{tab:exp-params} cho thấy bước truy xuất lấy một tập tìm kiếm (search pool) gồm 50 ứng viên từ hai kênh lexical và dense rồi hợp nhất còn 25 ứng viên; các độ đo truy xuất được tính ở các mức $k \in \{1,3,5,10\}$. Ở bước sinh câu trả lời, nhiệt độ (temperature) được đặt thấp để ưu tiên tính ổn định và bám nguồn. Ở bước đánh giá sinh văn bản bằng mô hình chấm, nhiệt độ được đặt bằng 0 để kết quả chấm nhất quán giữa các lần chạy.
+Bảng~\ref{tab:exp-params} cho thấy bước truy xuất lấy một tập tìm kiếm gồm 50 ứng viên từ hai kênh từ khóa và vector rồi hợp nhất còn 25 ứng viên; các độ đo truy xuất được tính ở các mức $k \in \{1,3,5,10\}$. Ở bước sinh câu trả lời, nhiệt độ được đặt thấp để ưu tiên tính ổn định và bám nguồn. Ở bước đánh giá sinh văn bản bằng mô hình chấm, nhiệt độ được đặt bằng 0 để kết quả chấm nhất quán giữa các lần chạy.
 
-Nguồn dữ liệu của đồ án gồm SGK Tin học lớp 10, 11 và 12 thuộc hai bộ sách Cánh Diều và Kết Nối Tri Thức. Sau bước tiền xử lý và phân đoạn (chunking), kho tri thức thu được 2348 phân đoạn, mỗi phân đoạn mang siêu dữ liệu (metadata) về bộ sách, lớp, chủ đề, bài học, loại nội dung và cấp phân cấp. Chính cấu trúc này cho phép hệ thống vừa truy xuất ở mức cục bộ cho câu hỏi ngắn, vừa hỗ trợ các tác vụ cần bao phủ một bài học hoàn chỉnh như sinh slide hoặc soạn giáo án.
+Nguồn dữ liệu của đồ án gồm SGK Tin học lớp 10, 11 và 12 thuộc hai bộ sách Cánh Diều và Kết Nối Tri Thức. Sau bước tiền xử lý và phân đoạn, kho tri thức thu được 2348 phân đoạn, mỗi phân đoạn mang siêu dữ liệu về bộ sách, lớp, chủ đề, bài học, loại nội dung và cấp phân cấp. Chính cấu trúc này cho phép hệ thống vừa truy xuất ở mức cục bộ cho câu hỏi ngắn, vừa hỗ trợ các tác vụ cần bao phủ một bài học hoàn chỉnh như sinh bản trình chiếu hoặc soạn giáo án.
 
 \section{Cài đặt hệ thống và luồng xử lý}
 
-Tại mức cài đặt, hệ thống được chia thành bốn nhóm module chính. Nhóm thứ nhất là lớp tiếp nhận và điều phối yêu cầu, bao gồm các thành phần tạo \textit{RequestContext}, phân tích ngữ cảnh hội thoại, định tuyến ý định, lập kế hoạch hành động và quản lý vòng đời phiên (session). Nhóm thứ hai là lớp dịch vụ nghiệp vụ, nơi triển khai các chức năng hỏi đáp, quiz, sinh slide và sinh giáo án. Nhóm thứ ba là lớp tri thức, phụ trách ingestion, phân đoạn, embedding, indexing, truy xuất, xếp hạng lại (reranking) và dựng ngữ cảnh đầu vào cho LLM. Nhóm cuối cùng là lớp thực nghiệm và đánh giá, gồm luồng xử lý tạo bộ chuẩn đối sánh (benchmark) truy xuất, luồng xử lý đánh giá sinh văn bản theo RAGAS và các file đầu ra thô (raw output) phục vụ phân tích lỗi.
+Tại mức cài đặt, hệ thống được chia thành bốn nhóm mô-đun chính. Nhóm thứ nhất là lớp tiếp nhận và điều phối yêu cầu, bao gồm các thành phần tạo \textit{RequestContext}, phân tích ngữ cảnh hội thoại, định tuyến ý định, lập kế hoạch hành động và quản lý vòng đời phiên. Nhóm thứ hai là lớp dịch vụ nghiệp vụ, nơi triển khai các chức năng hỏi đáp, bài luyện tập, sinh bản trình chiếu và sinh giáo án. Nhóm thứ ba là lớp tri thức, phụ trách nạp dữ liệu, phân đoạn, tạo vector nhúng, lập chỉ mục, truy xuất, xếp hạng lại và dựng ngữ cảnh đầu vào cho LLM. Nhóm cuối cùng là lớp thực nghiệm và đánh giá, gồm luồng xử lý tạo bộ chuẩn đối sánh truy xuất, luồng xử lý đánh giá sinh văn bản theo RAGAS và các tệp đầu ra thô phục vụ phân tích lỗi.
 
-Cách chia này nhằm giữ ranh giới rõ giữa phần điều phối hệ thống và phần nghiên cứu chính. Các module điều phối giúp hệ thống vận hành trên nhiều loại yêu cầu, nhưng phần đóng góp kỹ thuật được kiểm chứng trong chương này vẫn tập trung vào nút truy xuất và nút sinh văn bản. Do đó, Chương 4 không đi vào liệt kê toàn bộ package hay từng file cài đặt, mà chỉ trình bày đủ để người đọc hiểu dữ liệu đi qua những khối nào trước khi trở thành câu trả lời hoặc artifact cuối.
+Cách chia này nhằm giữ ranh giới rõ giữa phần điều phối hệ thống và phần nghiên cứu chính. Các mô-đun điều phối giúp hệ thống vận hành trên nhiều loại yêu cầu, nhưng phần đóng góp kỹ thuật được kiểm chứng trong chương này vẫn tập trung vào nút truy xuất và nút sinh văn bản. Do đó, Chương 4 không đi vào liệt kê toàn bộ gói mã nguồn hay từng tệp cài đặt, mà chỉ trình bày đủ để người đọc hiểu dữ liệu đi qua những khối nào trước khi trở thành câu trả lời hoặc sản phẩm đầu ra cuối.
 
-\textbf{Luồng xử lý xử lý tài liệu.}
+\textbf{Luồng xử lý tài liệu.}
 
-Luồng xử lý xử lý tài liệu bắt đầu từ tập văn bản SGK đã được chuẩn hóa. Ở bước đầu, nội dung được làm sạch để loại bỏ nhiễu trình bày, sau đó được tách theo cấu trúc heading của từng bài học. Mỗi đoạn nội dung sau khi tách được gắn đường dẫn ngữ cảnh (đường dẫn ngữ cảnh (breadcrumb)), cấp độ (cấp độ (level)) và siêu dữ liệu bài học tương ứng. Cách cài đặt này giúp phân đoạn vẫn giữ được mối liên hệ với ngữ cảnh sư phạm của SGK, thay vì chỉ là các đoạn văn bản rời rạc.
+Luồng xử lý tài liệu bắt đầu từ tập văn bản SGK đã được chuẩn hóa. Ở bước đầu, nội dung được làm sạch để loại bỏ nhiễu trình bày, sau đó được tách theo cấu trúc tiêu đề của từng bài học. Mỗi đoạn nội dung sau khi tách được gắn đường dẫn ngữ cảnh, cấp độ và siêu dữ liệu bài học tương ứng. Cách cài đặt này giúp phân đoạn vẫn giữ được mối liên hệ với ngữ cảnh sư phạm của SGK, thay vì chỉ là các đoạn văn bản rời rạc.
 
-Sau khi phân đoạn, hệ thống sinh embedding trên trường \texttt{full\_content} và nạp vector vào Qdrant. Song song với đó, các trường văn bản cần thiết cũng được lưu để phục vụ BM25 và để hiển thị nguồn khi phân tích kết quả truy xuất. Việc lưu đồng thời cả siêu dữ liệu phân cấp lẫn vector embedding cho phép hệ thống lọc trước theo phạm vi (phạm vi (scope)) rồi mới thực hiện truy xuất, từ đó giảm rủi ro nhầm lẫn giữa các bài học có thuật ngữ gần nhau nhưng khác bộ sách hoặc khác khối lớp.
+Sau khi phân đoạn, hệ thống sinh vector nhúng trên trường \texttt{full\_content} và nạp vector vào Qdrant. Song song với đó, các trường văn bản cần thiết cũng được lưu để phục vụ BM25 và để hiển thị nguồn khi phân tích kết quả truy xuất. Việc lưu đồng thời cả siêu dữ liệu phân cấp lẫn vector nhúng cho phép hệ thống lọc trước theo phạm vi rồi mới thực hiện truy xuất, từ đó giảm rủi ro nhầm lẫn giữa các bài học có thuật ngữ gần nhau nhưng khác bộ sách hoặc khác khối lớp.
 
-Điểm cần nhấn mạnh là chính kho phân đoạn này về sau cũng là nguồn để sinh bộ bộ chuẩn đối sánh truy xuất. Mỗi câu hỏi kiểm thử được sinh từ một đoạn phân đoạn cụ thể và được gắn với bài học chứa đoạn đó, nên bộ câu hỏi đánh giá luôn nằm trong đúng phạm vi dữ liệu mà hệ thống thực sự lập chỉ mục. Quan hệ này được trình bày chi tiết ở Mục 4.3.
+Điểm cần nhấn mạnh là chính kho phân đoạn này về sau cũng là nguồn để sinh bộ chuẩn đối sánh truy xuất. Mỗi câu hỏi kiểm thử được sinh từ một đoạn phân đoạn cụ thể và được gắn với bài học chứa đoạn đó, nên bộ câu hỏi đánh giá luôn nằm trong đúng phạm vi dữ liệu mà hệ thống thực sự lập chỉ mục. Quan hệ này được trình bày chi tiết ở Mục 4.3.
 
 \textbf{Luồng xử lý hỏi đáp.}
 
-Khi người dùng gửi câu hỏi, hệ thống trước hết tạo một \textit{RequestContext} để gom câu hỏi hiện tại, thông tin bộ sách hoặc lớp được chọn, lịch sử hội thoại gần và các trường debug cần thiết. Từ đây, \textit{ContextAnalyzer} kiểm tra xem câu hỏi có phụ thuộc vào turn trước hay không; nếu có, hệ thống trích một phần ngữ cảnh hội thoại để làm giàu truy vấn. \textit{IntentRouter} sau đó xác định loại yêu cầu, chẳng hạn hỏi đáp kiến thức, sinh quiz, sinh slide hoặc soạn giáo án.
+Khi người dùng gửi câu hỏi, hệ thống trước hết tạo một \textit{RequestContext} để gom câu hỏi hiện tại, thông tin bộ sách hoặc lớp được chọn, lịch sử hội thoại gần và các trường theo dõi cần thiết. Từ đây, \textit{ContextAnalyzer} kiểm tra xem câu hỏi có phụ thuộc vào lượt trước hay không; nếu có, hệ thống trích một phần ngữ cảnh hội thoại để làm giàu truy vấn. \textit{IntentRouter} sau đó xác định loại yêu cầu, chẳng hạn hỏi đáp kiến thức, sinh bài luyện tập, sinh bản trình chiếu hoặc soạn giáo án.
 
-Với các ý định (intent) cần tri thức từ SGK, \textit{ActionPlanner} tạo hành động tương ứng và chuyển cho \textit{ExecutionDispatcher}. Ở nhánh hỏi đáp, dispatcher gọi \textit{RAGService} để truy xuất ngữ cảnh (nút truy xuất), gửi ngữ cảnh này vào câu lệnh (prompt) sinh câu trả lời (nút sinh văn bản) và ghi lại vết thực thi (trace) của toàn bộ phiên xử lý. Với các tác vụ dài như slide hoặc giáo án, dispatcher không sinh đầu ra trực tiếp mà chuyển tiếp cho luồng xử lý đa tác tử đã mô tả ở Chương 3. Nhờ vậy, phần thực thi vẫn thống nhất ở tầng orchestration, trong khi logic chuyên biệt của từng tác vụ được cô lập ở các service tương ứng.
+Với các ý định cần tri thức từ SGK, \textit{ActionPlanner} tạo hành động tương ứng và chuyển cho \textit{ExecutionDispatcher}. Ở nhánh hỏi đáp, bộ điều phối thực thi gọi \textit{RAGService} để truy xuất ngữ cảnh, gửi ngữ cảnh này vào câu lệnh sinh câu trả lời và ghi lại vết thực thi của toàn bộ phiên xử lý. Với các tác vụ dài như bản trình chiếu hoặc giáo án, bộ điều phối thực thi không sinh đầu ra trực tiếp mà chuyển tiếp cho luồng xử lý đa tác tử đã mô tả ở Chương 3. Nhờ vậy, phần thực thi vẫn thống nhất ở tầng điều phối, trong khi quy tắc chuyên biệt của từng tác vụ được cô lập ở các dịch vụ tương ứng.
 
-Điểm quan trọng trong cài đặt hiện tại là hệ thống không xem mọi yêu cầu như một lời gọi LLM đơn lẻ. Thay vào đó, truy vấn được biến đổi có kiểm soát qua các bước phân tích ngữ cảnh, định tuyến, truy xuất, rồi mới tới sinh văn bản. Cách tổ chức này làm rõ hơn quan hệ nhân quả giữa lỗi truy xuất và lỗi answer, vốn là điều cần thiết cho các thí nghiệm báo cáo ở phần sau của chương.
+Điểm cần nhấn mạnh trong cài đặt hiện tại là hệ thống không xem mọi yêu cầu như một lời gọi LLM đơn lẻ. Thay vào đó, truy vấn được biến đổi có kiểm soát qua các bước phân tích ngữ cảnh, định tuyến, truy xuất, rồi mới tới sinh văn bản. Cách tổ chức này làm rõ hơn quan hệ nhân quả giữa lỗi truy xuất và lỗi trả lời, vốn là điều cần thiết cho các thí nghiệm báo cáo ở phần sau của chương.
 
 \textbf{Nút truy xuất và xếp hạng lại.}
 
-Trong cấu hình truy xuất dùng cho thực nghiệm, nút truy xuất lấy một tập tìm kiếm gồm 50 ứng viên từ hai kênh lexical và dense, sau đó hợp nhất bằng RRF để thu được danh sách 25 ứng viên. Đây là đầu vào cho cấu hình đánh giá không xếp hạng lại (no-xếp hạng lại (rerank)). Ở cấu hình có xếp hạng lại (with-xếp hạng lại), cùng tập ứng viên này được chuyển qua cross-encoder để chấm lại mức độ liên quan trước khi chọn ra top-$N$ cuối cùng. Cơ chế lọc theo phạm vi được áp dụng trước truy xuất khi câu hỏi hoặc phiên đã xác định được \textit{book}, \textit{grade} hoặc \textit{topic}.
+Trong cấu hình truy xuất dùng cho thực nghiệm, nút truy xuất lấy một tập tìm kiếm gồm 50 ứng viên từ hai kênh từ khóa và vector, sau đó hợp nhất bằng RRF để thu được danh sách 25 ứng viên. Đây là đầu vào cho cấu hình đánh giá không xếp hạng lại. Ở cấu hình có xếp hạng lại, cùng tập ứng viên này được chuyển qua cross-encoder để chấm lại mức độ liên quan trước khi chọn ra top-$N$ cuối cùng. Cơ chế lọc theo phạm vi được áp dụng trước truy xuất khi câu hỏi hoặc phiên đã xác định được \textit{book}, \textit{grade} hoặc \textit{topic}.
 
 Một kết quả truy xuất trả về cho mỗi ứng viên gồm phần nội dung phân đoạn, điểm số liên quan, siêu dữ liệu bài học và thông tin nguồn. Bộ thông tin này vừa được dùng làm ngữ cảnh cho nút sinh văn bản, vừa được lưu lại trong đầu ra thô để phục vụ phân tích lỗi. Việc tách riêng bước truy xuất và bước xếp hạng lại trong cài đặt cho phép đo lường đóng góp của bộ xếp hạng lại một cách độc lập, thay vì gộp chung vào một điểm số duy nhất.
 
 \textbf{Nút sinh văn bản.}
 
-Ở nút sinh văn bản, câu lệnh đầu vào luôn gồm hai thành phần: câu hỏi của người dùng và tập ngữ cảnh đã truy xuất. Các phân đoạn được nối lại bằng dấu phân tách rõ ràng trước khi đưa vào câu lệnh, kèm chỉ dẫn để mô hình trả lời theo ngôn ngữ phù hợp với học sinh THPT và ưu tiên bám sát thông tin xuất hiện trong ngữ cảnh (context) hơn là suy luận mở rộng từ tri thức tham số. Khi ngữ cảnh không đủ hoặc không truy xuất được tài liệu phù hợp, mô hình được yêu cầu nêu rõ giới hạn thay vì tiếp tục sinh nội dung không có căn cứ.
+Ở nút sinh văn bản, câu lệnh đầu vào luôn gồm hai thành phần: câu hỏi của người dùng và tập ngữ cảnh đã truy xuất. Các phân đoạn được nối lại bằng dấu phân tách rõ ràng trước khi đưa vào câu lệnh, kèm chỉ dẫn để mô hình trả lời theo ngôn ngữ phù hợp với học sinh THPT và ưu tiên bám sát thông tin xuất hiện trong ngữ cảnh hơn là suy luận mở rộng từ tri thức tham số. Khi ngữ cảnh không đủ hoặc không truy xuất được tài liệu phù hợp, mô hình được yêu cầu nêu rõ giới hạn thay vì tiếp tục sinh nội dung không có căn cứ.
 
-Việc tách riêng nút truy xuất và nút sinh văn bản trong cài đặt là tiền đề để hai node được đánh giá bằng hai phương pháp khác nhau ở phần sau: nút truy xuất được đánh giá định lượng bằng bộ chuẩn đối sánh chuẩn vàng đơn (single-gold), còn nút sinh văn bản được đánh giá bằng bộ độ đo RAGAS \cite{es2023ragas}. Nhờ vậy, mỗi lớp bằng chứng phản ánh đúng khía cạnh mà nó đo, thay vì bị trộn lẫn trong một con số tổng hợp.
+Việc tách riêng nút truy xuất và nút sinh văn bản trong cài đặt là tiền đề để hai nút được đánh giá bằng hai phương pháp khác nhau ở phần sau: nút truy xuất được đánh giá định lượng bằng bộ chuẩn đối sánh chuẩn vàng đơn, còn nút sinh văn bản được đánh giá bằng bộ độ đo RAGAS \cite{es2023ragas}. Nhờ vậy, mỗi lớp bằng chứng phản ánh đúng khía cạnh mà nó đo, thay vì bị trộn lẫn trong một con số tổng hợp.
 
 \section{Xây dựng bộ chuẩn đối sánh cho nút truy xuất}
 \label{sec:benchmark-retrieve}
 
-Phần này trình bày cách xây dựng bộ chuẩn đối sánh truy xuất dùng để đánh giá nút truy xuất. Vì độ tin cậy của toàn bộ kết quả thực nghiệm phụ thuộc trực tiếp vào chất lượng của bộ bộ chuẩn đối sánh này, phần trình bày tập trung vào quy trình sinh, cơ chế kiểm soát chất lượng và khả năng truy vết nguồn gốc.
+Phần này trình bày cách xây dựng bộ chuẩn đối sánh truy xuất dùng để đánh giá nút truy xuất. Vì độ tin cậy của toàn bộ kết quả thực nghiệm phụ thuộc trực tiếp vào chất lượng của bộ chuẩn đối sánh này, phần trình bày tập trung vào quy trình sinh, cơ chế kiểm soát chất lượng và khả năng truy vết nguồn gốc.
 
-\textbf{Bối cảnh và lý do xây dựng lại.} Phiên bản bộ chuẩn đối sánh đầu tiên được sinh bằng một bộ khuôn câu hỏi tất định: hệ thống nhét cụm từ khóa vào một số mẫu câu cố định mà không dùng mô hình ngôn ngữ. Khi đánh giá, khoảng 95\% câu hỏi rơi vào dạng template rỗng nghĩa, kéo Hit@1 xuống chỉ còn khoảng 0,43. Tuy nhiên, nhóm nhỏ các câu không thuộc template lại đạt Hit@10 bằng 1,00, cho thấy vấn đề nằm ở chất lượng câu hỏi chứ không phải ở khả năng truy xuất. Phát hiện này dẫn tới quyết định loại bỏ hoàn toàn bộ sinh template và xây dựng lại bộ chuẩn đối sánh bằng một mô hình ngôn ngữ thật, với ràng buộc rằng mỗi câu hỏi phải \textit{phân biệt được bài học} mà nó hỏi tới.
+\textbf{Bối cảnh và lý do xây dựng lại.} Phiên bản bộ chuẩn đối sánh đầu tiên được sinh bằng một bộ khuôn câu hỏi tất định: hệ thống nhét cụm từ khóa vào một số mẫu câu cố định mà không dùng mô hình ngôn ngữ. Khi đánh giá, khoảng 95\% câu hỏi rơi vào dạng khuôn rỗng nghĩa, kéo Hit@1 xuống chỉ còn khoảng 0,43. Tuy nhiên, nhóm nhỏ các câu không thuộc khuôn này lại đạt Hit@10 bằng 1,00, cho thấy vấn đề nằm ở chất lượng câu hỏi chứ không phải ở khả năng truy xuất. Phát hiện này dẫn tới quyết định loại bỏ hoàn toàn bộ sinh theo khuôn và xây dựng lại bộ chuẩn đối sánh bằng một mô hình ngôn ngữ thật, với ràng buộc rằng mỗi câu hỏi phải \textit{phân biệt được bài học} mà nó hỏi tới.
 
 \textbf{Quy trình sinh có đặc tả từng bước.} Toàn bộ quy trình tạo bộ chuẩn đối sánh được đặc tả thành một tài liệu chỉ dẫn từng bước trước khi cài đặt, bao gồm: nguyên tắc tái sử dụng phần chọn hạt giống (seed), hợp đồng đầu ra dạng JSON, tập điều kiện ràng buộc câu hỏi, các luật kiểm tra tự động, lược đồ bản ghi và tiêu chí nghiệm thu. Việc có đặc tả rõ ràng giúp quy trình lặp lại được và không phụ thuộc vào thao tác thủ công ngẫu hứng. Quy trình gồm ba bước, trong đó phân định rõ phần được thực hiện bằng mã nguồn xác định và phần do mô hình ngôn ngữ đảm nhận.
 
-\textit{Bước 1 --- sinh câu hỏi bằng mô hình ngôn ngữ, có kiểm soát.} Trước hết, một thủ tục chọn hạt giống bằng mã nguồn xác định lựa chọn các đoạn phân đoạn đại diện sao cho phủ đủ các bài học và cân bằng giữa các nhóm bộ sách và khối lớp. Với mỗi hạt giống, mô hình Gemini đọc trực tiếp nội dung của đoạn và sinh hai câu hỏi, trả về dưới dạng JSON theo hợp đồng định sẵn. Mỗi câu hỏi bắt buộc tuân thủ các điều kiện: trả lời được chỉ bằng nội dung đoạn và không bịa thông tin ngoài đoạn; chứa ít nhất một thuật ngữ, cú pháp hoặc tên riêng đặc trưng của bài để không bài khác trả lời được; tự chứa về ngữ nghĩa, không tham chiếu mơ hồ như ``đoạn trên'' hay ``bài này''; diễn đạt tự nhiên và không lặp lại các khuôn template đã bị loại; đa dạng về loại câu hỏi. Ngay sau khi mô hình trả về, một bước kiểm tra tự động xác định sẽ loại câu nếu không kết thúc bằng dấu hỏi, quá ngắn, khớp khuôn template, chứa từ mơ hồ, có từ khóa đặc trưng không xuất hiện trong nội dung đoạn, hoặc phần đáp án kỳ vọng trùng lặp với nội dung đoạn dưới ngưỡng quy định. Kết quả của mô hình được lưu cache theo định danh đoạn và phiên bản câu lệnh, nên chạy lại cho kết quả như cũ mà không tốn thêm lời gọi mô hình.
+\textit{Bước 1 --- sinh câu hỏi bằng mô hình ngôn ngữ, có kiểm soát.} Trước hết, một thủ tục chọn hạt giống bằng mã nguồn xác định lựa chọn các đoạn phân đoạn đại diện sao cho phủ đủ các bài học và cân bằng giữa các nhóm bộ sách và khối lớp. Với mỗi hạt giống, mô hình Gemini đọc trực tiếp nội dung của đoạn và sinh hai câu hỏi, trả về dưới dạng JSON theo hợp đồng định sẵn. Mỗi câu hỏi bắt buộc tuân thủ các điều kiện: trả lời được chỉ bằng nội dung đoạn và không bịa thông tin ngoài đoạn; chứa ít nhất một thuật ngữ, cú pháp hoặc tên riêng đặc trưng của bài để không bài khác trả lời được; tự chứa về ngữ nghĩa, không tham chiếu mơ hồ như ``đoạn trên'' hay ``bài này''; diễn đạt tự nhiên và không lặp lại các khuôn đã bị loại; đa dạng về loại câu hỏi. Ngay sau khi mô hình trả về, một bước kiểm tra tự động xác định sẽ loại câu nếu không kết thúc bằng dấu hỏi, quá ngắn, khớp khuôn bị loại, chứa từ mơ hồ, có từ khóa đặc trưng không xuất hiện trong nội dung đoạn, hoặc phần đáp án kỳ vọng trùng lặp với nội dung đoạn dưới ngưỡng quy định. Kết quả của mô hình được lưu đệm theo định danh đoạn và phiên bản câu lệnh, nên chạy lại cho kết quả như cũ mà không tốn thêm lời gọi mô hình.
 
 \textit{Bước 2 --- lọc bằng mã nguồn xác định.} Tập câu hỏi thô được đưa qua bước lọc gồm khử trùng lặp và phát hiện rò rỉ tiêu đề. Phép kiểm tra rò rỉ tiêu đề loại bỏ những câu lặp lại tên bài hoặc đường dẫn ngữ cảnh ở mức n-gram, nhằm tránh trường hợp câu hỏi ``ăn gian'' bằng cách nhắc lại đúng tên bài học.
 
@@ -166,11 +166,11 @@ Phần này trình bày cách xây dựng bộ chuẩn đối sánh truy xuất 
         \hline
     \end{tabular}
     \vspace{0.2cm}
-\caption{Phân bố bộ bộ chuẩn đối sánh truy xuất theo bộ sách và khối lớp}
+\caption{Phân bố bộ chuẩn đối sánh truy xuất theo bộ sách và khối lớp}
     \label{tab:benchmark-distribution}
 \end{table}
 
-Bảng~\ref{tab:benchmark-distribution} cho thấy bộ bộ chuẩn đối sánh được cân bằng tuyệt đối theo sáu nhóm bộ sách -- khối lớp, mỗi nhóm gồm đúng 100 câu hỏi. Đồng thời, 600 câu hỏi này bao phủ được 185 bài học, cho thấy tập kiểm thử không chỉ tập trung vào một số bài tiêu biểu mà trải rộng gần như toàn bộ kho tri thức dùng trong thực nghiệm.
+Bảng~\ref{tab:benchmark-distribution} cho thấy bộ chuẩn đối sánh được cân bằng tuyệt đối theo sáu nhóm bộ sách -- khối lớp, mỗi nhóm gồm đúng 100 câu hỏi. Đồng thời, 600 câu hỏi này bao phủ được 185 bài học, cho thấy tập kiểm thử không chỉ tập trung vào một số bài tiêu biểu mà trải rộng gần như toàn bộ kho tri thức dùng trong thực nghiệm.
 
 \begin{table}[H]
     \centering
@@ -193,13 +193,13 @@ Bảng~\ref{tab:benchmark-distribution} cho thấy bộ bộ chuẩn đối sán
         \hline
     \end{tabular}
     \vspace{0.2cm}
-\caption{Phân bố bộ bộ chuẩn đối sánh truy xuất theo loại câu hỏi và độ khó}
+\caption{Phân bố bộ chuẩn đối sánh truy xuất theo loại câu hỏi và độ khó}
     \label{tab:benchmark-type}
 \end{table}
 
 Bảng~\ref{tab:benchmark-type} cho thấy bộ chuẩn đối sánh nghiêng về các dạng câu hỏi định nghĩa, sự kiện và vận dụng, tức là những dạng gần với hành vi hỏi đáp thực tế của học sinh. Về độ khó, tập dữ liệu chỉ gồm hai mức dễ và trung bình, phản ánh chủ đích ưu tiên các câu hỏi có thể trả lời trực tiếp từ nội dung SGK thay vì các câu suy luận nhiều bước ngoài phạm vi tài liệu.
 
-\textbf{Định nghĩa độ liên quan.} Bộ bộ chuẩn đối sánh dùng chuẩn chuẩn vàng đơn ở mức bài học: mỗi câu hỏi gắn với đúng một bài học vàng. Một phân đoạn được tính là đúng nếu có cùng bộ sách, lớp, chủ đề và tên bài với khóa bài học vàng. Việc dùng khóa bài học làm chuẩn so khớp, thay vì gán nhãn relevance chi tiết cho từng phân đoạn, cho phép mở rộng bộ chuẩn đối sánh trên toàn bộ kho SGK mà vẫn giữ được tính nhất quán. Hệ quả của lựa chọn này là các độ đo dạng phủ như Recall và nDCG sẽ thấp về giá trị tuyệt đối, vì trong cùng một bài có nhiều phân đoạn đều được tính đúng; do đó các độ đo phản ánh đúng nhất chất lượng của nút truy xuất là Hit@$k$ và MRR.
+\textbf{Định nghĩa độ liên quan.} Bộ chuẩn đối sánh dùng chuẩn vàng đơn ở mức bài học: mỗi câu hỏi gắn với đúng một bài học vàng. Một phân đoạn được tính là đúng nếu có cùng bộ sách, lớp, chủ đề và tên bài với khóa bài học vàng. Việc dùng khóa bài học làm chuẩn so khớp, thay vì gán nhãn mức độ liên quan chi tiết cho từng phân đoạn, cho phép mở rộng bộ chuẩn đối sánh trên toàn bộ kho SGK mà vẫn giữ được tính nhất quán. Hệ quả của lựa chọn này là các độ đo dạng phủ như Recall và nDCG sẽ thấp về giá trị tuyệt đối, vì trong cùng một bài có nhiều phân đoạn đều được tính đúng; do đó các độ đo phản ánh đúng nhất chất lượng của nút truy xuất là Hit@$k$ và MRR.
 
 \section{Xây dựng dữ liệu cho nút sinh văn bản}
 \label{sec:data-generate}
@@ -210,7 +210,7 @@ Cần phân biệt rõ bộ dữ liệu này với bộ chuẩn đối sánh tru
 
 \section{Kiểm thử chức năng}
 
-Ngoài đánh giá định lượng, hệ thống còn được kiểm thử ở mức chức năng để bảo đảm các bước cài đặt cơ sở vận hành đúng trước khi chạy bộ chuẩn đối sánh. Các ca kiểm thử được chọn theo các điểm nút quan trọng của luồng xử lý, từ ingestion dữ liệu, phân đoạn, indexing đến lọc theo phạm vi (phạm vi filtering), truy xuất, sinh văn bản và vết thực thi logging. Các ca kiểm thử chính được liệt kê trong Bảng~\ref{tab:functional-tests}.
+Ngoài đánh giá định lượng, hệ thống còn được kiểm thử ở mức chức năng để bảo đảm các bước cài đặt cơ sở vận hành đúng trước khi chạy bộ chuẩn đối sánh. Các ca kiểm thử được chọn theo các điểm nút quan trọng của luồng xử lý, từ nạp dữ liệu, phân đoạn, lập chỉ mục đến lọc theo phạm vi, truy xuất, sinh văn bản và ghi vết thực thi. Các ca kiểm thử chính được liệt kê trong Bảng~\ref{tab:functional-tests}.
 
 \begin{table}[H]
     \centering
@@ -220,11 +220,11 @@ Ngoài đánh giá định lượng, hệ thống còn được kiểm thử ở
         \hline
         \textbf{Mã} & \textbf{Chức năng} & \textbf{Kết quả mong đợi} & \textbf{Kết quả} \\
         \hline
-        TC01 & Đọc dữ liệu SGK & Tài liệu được parse và làm sạch đúng định dạng đầu vào & Đạt \\
+        TC01 & Đọc dữ liệu SGK & Tài liệu được phân tích và làm sạch đúng định dạng đầu vào & Đạt \\
         \hline
-        TC02 & Phân đoạn theo heading & Sinh phân đoạn có siêu dữ liệu bài học và cấp độ nhất quán & Đạt \\
+        TC02 & Phân đoạn theo tiêu đề & Sinh phân đoạn có siêu dữ liệu bài học và cấp độ nhất quán & Đạt \\
         \hline
-        TC03 & Embedding và indexing & Vector được tạo và nạp vào kho chỉ mục không lỗi & Đạt \\
+        TC03 & Nhúng văn bản và lập chỉ mục & Vector được tạo và nạp vào kho chỉ mục không lỗi & Đạt \\
         \hline
         TC04 & Lọc theo phạm vi & Truy xuất được giới hạn đúng theo sách hoặc lớp đã chọn & Đạt \\
         \hline
@@ -232,13 +232,13 @@ Ngoài đánh giá định lượng, hệ thống còn được kiểm thử ở
         \hline
         TC06 & Xếp hạng lại & Phân đoạn đúng được đưa lên thứ hạng cao hơn sau xếp hạng lại & Đạt \\
         \hline
-        TC07 & Sinh văn bản & Câu trả lời bám tài liệu và có thể ghi lại ngữ cảnh debug & Đạt \\
+        TC07 & Sinh văn bản & Câu trả lời bám tài liệu và có thể ghi lại ngữ cảnh theo dõi & Đạt \\
         \hline
-        TC08 & Out-of-phạm vi handling & Hệ thống ưu tiên báo thiếu thông tin thay vì bịa nội dung & Đạt \\
+        TC08 & Xử lý ngoài phạm vi & Hệ thống ưu tiên báo thiếu thông tin thay vì bịa nội dung & Đạt \\
         \hline
-        TC09 & Multi-ý định routing & Yêu cầu phức hợp được tách thành nhiều hành động (action) hợp lệ & Đạt \\
+        TC09 & Điều hướng đa ý định & Yêu cầu phức hợp được tách thành nhiều hành động hợp lệ & Đạt \\
         \hline
-        TC10 & Logging và vết thực thi & Mỗi yêu cầu (request) có debug step phục vụ phân tích lỗi & Đạt \\
+        TC10 & Ghi nhật ký và vết thực thi & Mỗi yêu cầu có các bước theo dõi phục vụ phân tích lỗi & Đạt \\
         \hline
     \end{tabular}
     \caption{Các ca kiểm thử chức năng chính của hệ thống trước khi chạy thực nghiệm}
@@ -251,18 +251,20 @@ Kết quả ở Bảng~\ref{tab:functional-tests} cho thấy các khối nền t
 
 Phần này trình bày cách tổ chức thí nghiệm trước khi đi vào kết quả, gồm các cấu hình được so sánh, lý do lựa chọn, số lần chạy và căn cứ chọn tham số.
 
-\textbf{Các cấu hình so sánh và lý do chọn.} Đồ án tiến hành ba thí nghiệm, tập trung vào hai node lõi. Thí nghiệm thứ nhất đánh giá nút truy xuất ở cấu hình cơ sở không xếp hạng lại (no-xếp hạng lại), trong đó hệ thống chỉ dùng truy xuất lai (BM25 kết hợp dense, hợp nhất bằng RRF) mà không qua bước xếp hạng lại. Thí nghiệm thứ hai đánh giá nút truy xuất ở cấu hình có xếp hạng lại (with-xếp hạng lại), bổ sung cross-encoder để xếp hạng lại cùng tập ứng viên. Thí nghiệm thứ ba đánh giá nút sinh văn bản bằng RAGAS. Cấu hình không xếp hạng lại (no-xếp hạng lại) được chọn làm đường cơ sở (baseline) một cách có chủ đích: vì hai cấu hình truy xuất dùng chung tập ứng viên đầu vào và chỉ khác nhau ở bước xếp hạng lại, nên chênh lệch kết quả giữa chúng cô lập được đúng phần đóng góp của bộ xếp hạng lại. Đây là thiết kế so sánh kiểu cắt bỏ (ablation), phù hợp để trả lời câu hỏi nghiên cứu về giá trị thực tế của bộ xếp hạng lại, thay vì so với một hệ thống ngoài vốn khác biệt ở quá nhiều yếu tố và không thể quy kết nguyên nhân.
+\textbf{Các cấu hình so sánh và lý do chọn.} Đồ án tiến hành ba thí nghiệm, tập trung vào hai nút lõi. Thí nghiệm thứ nhất đánh giá nút truy xuất ở cấu hình cơ sở không xếp hạng lại, trong đó hệ thống chỉ dùng truy xuất lai (BM25 kết hợp tìm kiếm vector, hợp nhất bằng RRF) mà không qua bước xếp hạng lại. Thí nghiệm thứ hai đánh giá nút truy xuất ở cấu hình có xếp hạng lại, bổ sung mô hình cross-encoder để xếp hạng lại cùng tập ứng viên. Thí nghiệm thứ ba đánh giá nút sinh văn bản bằng RAGAS. Cấu hình không xếp hạng lại được chọn làm đường cơ sở một cách có chủ đích: vì hai cấu hình truy xuất dùng chung tập ứng viên đầu vào và chỉ khác nhau ở bước xếp hạng lại, nên chênh lệch kết quả giữa chúng cô lập được đúng phần đóng góp của bộ xếp hạng lại. Đây là thiết kế so sánh kiểu cắt bỏ, phù hợp để trả lời câu hỏi nghiên cứu về giá trị thực tế của bộ xếp hạng lại, thay vì so với một hệ thống ngoài vốn khác biệt ở quá nhiều yếu tố và không thể quy kết nguyên nhân.
 
 \textbf{Số lần chạy.} Mỗi cấu hình truy xuất được chạy một lần trên toàn bộ 600 câu hỏi của bộ chuẩn đối sánh, và thí nghiệm sinh văn bản được chạy một lần trên 246 mẫu. Việc chạy một lần là hợp lý vì luồng xử lý ở các thí nghiệm này về cơ bản mang tính tất định: bước truy xuất và xếp hạng lại cho kết quả ổn định với cùng đầu vào, còn mô hình chấm RAGAS được đặt ở nhiệt độ bằng 0 để loại bỏ phần lớn dao động ngẫu nhiên giữa các lần chấm. Do đó, lặp lại nhiều lần để lấy trung bình không làm thay đổi đáng kể kết luận, trong khi vẫn giữ được chi phí thực nghiệm ở mức hợp lý.
 
 \textbf{Căn cứ chọn tham số.} Các tham số ở Bảng~\ref{tab:exp-params} được chọn theo các căn cứ sau. Các mức $k \in \{1,3,5,10\}$ được dùng để vừa quan sát chất lượng ở thứ hạng cao nhất (Hit@1) vừa quan sát độ phủ trong một cửa sổ kết quả thực tế mà người dùng có thể xem (top-10). Kích thước tập tìm kiếm 50 ứng viên đủ rộng để bước xếp hạng lại có không gian lựa chọn nhưng không làm chi phí cross-encoder tăng quá mức. Nhiệt độ sinh câu trả lời được đặt thấp ở mức 0,1 để ưu tiên tính ổn định và bám nguồn, phù hợp với ngữ cảnh giáo dục cần độ chính xác. Nhiệt độ mô hình chấm được đặt bằng 0 để kết quả đánh giá nhất quán giữa các lần chạy. Chuẩn so khớp chuẩn vàng đơn ở mức bài học được chọn vì cho phép mở rộng bộ chuẩn đối sánh trên toàn bộ kho SGK với chi phí gán nhãn thấp, như đã phân tích ở Mục 4.7.
 
-\textbf{Cách xử lý dữ liệu và môi trường.} Toàn bộ thí nghiệm chạy trên cùng kho tri thức 2348 phân đoạn và cùng cấu hình mô hình ở Bảng~\ref{tab:exp-environment}. Dữ liệu kiểm thử của hai node được xây dựng theo quy trình ở Mục 4.7, và kết quả thô (raw) của mỗi thí nghiệm được lưu lại theo từng truy vấn để phục vụ phân tích lỗi ở Mục 4.11.
+\textbf{Cách xử lý dữ liệu và môi trường.} Toàn bộ thí nghiệm chạy trên cùng kho tri thức 2348 phân đoạn và cùng cấu hình mô hình ở Bảng~\ref{tab:exp-environment}. Dữ liệu kiểm thử của hai nút được xây dựng theo quy trình ở Mục 4.7, và kết quả thô của mỗi thí nghiệm được lưu lại theo từng truy vấn để phục vụ phân tích lỗi ở Mục 4.11.
+
+\textbf{Phạm vi đo thời gian.} Các thời gian báo cáo trong phần thực nghiệm là thời gian của các nút được đánh giá, không phải thời gian phản hồi đầu cuối của toàn bộ sản phẩm. Cụ thể, thí nghiệm RAGAS đo chuỗi hỏi đáp chuẩn gồm truy xuất ngữ cảnh và sinh một câu trả lời ngắn từ ngữ cảnh đó. Thí nghiệm này không bao gồm các bước định tuyến đa ý định, duyệt dàn ý, sinh nhiều sản phẩm trung gian, tìm học liệu minh họa, xuất PPTX, hậu kiểm nhiều vòng hoặc tương tác có con người trong vòng lặp của các dịch vụ như bản trình chiếu và giáo án. Vì vậy, số đo thời gian ở Mục~\ref{sec:result-generate} chỉ nên được diễn giải như chi phí của lõi RAG hỏi đáp, còn độ trễ vận hành của các luồng xử lý dài cần được đánh giá bằng một bộ chuẩn đầu cuối riêng theo từng dịch vụ.
 
 \section{Kết quả đánh giá nút truy xuất}
 \label{sec:result-retrieve}
 
-Thực nghiệm nút truy xuất được chạy đầy đủ trên 600 câu hỏi của bộ chuẩn đối sánh chuẩn vàng đơn ở cả hai cấu hình: không có bộ xếp hạng lại (không xếp hạng lại (no-xếp hạng lại)) và có bộ xếp hạng lại (có xếp hạng lại (with-xếp hạng lại)). Mỗi câu hỏi được chấm tại các mức $k \in \{1,3,5,10\}$ với các độ đo Hit@$k$, Recall@$k$, Precision@$k$, MRR@$k$ và nDCG@$k$, là nhóm độ đo thường dùng trong đánh giá truy hồi thông tin \cite{thakur2021beir,jarvelin2002cumulated}. Vì bộ chuẩn đối sánh dùng khóa bài học làm chuẩn đúng, các độ đo này phản ánh trực tiếp khả năng của nút truy xuất trong việc đưa đúng bài học mục tiêu lên các vị trí đầu của danh sách kết quả.
+Thực nghiệm nút truy xuất được chạy đầy đủ trên 600 câu hỏi của bộ chuẩn đối sánh chuẩn vàng đơn ở cả hai cấu hình: không có bộ xếp hạng lại và có bộ xếp hạng lại. Mỗi câu hỏi được chấm tại các mức $k \in \{1,3,5,10\}$ với các độ đo Hit@$k$, Recall@$k$, Precision@$k$, MRR@$k$ và nDCG@$k$, là nhóm độ đo thường dùng trong đánh giá truy hồi thông tin \cite{thakur2021beir,jarvelin2002cumulated}. Vì bộ chuẩn đối sánh dùng khóa bài học làm chuẩn đúng, các độ đo này phản ánh trực tiếp khả năng của nút truy xuất trong việc đưa đúng bài học mục tiêu lên các vị trí đầu của danh sách kết quả.
 
 \textbf{So sánh tổng thể giữa hai cấu hình.} Kết quả tổng thể của hai cấu hình được trình bày trong Bảng~\ref{tab:retrieval-overall}.
 
@@ -271,7 +273,7 @@ Thực nghiệm nút truy xuất được chạy đầy đủ trên 600 câu h�
     \renewcommand{\arraystretch}{1.25}
     \begin{tabular}{|p{0.26\textwidth}|>{\centering\arraybackslash}p{0.18\textwidth}|>{\centering\arraybackslash}p{0.18\textwidth}|>{\centering\arraybackslash}p{0.12\textwidth}|}
         \hline
-        \textbf{Chỉ số} & \textbf{No-xếp hạng lại} & \textbf{With-xếp hạng lại} & \textbf{$\Delta$} \\
+        \textbf{Chỉ số} & \textbf{Không xếp hạng lại} & \textbf{Có xếp hạng lại} & \textbf{$\Delta$} \\
         \hline
         Hit@1 & 0,7617 & 0,8183 & $+0,0566$ \\
         \hline
@@ -291,13 +293,13 @@ Thực nghiệm nút truy xuất được chạy đầy đủ trên 600 câu h�
         \hline
     \end{tabular}
     \vspace{0.2cm}
-\caption{So sánh kết quả truy xuất tổng thể giữa cấu hình no-xếp hạng lại và with-xếp hạng lại trên 600 câu hỏi}
+\caption{So sánh kết quả truy xuất tổng thể giữa cấu hình không xếp hạng lại và có xếp hạng lại trên 600 câu hỏi}
     \label{tab:retrieval-overall}
 \end{table}
 
-Bảng~\ref{tab:retrieval-overall} cho thấy bộ xếp hạng lại cải thiện rõ rệt ở nhóm thứ hạng đầu: Hit@1 tăng từ 0,7617 lên 0,8183 và MRR@10 tăng từ 0,8484 lên 0,8856. Mức cải thiện thu hẹp dần khi $k$ tăng, và tới Hit@10 hai cấu hình gần như tương đương (0,9817 so với 0,9833). Điều này cho thấy bộ xếp hạng lại chủ yếu \textit{sắp xếp lại} thứ hạng để đưa bài học đúng lên cao hơn, chứ không mở rộng độ phủ, bởi bài học đúng vốn đã nằm trong top-10 của retriever.
+Bảng~\ref{tab:retrieval-overall} cho thấy bộ xếp hạng lại cải thiện rõ rệt ở nhóm thứ hạng đầu: Hit@1 tăng từ 0,7617 lên 0,8183 và MRR@10 tăng từ 0,8484 lên 0,8856. Mức cải thiện thu hẹp dần khi $k$ tăng, và tới Hit@10 hai cấu hình gần như tương đương (0,9817 so với 0,9833). Điều này cho thấy bộ xếp hạng lại chủ yếu \textit{sắp xếp lại} thứ hạng để đưa bài học đúng lên cao hơn, chứ không mở rộng độ phủ, bởi bài học đúng vốn đã nằm trong 10 kết quả đầu của bộ truy xuất.
 
-Hai độ đo nDCG@10 và Precision@10 giảm nhẹ khi bật bộ xếp hạng lại. Hiện tượng này là hệ quả trực tiếp của chuẩn chuẩn vàng đơn ở mức bài học. Vì mọi phân đoạn cùng bài đều được tính đúng, một retriever thô thường đưa nhiều phân đoạn của cùng một bài vào top-10, khiến Precision@10 và nDCG@10 cao một cách hình thức. Khi bộ xếp hạng lại đưa phân đoạn phù hợp nhất lên vị trí đầu nhưng đẩy bớt các phân đoạn cùng bài xuống dưới, hai độ đo theo độ phủ này giảm, dù chất lượng ở thứ hạng đầu lại tăng. Vì vậy, với thiết kế bộ chuẩn đối sánh hiện tại, Hit@1 và MRR là các độ đo phản ánh đúng nhất hiệu quả của bộ xếp hạng lại, còn nDCG@10 và Precision@10 không phải là độ đo phù hợp để kết luận.
+Hai độ đo nDCG@10 và Precision@10 giảm nhẹ khi bật bộ xếp hạng lại. Hiện tượng này là hệ quả trực tiếp của chuẩn vàng đơn ở mức bài học. Vì mọi phân đoạn cùng bài đều được tính đúng, một bộ truy xuất thô thường đưa nhiều phân đoạn của cùng một bài vào 10 kết quả đầu, khiến Precision@10 và nDCG@10 cao một cách hình thức. Khi bộ xếp hạng lại đưa phân đoạn phù hợp nhất lên vị trí đầu nhưng đẩy bớt các phân đoạn cùng bài xuống dưới, hai độ đo theo độ phủ này giảm, dù chất lượng ở thứ hạng đầu lại tăng. Vì vậy, với thiết kế bộ chuẩn đối sánh hiện tại, Hit@1 và MRR là các độ đo phản ánh đúng nhất hiệu quả của bộ xếp hạng lại, còn nDCG@10 và Precision@10 không phải là độ đo phù hợp để kết luận.
 
 Hình~\ref{fig:hitk-curve} biểu diễn Hit@$k$ của hai cấu hình khi $k$ tăng. Khoảng cách giữa hai đường rõ nhất tại $k=1$ rồi thu hẹp dần và gần như khép lại tại $k=10$, minh họa trực quan cho nhận định rằng bộ xếp hạng lại cải thiện thứ hạng đầu chứ không mở rộng độ phủ.
 
@@ -317,7 +319,7 @@ Hình~\ref{fig:hitk-curve} biểu diễn Hit@$k$ của hai cấu hình khi $k$ t
     ]
     \addplot coordinates {(1,0.7617) (3,0.9367) (5,0.9683) (10,0.9817)};
     \addplot coordinates {(1,0.8183) (3,0.9500) (5,0.9750) (10,0.9833)};
-    \legend{No-rerank, With-rerank}
+    \legend{Không xếp hạng lại, Có xếp hạng lại}
     \end{axis}
     \end{tikzpicture}
     \caption{Hit@$k$ theo $k$ của hai cấu hình trên toàn bộ 600 câu hỏi}
@@ -333,7 +335,7 @@ Hình~\ref{fig:hitk-curve} biểu diễn Hit@$k$ của hai cấu hình khi $k$ t
         \hline
         \multirow{2}{*}{\textbf{Nhóm}} & \multicolumn{2}{c|}{\textbf{Hit@1}} & \multicolumn{2}{c|}{\textbf{MRR@10}} \\
         \cline{2-5}
-         & No-xếp hạng lại & With-xếp hạng lại & No-xếp hạng lại & With-xếp hạng lại \\
+         & Không xếp hạng lại & Có xếp hạng lại & Không xếp hạng lại & Có xếp hạng lại \\
         \hline
         CD-10 & 0,7000 & 0,8000 & 0,8086 & 0,8817 \\
         \hline
@@ -353,7 +355,7 @@ Hình~\ref{fig:hitk-curve} biểu diễn Hit@$k$ của hai cấu hình khi $k$ t
     \label{tab:retrieval-book-grade}
 \end{table}
 
-Bảng~\ref{tab:retrieval-book-grade} cho thấy bộ xếp hạng lại mang lại lợi ích lớn nhất ở chính những nhóm vốn yếu ở thứ hạng đầu: KNTT-11 tăng Hit@1 từ 0,70 lên 0,82 và CD-10 tăng từ 0,70 lên 0,80. Ngược lại, nhóm vốn đã mạnh như CD-11 gần như đã bão hòa nên mức tăng nhỏ. Xu hướng này cho thấy bộ xếp hạng lại đặc biệt hữu ích trong việc bù đắp cho các trường hợp mà retriever thô chưa đưa được bài học đúng lên đầu. Hình~\ref{fig:hit1-book-grade} trực quan hóa sự chênh lệch này theo từng nhóm.
+Bảng~\ref{tab:retrieval-book-grade} cho thấy bộ xếp hạng lại mang lại lợi ích lớn nhất ở chính những nhóm vốn yếu ở thứ hạng đầu: KNTT-11 tăng Hit@1 từ 0,70 lên 0,82 và CD-10 tăng từ 0,70 lên 0,80. Ngược lại, nhóm vốn đã mạnh như CD-11 gần như đã bão hòa nên mức tăng nhỏ. Xu hướng này cho thấy bộ xếp hạng lại hữu ích trong việc bù đắp cho các trường hợp mà bộ truy xuất thô chưa đưa được bài học đúng lên đầu. Hình~\ref{fig:hit1-book-grade} trực quan hóa sự chênh lệch này theo từng nhóm.
 
 \begin{figure}[H]
     \centering
@@ -375,19 +377,19 @@ Bảng~\ref{tab:retrieval-book-grade} cho thấy bộ xếp hạng lại mang l�
     ]
     \addplot coordinates {(CD-10,0.70) (CD-11,0.90) (CD-12,0.77) (KNTT-10,0.74) (KNTT-11,0.70) (KNTT-12,0.76)};
     \addplot coordinates {(CD-10,0.80) (CD-11,0.91) (CD-12,0.80) (KNTT-10,0.79) (KNTT-11,0.82) (KNTT-12,0.79)};
-    \legend{No-rerank, With-rerank}
+    \legend{Không xếp hạng lại, Có xếp hạng lại}
     \end{axis}
     \end{tikzpicture}
     \caption{So sánh Hit@1 giữa hai cấu hình theo từng nhóm bộ sách và khối lớp}
     \label{fig:hit1-book-grade}
 \end{figure}
 
-\textbf{Chi phí tính toán.} Lợi ích về độ chính xác ở thứ hạng đầu đi kèm một chi phí đáng kể về thời gian. Toàn bộ 600 câu hỏi được đánh giá trong khoảng 59,7 giây ở cấu hình no-xếp hạng lại, tương đương xấp xỉ 0,10 giây mỗi truy vấn, nhưng tăng lên khoảng 1895,5 giây ở cấu hình with-xếp hạng lại, tức gấp khoảng 31,8 lần. Phần lớn chi phí tăng thêm đến từ việc cross-encoder phải chấm lại từng cặp truy vấn --- ứng viên. Đây là một đánh đổi cần cân nhắc khi triển khai thực tế: bộ xếp hạng lại đáng dùng cho mục tiêu nâng độ chính xác top-1, nhưng nên được áp dụng có chọn lọc, chẳng hạn xử lý theo lô, lưu đệm kết quả, hoặc chỉ kích hoạt khi cơ chế truy hồi thích ứng xác định truy vấn thực sự cần.
+\textbf{Chi phí tính toán.} Lợi ích về độ chính xác ở thứ hạng đầu đi kèm chi phí thời gian cao hơn. Toàn bộ 600 câu hỏi được đánh giá trong khoảng 59,7 giây ở cấu hình không xếp hạng lại, tương đương xấp xỉ 0,10 giây mỗi truy vấn, nhưng tăng lên khoảng 1895,5 giây ở cấu hình có xếp hạng lại, tức gấp khoảng 31,8 lần. Phần lớn chi phí tăng thêm đến từ việc cross-encoder phải chấm lại từng cặp truy vấn --- ứng viên. Đây là một đánh đổi cần cân nhắc khi triển khai thực tế: bộ xếp hạng lại phù hợp với mục tiêu nâng độ chính xác ở kết quả đầu tiên, nhưng nên được áp dụng có chọn lọc, chẳng hạn xử lý theo lô, lưu đệm kết quả, hoặc chỉ kích hoạt khi cơ chế truy hồi thích ứng xác định truy vấn thực sự cần.
 
 \section{Kết quả đánh giá nút sinh văn bản theo RAGAS}
 \label{sec:result-generate}
 
-Nút sinh văn bản được đánh giá định lượng bằng RAGAS, một khung đánh giá tự động theo hướng dùng mô hình ngôn ngữ làm giám khảo (LLM làm giám khảo (LLM-as-judge)) phổ biến cho các hệ thống RAG \cite{es2023ragas}. Việc dùng mô hình ngôn ngữ làm giám khảo cũng cần được kiểm soát bằng cấu hình nhất quán và dữ liệu tham chiếu rõ ràng \cite{zheng2023llmjudge}. Trong cấu hình của đồ án, mô hình giám khảo là Google Gemini chạy ở nhiệt độ bằng 0 để bảo đảm tính nhất quán, kết hợp với mô hình embedding tiếng Việt cho các độ đo cần đối chiếu ngữ nghĩa. Bốn độ đo được sử dụng, mỗi độ đo nhắm vào một khía cạnh khác nhau của chất lượng câu trả lời, được liệt kê trong Bảng~\ref{tab:ragas-metrics}.
+Nút sinh văn bản được đánh giá định lượng bằng RAGAS, một khung đánh giá tự động theo hướng dùng mô hình ngôn ngữ làm giám khảo, phổ biến cho các hệ thống RAG \cite{es2023ragas}. Việc dùng mô hình ngôn ngữ làm giám khảo cũng cần được kiểm soát bằng cấu hình nhất quán và dữ liệu tham chiếu rõ ràng \cite{zheng2023llmjudge}. Trong cấu hình của đồ án, mô hình giám khảo là Google Gemini chạy ở nhiệt độ bằng 0 để bảo đảm tính nhất quán, kết hợp với mô hình nhúng tiếng Việt cho các độ đo cần đối chiếu ngữ nghĩa. Bốn độ đo được sử dụng, mỗi độ đo nhắm vào một khía cạnh khác nhau của chất lượng câu trả lời, được liệt kê trong Bảng~\ref{tab:ragas-metrics}.
 
 \begin{table}[H]
     \centering
@@ -429,9 +431,9 @@ Bảng~\ref{tab:ragas-metrics} cho thấy bốn độ đo được chọn bao ph
         \hline
         Ngữ cảnh Recall & 0,9593 \\
         \hline
-        Thời gian retriever (giây) & 4,579 \\
+        Thời gian truy xuất (giây) & 4,579 \\
         \hline
-        Thời gian generator (giây) & 1,979 \\
+        Thời gian sinh văn bản (giây) & 1,979 \\
         \hline
         Tổng thời gian luồng xử lý (giây) & 6,558 \\
         \hline
@@ -441,22 +443,24 @@ Bảng~\ref{tab:ragas-metrics} cho thấy bốn độ đo được chọn bao ph
     \label{tab:generation-ragas}
 \end{table}
 
-Bảng~\ref{tab:generation-ragas} cho thấy Faithfulness đạt 0,9757 và Ngữ cảnh Recall đạt 0,9593, trong khi Answer Relevancy đạt 0,8571 và Ngữ cảnh Precision đạt 0,8555. Về thời gian, trung bình mỗi mẫu mất 4,579 giây cho bước truy xuất, 1,979 giây cho bước sinh câu trả lời và 6,558 giây cho toàn bộ luồng xử lý.
+Bảng~\ref{tab:generation-ragas} cho thấy Faithfulness đạt 0,9757 và Ngữ cảnh Recall đạt 0,9593, trong khi Answer Relevancy đạt 0,8571 và Ngữ cảnh Precision đạt 0,8555. Về thời gian, trung bình mỗi mẫu mất 4,579 giây cho bước truy xuất, 1,979 giây cho bước sinh câu trả lời và 6,558 giây cho toàn bộ luồng xử lý được đo trong thí nghiệm RAGAS.
+
+Cần lưu ý rằng ``toàn bộ luồng xử lý'' trong Bảng~\ref{tab:generation-ragas} là toàn bộ luồng hỏi đáp chuẩn của bộ chuẩn sinh văn bản, không phải toàn bộ luồng sản phẩm của mọi dịch vụ. Với các yêu cầu sinh bản trình chiếu hoặc giáo án, hệ thống phải chạy thêm nhiều bước có độ trễ lớn như lập dàn ý, chờ người dùng duyệt dàn ý nếu bật HITL, sinh nội dung cho nhiều trang hoặc mục, tìm học liệu minh họa qua công cụ ngoài, ghép sản phẩm trung gian, xuất tệp và hậu kiểm chất lượng. Do đó, việc các dịch vụ này có độ trễ thực tế ở mức vài phút không mâu thuẫn với số đo RAGAS hơn 6 giây; hai con số đo hai phạm vi khác nhau.
 
 Kết quả ở Bảng~\ref{tab:generation-ragas} cho thấy hai điểm đáng chú ý. Thứ nhất, Faithfulness và Ngữ cảnh Recall đều ở mức cao, cho thấy khi nút truy xuất cung cấp được ngữ cảnh phù hợp, nút sinh văn bản có xu hướng bám tốt vào nguồn và ít bịa thông tin ngoài tài liệu --- đúng với mục tiêu giữ tính bám nguồn đã đặt ra ở Chương 3. Thứ hai, Answer Relevancy và Ngữ cảnh Precision thấp hơn một bậc, phản ánh rằng câu trả lời đôi khi còn thừa thông tin và chất lượng câu trả lời vẫn phụ thuộc vào việc sắp xếp đúng các phân đoạn giá trị nhất ở đầu danh sách ngữ cảnh. Nhận xét này nhất quán với kết quả ở Mục 4.9: bài học đúng thường đã được tìm thấy, nhưng thứ hạng giữa các phân đoạn trong cùng bài vẫn còn dư địa cải thiện, và đây chính là phần mà bộ xếp hạng lại đóng góp.
 
 \section{Phân tích lỗi}
 \label{sec:error-analysis}
 
-Để hiểu rõ giới hạn của hệ thống, các lỗi quan sát được trong quá trình thực nghiệm được phân theo từng lớp của luồng xử lý. Ở lớp dữ liệu và phân đoạn, một số bài học có nội dung gần nhau về thuật ngữ nhưng khác bộ sách hoặc khác khối lớp, dễ gây nhầm lẫn cho retriever khi không có bộ lọc phạm vi; ngoài ra, việc cắt phân đoạn theo heading đôi khi tách rời một ý trải dài qua nhiều đoạn. Ở lớp truy xuất, các truy vấn ngắn hoặc dùng từ chung chung khó được phân biệt đúng bài, dẫn tới việc bài học đúng không được đưa lên vị trí đầu; đây cũng là nhóm trường hợp mà bộ xếp hạng lại giúp cải thiện rõ nhất theo kết quả ở Mục 4.9. Ở lớp xếp hạng lại, vẫn tồn tại những trường hợp cross-encoder đánh giá sai mức liên quan và đẩy phân đoạn đúng xuống thấp, dù trên tổng thể bộ xếp hạng lại cải thiện thứ hạng đầu.
+Để hiểu rõ giới hạn của hệ thống, các lỗi quan sát được trong quá trình thực nghiệm được phân theo từng lớp của luồng xử lý. Ở lớp dữ liệu và phân đoạn, một số bài học có nội dung gần nhau về thuật ngữ nhưng khác bộ sách hoặc khác khối lớp, có thể gây nhầm lẫn cho bộ truy xuất khi không có bộ lọc phạm vi; ngoài ra, việc cắt phân đoạn theo tiêu đề đôi khi tách rời một ý trải dài qua nhiều đoạn. Ở lớp truy xuất, các truy vấn ngắn hoặc dùng từ chung chung khó được phân biệt đúng bài, dẫn tới việc bài học đúng không được đưa lên vị trí đầu; đây cũng là nhóm trường hợp mà bộ xếp hạng lại giúp cải thiện rõ nhất theo kết quả ở Mục 4.9. Ở lớp xếp hạng lại, vẫn tồn tại những trường hợp cross-encoder đánh giá sai mức liên quan và đẩy phân đoạn đúng xuống thấp, dù trên tổng thể bộ xếp hạng lại cải thiện thứ hạng đầu.
 
-Ở lớp sinh văn bản, các lỗi chính gồm câu trả lời thừa thông tin làm giảm Answer Relevancy, và một số ít trường hợp suy luận mở rộng ngoài ngữ cảnh khi tài liệu không đủ. Cuối cùng, ở lớp đánh giá, chuẩn chuẩn vàng đơn ở mức bài học khiến các độ đo theo độ phủ như nDCG@10 và Precision@10 không phản ánh đúng chất lượng thứ hạng đầu, như đã phân tích ở Mục 4.9; tương tự, các độ đo RAGAS dựa trên đáp án tham chiếu sẽ chịu ảnh hưởng bởi chất lượng của đáp án tham chiếu. Các mẫu cụ thể có điểm số thấp được lưu trong đầu ra thô của cả hai luồng đánh giá, cho phép truy lại từng trường hợp để phân tích sâu hơn khi cần.
+Ở lớp sinh văn bản, các lỗi chính gồm câu trả lời thừa thông tin làm giảm Answer Relevancy, và một số ít trường hợp suy luận mở rộng ngoài ngữ cảnh khi tài liệu không đủ. Cuối cùng, ở lớp đánh giá, chuẩn vàng đơn ở mức bài học khiến các độ đo theo độ phủ như nDCG@10 và Precision@10 không phản ánh đúng chất lượng thứ hạng đầu, như đã phân tích ở Mục 4.9; tương tự, các độ đo RAGAS dựa trên đáp án tham chiếu sẽ chịu ảnh hưởng bởi chất lượng của đáp án tham chiếu. Các mẫu cụ thể có điểm số thấp được lưu trong đầu ra thô của cả hai luồng đánh giá, cho phép truy lại từng trường hợp để phân tích sâu hơn khi cần.
 
 \section{Nhận xét tổng hợp kết quả thực nghiệm}
 
-Từ các kết quả trên, có thể rút ra một số nhận xét chính. Thứ nhất, hướng tiếp cận RAG trên dữ liệu SGK Tin học THPT đã chứng minh được tính khả thi: nút truy xuất đạt Hit@1 bằng 0,8183 và MRR@10 bằng 0,8856 ở cấu hình tốt nhất, trong khi nút sinh văn bản đạt Faithfulness bằng 0,9757 trên tập đánh giá RAGAS. Thứ hai, bộ xếp hạng lại bằng cross-encoder đóng góp rõ rệt vào chất lượng thứ hạng đầu, cải thiện Hit@1 thêm khoảng 5,7 điểm phần trăm và mang lại lợi ích lớn nhất ở các nhóm bộ sách vốn yếu, tuy phải trả giá bằng chi phí thời gian tăng khoảng 31,8 lần. Thứ ba, kết quả của hai node nhất quán với nhau: việc nút truy xuất đưa đúng bài học vào ngữ cảnh là nền tảng để nút sinh văn bản đạt độ trung thực cao, và phần thứ hạng còn cải thiện được ở truy xuất cũng chính là phần ảnh hưởng tới Answer Relevancy và Ngữ cảnh Precision của sinh văn bản.
+Từ các kết quả trên, có thể rút ra một số nhận xét chính. Thứ nhất, hướng tiếp cận RAG trên dữ liệu SGK Tin học THPT có tính khả thi: nút truy xuất đạt Hit@1 bằng 0,8183 và MRR@10 bằng 0,8856 ở cấu hình tốt nhất, trong khi nút sinh văn bản đạt Faithfulness bằng 0,9757 trên tập đánh giá RAGAS. Thứ hai, bộ xếp hạng lại bằng cross-encoder đóng góp rõ rệt vào chất lượng thứ hạng đầu, cải thiện Hit@1 thêm khoảng 5,7 điểm phần trăm và mang lại lợi ích lớn nhất ở các nhóm bộ sách vốn yếu, tuy phải trả giá bằng chi phí thời gian tăng khoảng 31,8 lần. Thứ ba, kết quả của hai nút nhất quán với nhau: việc nút truy xuất đưa đúng bài học vào ngữ cảnh là nền tảng để nút sinh văn bản đạt độ trung thực cao, và phần thứ hạng còn cải thiện được ở truy xuất cũng chính là phần ảnh hưởng tới Answer Relevancy và Ngữ cảnh Precision của sinh văn bản.
 
-Bên cạnh các kết quả đạt được, chương cũng chỉ ra những giới hạn cần lưu ý khi diễn giải số liệu. Bộ chuẩn đối sánh truy xuất sử dụng chuẩn chuẩn vàng đơn ở mức bài học, nên các độ đo theo độ phủ không nên được dùng làm kết luận chính; chi phí của bộ xếp hạng lại còn cao và cần được tối ưu khi triển khai; và việc đánh giá sinh văn bản dựa trên đáp án tham chiếu phụ thuộc vào chất lượng của đáp án đó. Những giới hạn này là cơ sở cho các hướng cải thiện sẽ được trình bày ở Chương 5 và Chương 6.
+Bên cạnh các kết quả đạt được, chương cũng chỉ ra những giới hạn cần lưu ý khi diễn giải số liệu. Bộ chuẩn đối sánh truy xuất sử dụng chuẩn vàng đơn ở mức bài học, nên các độ đo theo độ phủ không nên được dùng làm kết luận chính; chi phí của bộ xếp hạng lại còn cao và cần được tối ưu khi triển khai; và việc đánh giá sinh văn bản dựa trên đáp án tham chiếu phụ thuộc vào chất lượng của đáp án đó. Những giới hạn này là cơ sở cho các hướng cải thiện sẽ được trình bày ở Chương 5 và Chương 6.
 
 Tóm lại, Chương 4 đã trình bày việc hiện thực hóa hệ thống từ dữ liệu SGK đến luồng xử lý hỏi đáp hoàn chỉnh, mô tả chi tiết cách xây dựng và chứng thực hai bộ dữ liệu kiểm thử, đồng thời báo cáo kết quả đánh giá riêng cho nút truy xuất và nút sinh văn bản. Các kết luận trong chương đều dựa trên những số liệu đã thực sự được chạy và kiểm chứng, và mỗi bộ dữ liệu kiểm thử đều có thể truy ngược về nguồn để kiểm tra độc lập.
 
