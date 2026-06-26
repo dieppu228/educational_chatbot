@@ -1,6 +1,7 @@
 import time
 import asyncio
 import logging
+import re
 import threading
 from typing import Generator, Optional, Dict, AsyncGenerator
 
@@ -8,7 +9,12 @@ from src.config.config import project_path, settings
 
 # Core pipeline components
 from src.llm.intent_router import IntentRouter
-from src.llm.action_planner import ActionPlanner, Action
+from src.llm.action_planner import (
+    ActionPlanner,
+    Action,
+    has_assessment_context,
+    is_assessment_followup_message,
+)
 from src.llm.session_manager import SessionManager
 from src.llm.session_store import SessionStore
 from src.llm.memory import MemoryManager
@@ -185,6 +191,8 @@ class Orchestrator:
             yield msg
             return
 
+        self._prepare_history_context(ctx)
+
         # ② Context enrichment + Query Rewriting (async)
         await self._enrich_context_async(ctx)
 
@@ -193,6 +201,10 @@ class Orchestrator:
 
         # ④ Intent Detection (LLM call - async)
         await self._detect_intent_async(ctx)
+
+        # Keep active quiz/slide exercise sessions for terse follow-ups like
+        # "câu 1 A" or "cho tôi đáp án", even if the router guesses a new topic.
+        self._preserve_active_assessment_session(ctx)
 
         # ⑤ Session Resolution (pure code)
         self._resolve_session(ctx)
@@ -326,6 +338,38 @@ class Orchestrator:
                 after=after,
             )
 
+    def _preserve_active_assessment_session(self, ctx: RequestContext) -> None:
+        current_session = self.memory.get_current_session(ctx.user_id)
+        if not has_assessment_context(current_session):
+            return
+        followup_intents = {"interact", "chat", "explain", "analyze"}
+        if not any(intent.primary_intent in followup_intents for intent in ctx.intent_results):
+            return
+        if not is_assessment_followup_message(ctx.query.lower()):
+            return
+
+        changed = False
+        for intent in ctx.intent_results:
+            if intent.is_new_topic:
+                intent.is_new_topic = False
+                changed = True
+            if intent.primary_intent == "chat":
+                intent.primary_intent = "interact"
+                changed = True
+
+        if ctx.intent_results:
+            ctx.intent_result = ctx.intent_results[0]
+
+        if changed:
+            ctx.add_debug_step(
+                "SessionGuard",
+                status="preserved_assessment_session",
+                reason="assessment_followup",
+                session_id=current_session.session_id,
+                has_quiz_state=current_session.quiz_state is not None,
+                has_slide_state=current_session.slide_state is not None,
+            )
+
     @staticmethod
     def _book_label(book: str) -> str:
         return {"CD": "Cánh Diều", "KNTT": "Kết Nối Tri Thức"}.get(book, book)
@@ -368,13 +412,104 @@ class Orchestrator:
     # PIPELINE STAGES (async versions)
     # ============================================================
 
-    async def _enrich_context_async(self, ctx: RequestContext):
+    def _prepare_history_context(self, ctx: RequestContext) -> None:
         current_session = self.memory.get_current_session(ctx.user_id)
-        history_text = ""
-        if current_session:
-            history_text = "\n".join(
-                f"{m.role}: {m.content}" for m in current_session.messages[-5:]
+        if not current_session or not current_session.messages:
+            ctx.history_context = ""
+            ctx.history_mode = "none"
+            ctx.history_reason = "no_current_history"
+            ctx.add_debug_step(
+                "HistoryPolicy",
+                mode=ctx.history_mode,
+                reason=ctx.history_reason,
+                messages_used=0,
             )
+            return
+
+        history_text = self._format_history_messages(current_session.messages[-5:])
+        if is_assessment_followup_message(ctx.query.lower()) and has_assessment_context(current_session):
+            ctx.history_context = history_text
+            ctx.history_mode = "same_topic"
+            ctx.history_reason = "assessment_followup"
+        elif self._should_reset_history_for_topic(ctx.query, current_session.topic, history_text):
+            ctx.history_context = ""
+            ctx.history_mode = "reset"
+            ctx.history_reason = "topic_changed"
+        else:
+            ctx.history_context = history_text
+            ctx.history_mode = "same_topic"
+            ctx.history_reason = "same_or_ambiguous_topic"
+
+        ctx.add_debug_step(
+            "HistoryPolicy",
+            mode=ctx.history_mode,
+            reason=ctx.history_reason,
+            current_topic=current_session.topic,
+            messages_used=len(current_session.messages[-5:]) if ctx.history_context else 0,
+        )
+
+    @staticmethod
+    def _format_history_messages(messages) -> str:
+        return "\n".join(f"{m.role}: {m.content}" for m in messages)
+
+    def _should_reset_history_for_topic(self, query: str, current_topic: str, history_text: str) -> bool:
+        if not current_topic:
+            return self._looks_like_explicit_generate(query)
+        if self._has_contextual_reference(query, history_text):
+            return False
+        if self._topic_has_overlap(query, current_topic):
+            return False
+        if self._looks_like_explicit_generate(query):
+            return True
+        return len(self._content_keywords(query)) >= 2
+
+    def _has_contextual_reference(self, query: str, history_text: str) -> bool:
+        text = query.lower()
+        if self.context_analyzer.needs_contextualization(query, history_text):
+            return True
+        patterns = [
+            r"\bcâu\s*\d+\b", r"\bcau\s*\d+\b",
+            r"\b(?:bài|bai|chủ\s*đề|chu\s*de|nội\s*dung|noi\s*dung)\s*(?:này|nay|đó|do)\b",
+            r"\b(?:cái|cai|phần|phan)\s*(?:này|nay|đó|do)\b",
+            r"\b(?:vừa|vua|trên|tren|tiếp|tiep|thêm|them|nữa|nua|lại|lai)\b",
+            r"\b(?:đáp\s*án|dap\s*an|giải\s*thích\s*câu|giai\s*thich\s*cau)\b",
+        ]
+        return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+
+    @staticmethod
+    def _looks_like_explicit_generate(query: str) -> bool:
+        text = query.lower()
+        return bool(
+            re.search(r"\b(?:sinh|tạo|tao|soạn|soan|thiết\s*kế|thiet\s*ke|lập|lap)\b", text)
+            and re.search(
+                r"\b(?:slide|bài\s*giảng|bai\s*giang|giáo\s*án|giao\s*an|quiz|bài\s*tập|bai\s*tap|câu\s*hỏi|cau\s*hoi|trắc\s*nghiệm|trac\s*nghiem|tự\s*luận|tu\s*luan)\b",
+                text,
+            )
+        )
+
+    @classmethod
+    def _topic_has_overlap(cls, query: str, current_topic: str) -> bool:
+        query_keywords = cls._content_keywords(query)
+        topic_keywords = cls._content_keywords(current_topic)
+        return bool(query_keywords and topic_keywords and query_keywords.intersection(topic_keywords))
+
+    @staticmethod
+    def _content_keywords(text: str) -> set[str]:
+        stopwords = {
+            "sinh", "tao", "tạo", "soan", "soạn", "thiet", "thiết", "ke", "kế",
+            "slide", "bai", "bài", "giang", "giảng", "giao", "giáo", "an", "án",
+            "quiz", "tap", "tập", "cau", "câu", "hoi", "hỏi", "trac", "trắc",
+            "nghiem", "nghiệm", "tu", "tự", "luan", "luận", "ve", "về", "cho",
+            "toi", "tôi", "minh", "mình", "hay", "hãy", "lop", "lớp", "bo", "bộ",
+            "sach", "sách", "tin", "học", "hoc", "may", "máy", "tinh", "tính",
+            "cd", "kntt", "canh", "cánh", "dieu", "diều", "ket", "kết", "noi", "nối",
+            "tri", "thuc", "thức", "la", "là", "gi", "gì", "va", "và", "cua", "của",
+        }
+        tokens = set(re.findall(r"\w{2,}", text.lower(), flags=re.UNICODE))
+        return {token for token in tokens if token not in stopwords}
+
+    async def _enrich_context_async(self, ctx: RequestContext):
+        history_text = ctx.history_context
 
         if history_text and self.context_analyzer.needs_contextualization(ctx.query, history_text):
             context_snippet = self.context_analyzer.extract_context_from_history(ctx.query, history_text)
@@ -402,12 +537,7 @@ class Orchestrator:
         )
 
     async def _extract_params_async(self, ctx: RequestContext):
-        current_session = self.memory.get_current_session(ctx.user_id)
-        history_text = ""
-        if current_session:
-            history_text = "\n".join(
-                f"{m.role}: {m.content}" for m in current_session.messages[-5:]
-            )
+        history_text = ctx.history_context
 
         t0 = time.time()
         params = await self.param_extractor.extract_async(
@@ -435,7 +565,7 @@ class Orchestrator:
     async def _detect_intent_async(self, ctx: RequestContext):
         current_session = self.memory.get_current_session(ctx.user_id)
         current_topic = current_session.topic if current_session else None
-        session_messages = current_session.get_context_messages() if current_session else None
+        session_messages = current_session.get_context_messages() if current_session and ctx.history_context else None
 
         t1 = time.time()
         intent_results = await self.intent_router.detect_multi_async(

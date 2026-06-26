@@ -32,6 +32,9 @@ class RequestContext:
     context_enriched: bool = False
     rewrite_info: Optional[Dict] = None
     extracted_params: Dict[str, Any] = field(default_factory=dict)
+    history_context: str = ""                   # Session messages allowed for current topic only
+    history_mode: str = "none"                  # none|same_topic|reset
+    history_reason: Optional[str] = None
 
     # ── Intent (IntentRouter) ──────────────────────────────
     intent_result: Optional[IntentResult] = None          # Intent chính (= intent_results[0]), backward-compat
