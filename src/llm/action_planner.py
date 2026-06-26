@@ -82,6 +82,41 @@ ROUND_ID_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+ANSWER_KEY_KEYWORDS = [
+    r"đưa\s*(?:ra\s*)?đáp\s*án", r"dua\s*(?:ra\s*)?dap\s*an",
+    r"cho\s*(?:tôi|toi|mình|minh|em)?\s*(?:xem\s*)?đáp\s*án",
+    r"cho\s*(?:toi|minh|em)?\s*(?:xem\s*)?dap\s*an",
+    r"xem\s*đáp\s*án", r"xem\s*dap\s*an",
+    r"đáp\s*án\s*câu\s*\d+", r"dap\s*an\s*cau\s*\d+",
+    r"đáp\s*án\s*(?:đúng|dung|là\s*gì|la\s*gi|nào|nao)",
+    r"dap\s*an\s*(?:dung|la\s*gi|nao)",
+    r"answer\s*key",
+]
+
+ASSESSMENT_FOLLOWUP_KEYWORDS = [
+    *ANSWER_KEY_KEYWORDS,
+    r"\bcâu\s*\d+\b", r"\bcau\s*\d+\b",
+    r"\b(?:đáp\s*án|dap\s*an|chọn|chon)\s*[ABCD]\b",
+    r"\b[ABCD]\b",
+    r"giải\s*thích\s*câu", r"giai\s*thich\s*cau",
+]
+
+
+def has_assessment_context(session: Optional[Session]) -> bool:
+    if not session:
+        return False
+    has_quiz = bool(session.quiz_state and session.quiz_state.get_all_questions())
+    has_slide_exercises = bool(session.slide_state and session.slide_state.has_exercises)
+    return has_quiz or has_slide_exercises
+
+
+def is_answer_key_request(message: str) -> bool:
+    return any(re.search(pattern, message, re.IGNORECASE) for pattern in ANSWER_KEY_KEYWORDS)
+
+
+def is_assessment_followup_message(message: str) -> bool:
+    return any(re.search(pattern, message, re.IGNORECASE) for pattern in ASSESSMENT_FOLLOWUP_KEYWORDS)
+
 
 # ============================================================
 # ACTION PLANNER CLASS
@@ -97,6 +132,12 @@ class ActionPlanner:
     ) -> ActionPlan:
         primary = intent_result.primary_intent
         msg_lower = message.lower()
+
+        if has_assessment_context(session):
+            if is_answer_key_request(msg_lower):
+                return self._plan_interact(intent_result, session, msg_lower)
+            if primary == "chat" and is_assessment_followup_message(msg_lower):
+                return self._plan_interact(intent_result, session, msg_lower)
 
         if primary == "generate":
             return self._plan_generate(intent_result, msg_lower)
@@ -174,6 +215,15 @@ class ActionPlanner:
 
         # 3. Determine based on session state
         if session:
+            # If session has slide exercises and user asks for answer key or answers,
+            # keep the interaction with slide exercises instead of older quiz rounds.
+            if session.slide_state and session.slide_state.has_exercises:
+                if is_answer_key_request(msg) or is_assessment_followup_message(msg):
+                    return ActionPlan(
+                        action=Action.ANSWER_EXERCISE,
+                        reason="Session has slide exercises",
+                    )
+
             # If session has quiz state with questions → check answer
             if session.quiz_state and session.quiz_state.get_all_questions():
                 return ActionPlan(

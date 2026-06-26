@@ -15,6 +15,9 @@ from src.schemas.slide_schemas import (
 )
 from src.llm.memory import Session, QuestionRecord
 from src.llm.handlers.question.scorer import QuestionScorer
+from src.llm.services.quiz_service import QuizService
+from src.llm.action_planner import is_answer_key_request
+from src.llm.utils import extract_question_index_from_query
 from src.rag.rag_service import RAGService
 from src.llm.graphs.content_supervisor import build_content_supervisor, RECURSION_LIMIT
 from src.llm.graphs.stream_wrapper import invoke_graph_sync, resume_graph
@@ -616,6 +619,16 @@ class SlideService:
             yield "Không có bài tập slide nào để trả lời."
             return
 
+        direct_msg = self._try_grade_direct_mcq_exercises(session, slide_state, original_query, ctx)
+        if direct_msg:
+            yield direct_msg
+            return
+
+        answer_key_msg = self._try_show_exercise_answer_key(session, slide_state, original_query, ctx)
+        if answer_key_msg:
+            yield answer_key_msg
+            return
+
         task_items = [q.to_task_item() for q in slide_state.exercise_questions]
 
         t0 = time.time()
@@ -644,6 +657,164 @@ class SlideService:
             yield msg
         else:
             yield f"\nKhông xác định được câu trả lời. {result.explanation or ''}"
+
+    def _try_grade_direct_mcq_exercises(
+        self,
+        session: Session,
+        slide_state,
+        original_query: str,
+        ctx: RequestContext,
+    ) -> Optional[str]:
+        answers = QuizService._extract_direct_mcq_answers(
+            original_query,
+            total_questions=len(slide_state.exercise_questions),
+        )
+        if not answers:
+            return None
+
+        graded = []
+        skipped = []
+        for display_index, user_answer in answers:
+            question_index = display_index - 1
+            if question_index < 0 or question_index >= len(slide_state.exercise_questions):
+                skipped.append({
+                    "question_display_index": display_index,
+                    "user_answer": user_answer,
+                    "reason": "question_index_out_of_range",
+                })
+                continue
+
+            record = slide_state.exercise_questions[question_index]
+            if record.question_type != "mcq":
+                skipped.append({
+                    "question_display_index": display_index,
+                    "question_id": record.question_id,
+                    "question_type": record.question_type,
+                    "user_answer": user_answer,
+                    "reason": "not_mcq",
+                })
+                continue
+
+            correct_answer = str(record.content.get("correct_answer", "")).strip().upper()
+            if correct_answer not in {"A", "B", "C", "D"}:
+                skipped.append({
+                    "question_display_index": display_index,
+                    "question_id": record.question_id,
+                    "user_answer": user_answer,
+                    "correct_answer": correct_answer,
+                    "reason": "invalid_correct_answer",
+                })
+                continue
+
+            is_correct = user_answer == correct_answer
+            record.record_attempt(
+                user_answer=user_answer,
+                is_correct=is_correct,
+                score=1.0 if is_correct else 0.0,
+            )
+            graded.append((display_index, user_answer, correct_answer, is_correct))
+
+        if not graded:
+            ctx.add_debug_step(
+                "DirectMCQAnswerParser",
+                status="parsed_but_not_graded",
+                raw_query=original_query,
+                parsed_answers=[
+                    {"question_display_index": idx, "user_answer": ans}
+                    for idx, ans in answers
+                ],
+                skipped=skipped,
+            )
+            return None
+
+        correct_count = sum(1 for _, _, _, is_correct in graded if is_correct)
+        lines = [f"\n\nĐã chấm {len(graded)} câu: {correct_count}/{len(graded)} đúng."]
+        for display_index, user_answer, correct_answer, is_correct in graded:
+            status = "Đúng" if is_correct else "Sai"
+            lines.append(
+                f"Câu {display_index}: {status} - bạn chọn {user_answer}, đáp án đúng {correct_answer}."
+            )
+
+        msg = "\n".join(lines)
+        session.add_message("assistant", msg)
+        ctx.add_debug_step(
+            "DirectMCQAnswerParser",
+            status="graded",
+            raw_query=original_query,
+            parsed_answers=[
+                {"question_display_index": idx, "user_answer": ans}
+                for idx, ans in answers
+            ],
+            graded_answers=[
+                {
+                    "question_display_index": display_index,
+                    "question_record_index": display_index - 1,
+                    "user_answer": user_answer,
+                    "correct_answer": correct_answer,
+                    "is_correct": is_correct,
+                }
+                for display_index, user_answer, correct_answer, is_correct in graded
+            ],
+            skipped=skipped,
+        )
+        ctx.add_debug_step(
+            "Handler",
+            action="answer_exercise",
+            status="direct_mcq",
+            answers_detected=len(answers),
+            answers_graded=len(graded),
+            correct=correct_count,
+        )
+        return msg
+
+    def _try_show_exercise_answer_key(
+        self,
+        session: Session,
+        slide_state,
+        original_query: str,
+        ctx: RequestContext,
+    ) -> Optional[str]:
+        if not is_answer_key_request(original_query.lower()):
+            return None
+
+        question_index = extract_question_index_from_query(original_query)
+        if question_index is not None:
+            if question_index < 1 or question_index > len(slide_state.exercise_questions):
+                return None
+            selected = [(question_index, slide_state.exercise_questions[question_index - 1])]
+        else:
+            selected = list(enumerate(slide_state.exercise_questions, start=1))
+
+        lines = ["\n\nĐáp án bài tập trong slide:"]
+        for display_index, record in selected:
+            content = record.content or {}
+            correct_answer = (
+                content.get("correct_answer")
+                or content.get("answer")
+                or content.get("correct")
+            )
+            explanation = str(content.get("explanation") or "").strip()
+
+            if correct_answer in (None, ""):
+                continue
+
+            line = f"Câu {display_index}: {correct_answer}"
+            if explanation:
+                line += f" - {explanation}"
+            lines.append(line)
+
+        if len(lines) == 1:
+            return None
+
+        msg = "\n".join(lines)
+        session.add_message("assistant", msg)
+        ctx.add_debug_step(
+            "Handler",
+            action="answer_exercise",
+            status="answer_key",
+            questions_returned=len(lines) - 1,
+        )
+        return msg
 
     # ────────────────────────────────────────────────────────
     # HELPERS
@@ -962,6 +1133,16 @@ class SlideService:
 
         if not slide_state or not slide_state.has_exercises:
             yield "Không có bài tập slide nào để trả lời."
+            return
+
+        direct_msg = self._try_grade_direct_mcq_exercises(session, slide_state, original_query, ctx)
+        if direct_msg:
+            yield direct_msg
+            return
+
+        answer_key_msg = self._try_show_exercise_answer_key(session, slide_state, original_query, ctx)
+        if answer_key_msg:
+            yield answer_key_msg
             return
 
         task_items = [q.to_task_item() for q in slide_state.exercise_questions]
