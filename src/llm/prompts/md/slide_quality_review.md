@@ -16,6 +16,8 @@ NGUYÊN TẮC CHẤM:
 - Không đánh trượt chỉ vì slide còn cần giáo viên chỉnh câu chữ, rút gọn bullet, đổi bố cục hoặc thay hình minh họa.
 - Ưu tiên cho qua nếu nội dung chính đúng, có cấu trúc bài giảng cơ bản và giáo viên có thể chỉnh sửa tiếp.
 - Chỉ coi là lỗi critical khi sai kiến thức nghiêm trọng, bịa nội dung ngoài context, thiếu phần cốt lõi khiến không dạy được, hoặc có rủi ro an toàn/chính sách.
+- Phần "exercise"/"luyện tập" trong slide là embedded formative assessment, có thể là câu hỏi MCQ mới được sinh từ kiến thức trong context. KHÔNG yêu cầu nó phải sao chép nguyên văn bài tập SGK trong context, trừ khi user yêu cầu rõ "lấy đúng bài tập trong SGK" hoặc "giữ nguyên bài tập".
+- Chỉ đánh quiz/exercise là hallucination khi câu hỏi, đáp án hoặc giải thích sai kiến thức, lệch hẳn chủ đề, hoặc không thể suy ra từ nội dung bài học. Nếu câu hỏi đúng chủ đề nhưng chưa khớp bài tập gốc, đánh tối đa major và ưu tiên reflection_action="revise_quiz" hoặc approve kèm issue.
 
 YÊU CẦU USER:
 {query}
@@ -57,4 +59,5 @@ QUY TẮC RA QUYẾT ĐỊNH:
 - Với lỗi media thông thường như thiếu ảnh/GIF, ảnh chưa đủ cụ thể, hoặc reuse ảnh giữa nhiều slide: severity tối đa là "minor" hoặc "major", target="media", reflection_action ưu tiên "approve" kèm issue nếu nội dung chính vẫn dùng được.
 - Với lỗi trình bày thông thường như bullet hơi dài, luồng chưa thật mượt, nội dung chưa thật sâu nhưng vẫn đúng trọng tâm: severity tối đa là "major" và ưu tiên approve kèm issue.
 - Chỉ đánh media là "critical" khi hình ảnh/GIF gây hiểu sai kiến thức, chứa nội dung không phù hợp, hoặc mâu thuẫn trực tiếp với context SGK.
+- Với lỗi chỉ nằm ở quiz/exercise nhúng: target phải là "quiz" hoặc "exercise"; nếu cần sửa thì reflection_action="revise_quiz", không chọn "revise_content" và không block toàn bộ deck khi nội dung slide chính vẫn dùng được.
 - revision_instruction phải cụ thể: nêu phần cần sửa, giữ phần nào, dùng nguồn/context nào nếu có.

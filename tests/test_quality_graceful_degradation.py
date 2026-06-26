@@ -97,6 +97,27 @@ def test_classify_quality_media_critical_is_warning_when_deck_exists():
     ) == "warn"
 
 
+def test_classify_quality_embedded_quiz_critical_is_warning_when_deck_exists():
+    assert classify_quality(
+        {
+            "passed": False,
+            "score": 2.0,
+            "reason_fail": "HALLUCINATION",
+            "issues": [
+                {
+                    "case": "QUIZ_INVALID",
+                    "severity": "critical",
+                    "target": "quiz",
+                    "message": "Câu hỏi luyện tập không khớp bài tập gốc trong context.",
+                }
+            ],
+            "reflection_action": "block",
+        },
+        has_deck=True,
+        hard_floor=0.0,
+    ) == "warn"
+
+
 def test_build_quality_warnings_uses_issue_message_and_suggestion():
     warnings = build_quality_warnings(_soft_review())
 

@@ -319,6 +319,28 @@ def _is_media_issue(issue: dict) -> bool:
     )
 
 
+def _is_embedded_quiz_issue(issue: dict) -> bool:
+    target = str((issue or {}).get("target") or "").lower()
+    case = str((issue or {}).get("case") or "").lower()
+    message = str((issue or {}).get("message") or "").lower()
+    return (
+        "quiz" in target
+        or "exercise" in target
+        or "luyện tập" in target
+        or "bài tập" in target
+        or "quiz" in case
+        or "exercise" in case
+        or "quiz" in message
+        or "câu hỏi" in message
+        or "luyện tập" in message
+        or "bài tập" in message
+    )
+
+
+def _is_optional_slide_addon_issue(issue: dict) -> bool:
+    return _is_media_issue(issue) or _is_embedded_quiz_issue(issue)
+
+
 def classify_quality(review: Optional[dict], has_deck: bool, *, hard_floor: float) -> str:
     """Return approve, warn, or block for a quality review result."""
     if not has_deck:
@@ -337,10 +359,16 @@ def classify_quality(review: Optional[dict], has_deck: bool, *, hard_floor: floa
         issue for issue in issues
         if (issue or {}).get("severity") == "critical"
     ]
-    if any(not _is_media_issue(issue) for issue in critical_issues):
+    if any(not _is_optional_slide_addon_issue(issue) for issue in critical_issues):
         return "block"
 
-    if reason in _HARD_REASONS:
+    if reason in _HARD_REASONS and not critical_issues:
+        return "block"
+
+    if reason in _HARD_REASONS and any(
+        not _is_optional_slide_addon_issue(issue)
+        for issue in issues
+    ):
         return "block"
 
     try:
