@@ -314,5 +314,5 @@ source venv/bin/activate && python app/api.py
 UI:
 
 ```bash
-cd app/frontend && npm run dev
+cd app/frontend && npm run dev:poll
 ```
