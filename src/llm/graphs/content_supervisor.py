@@ -13,7 +13,7 @@ from src.config.config import settings
 from src.llm.graphs.state import ContentSupervisorState
 from src.config.genai_client import create_genai_client
 from src.llm.graphs.tools import ALL_TOOLS, TOOL_STATE_MAPPING
-from src.llm.agents import MediaResearchAgent, QualityReviewerAgent
+from src.llm.agents import ContentAssessmentAgent, MediaResearchAgent, QualityReviewerAgent
 from src.llm.prompts import (
     SUPERVISOR_AFTER_CONTENT_PROMPT,
     SUPERVISOR_AFTER_OUTLINE_PROMPT,
@@ -329,6 +329,12 @@ def route_after_post_tool(state: ContentSupervisorState) -> str:
     if (
         state.get("task_type") == "slide"
         and state.get("content_payload") is not None
+        and state.get("quiz_payload") is None
+    ):
+        return "quiz_direct"
+    if (
+        state.get("task_type") == "slide"
+        and state.get("content_payload") is not None
         and state.get("media_payload") is None
         and _query_requests_media(state)
     ):
@@ -383,6 +389,55 @@ def media_direct_node(state: ContentSupervisorState) -> dict:
         "agent_tasks": agent_tasks,
         "artifacts": artifacts,
     }
+
+
+def quiz_direct_node(state: ContentSupervisorState) -> dict:
+    task = AgentTask(
+        task_id=f"{state.get('request_id') or 'request'}:quiz",
+        from_agent="content_supervisor",
+        to_agent="content_assessment_agent",
+        task_type="generate_embedded_assessment",
+        objective="Sinh câu hỏi trắc nghiệm nhúng trong slide bài giảng.",
+        inputs={
+            "topic": state.get("topic", ""),
+            "context_map": state.get("context_map", ""),
+        },
+        constraints={
+            "question_type": "mcq",
+            "max_questions": 5,
+            "language": "vi",
+        },
+        expected_artifact="quiz_payload",
+    )
+    result = ContentAssessmentAgent().run_task(task)
+    result_dict = result.to_dict()
+    quiz_payload = result.artifact or {"quiz_items": []}
+    if result.status == "failed":
+        quiz_payload = {"quiz_items": []}
+
+    agent_results = list(state.get("agent_results", []))
+    agent_results.append(result_dict)
+    agent_tasks = list(state.get("agent_tasks", []))
+    agent_tasks.append(task.to_dict())
+    artifacts = dict(state.get("artifacts", {}))
+    artifacts["quiz_payload"] = quiz_payload
+    return {
+        "quiz_payload": quiz_payload,
+        "agent_results": agent_results,
+        "agent_tasks": agent_tasks,
+        "artifacts": artifacts,
+    }
+
+
+def route_after_quiz_direct(state: ContentSupervisorState) -> str:
+    if (
+        state.get("task_type") == "slide"
+        and state.get("content_payload") is not None
+        and state.get("media_payload") is None
+        and _query_requests_media(state)
+    ):
+        return "media_direct"
+    return "merge_direct"
 
 
 def merge_direct_node(state: ContentSupervisorState) -> dict:
@@ -507,6 +562,7 @@ def build_content_supervisor(checkpointer=None):
     builder.add_node("tools", tool_node)
     builder.add_node("post_tool", post_tool_processor)
     builder.add_node("media_direct", media_direct_node)
+    builder.add_node("quiz_direct", quiz_direct_node)
     builder.add_node("merge_direct", merge_direct_node)
     builder.add_node("quality_direct", quality_direct_node)
     builder.add_node("reflection_decision", reflection_decision_node)
@@ -530,9 +586,18 @@ def build_content_supervisor(checkpointer=None):
         {
             "reflection_decision": "reflection_decision",
             "supervisor": "supervisor",
+            "quiz_direct": "quiz_direct",
             "media_direct": "media_direct",
             "merge_direct": "merge_direct",
             "quality_direct": "quality_direct",
+        },
+    )
+    builder.add_conditional_edges(
+        "quiz_direct",
+        route_after_quiz_direct,
+        {
+            "media_direct": "media_direct",
+            "merge_direct": "merge_direct",
         },
     )
     builder.add_edge("media_direct", "merge_direct")

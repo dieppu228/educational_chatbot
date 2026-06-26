@@ -56,7 +56,8 @@ class SlideExportService:
         file_id = f"{uuid.uuid4().hex}.pptx"
         filename = f"{self._slugify(lesson_title) or 'slide_bai_giang'}.pptx"
 
-        for index, slide_data in enumerate(slides, start=1):
+        export_slides = self._expand_exercise_slides(slides)
+        for index, slide_data in enumerate(export_slides, start=1):
             self._add_slide(prs, slide_data, index, lesson_title)
 
         output_path = self.export_dir / file_id
@@ -132,19 +133,11 @@ class SlideExportService:
 
     def _render_exercise_slide(self, slide, slide_data: Dict[str, Any], index: int) -> None:
         self._add_slide_title(slide, slide_data, index)
-        lines = []
-        for q_idx, question in enumerate(slide_data.get("questions") or [], start=1):
-            lines.append(f"Câu {q_idx}. {question.get('question', '')}")
-            options = question.get("options") or {}
-            for key in ("A", "B", "C", "D"):
-                if options.get(key):
-                    lines.append(f"{key}. {options[key]}")
-            if q_idx >= 3:
-                break
+        lines = self._exercise_display_lines(slide_data.get("questions") or [])
         if not lines:
             lines = self._display_bullets(slide_data)
-        if not self._set_placeholder_text(slide, 1, lines):
-            self._add_bullet_box(slide, lines, Inches(0.7), Inches(1.45), Inches(11.2), Inches(4.7))
+        if not self._set_exercise_placeholder_text(slide, 1, lines):
+            self._add_exercise_box(slide, lines, Inches(0.7), Inches(1.35), Inches(11.2), Inches(5.0))
 
     def _add_slide_title(self, slide, slide_data: Dict[str, Any], index: int) -> None:
         prefix = f"{index:02d}"
@@ -166,6 +159,13 @@ class SlideExportService:
             paragraph.level = 0
             paragraph.font.size = Pt(font_size)
             paragraph.space_after = Pt(8)
+
+    def _add_exercise_box(self, slide, lines: List[str], left, top, width, height) -> None:
+        box = slide.shapes.add_textbox(left, top, width, height)
+        frame = box.text_frame
+        frame.clear()
+        frame.word_wrap = True
+        self._fill_exercise_text_frame(frame, lines)
 
     def _add_media_slot(
         self,
@@ -317,6 +317,66 @@ class SlideExportService:
             return "content_media_tall"
         return "content_media_wide"
 
+    def _expand_exercise_slides(self, slides: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        expanded = []
+        for slide_data in slides:
+            if (slide_data.get("slide_type") or "content") != "exercise":
+                expanded.append(slide_data)
+                continue
+
+            questions = list(slide_data.get("questions") or [])
+            if not questions:
+                expanded.append(slide_data)
+                continue
+
+            chunk_size = self._exercise_questions_per_slide(questions)
+            chunks = [
+                questions[idx:idx + chunk_size]
+                for idx in range(0, len(questions), chunk_size)
+            ]
+            if len(chunks) == 1:
+                expanded.append(slide_data)
+                continue
+
+            base_title = slide_data.get("title") or "Bài tập luyện tập"
+            for idx, chunk in enumerate(chunks, start=1):
+                split_slide = dict(slide_data)
+                split_slide["questions"] = chunk
+                split_slide["title"] = f"{base_title} ({idx}/{len(chunks)})"
+                split_slide["slide_id"] = f"{slide_data.get('slide_id', 'exercise')}_{idx}"
+                expanded.append(split_slide)
+        return expanded
+
+    @staticmethod
+    def _exercise_questions_per_slide(questions: List[Dict[str, Any]]) -> int:
+        has_answer_content = any(
+            q.get("correct_answer") or q.get("answer")
+            for q in questions
+            if isinstance(q, dict)
+        )
+        return 2 if has_answer_content else 3
+
+    def _exercise_display_lines(self, questions: List[Dict[str, Any]]) -> List[str]:
+        lines = []
+        for q_idx, raw_question in enumerate(questions, start=1):
+            question = self._as_dict(raw_question)
+            if not question:
+                continue
+
+            if lines:
+                lines.append("")
+            lines.append(f"Câu {q_idx}. {self._shorten(str(question.get('question') or ''), 105)}")
+
+            options = question.get("options") or {}
+            for key in ("A", "B", "C", "D"):
+                if options.get(key):
+                    lines.append(f"{key}. {self._shorten(str(options[key]), 82)}")
+
+            correct_answer = question.get("correct_answer") or question.get("answer")
+            if correct_answer:
+                lines.append(f"Đáp án: {correct_answer}")
+        return lines
+
     def _placeholder(self, slide, idx: int):
         try:
             return slide.placeholders[idx]
@@ -341,6 +401,40 @@ class SlideExportService:
             if len(lines) >= 4 or sum(len(str(item)) for item in lines) > 420:
                 paragraph.font.size = Pt(font_size)
         return True
+
+    def _set_exercise_placeholder_text(self, slide, idx: int, lines: List[str]) -> bool:
+        placeholder = self._placeholder(slide, idx)
+        if placeholder is None:
+            return False
+        if not hasattr(placeholder, "text_frame"):
+            return False
+        frame = placeholder.text_frame
+        frame.clear()
+        frame.word_wrap = True
+        self._fill_exercise_text_frame(frame, lines)
+        return True
+
+    def _fill_exercise_text_frame(self, frame, lines: List[str]) -> None:
+        font_size = self._fit_exercise_font_size(lines)
+        for line_idx, line in enumerate(lines or ["Nội dung đang được cập nhật"]):
+            paragraph = frame.paragraphs[0] if line_idx == 0 else frame.add_paragraph()
+            text = str(line)
+            paragraph.text = text
+            paragraph.level = 0
+            paragraph.space_after = Pt(2 if text else 6)
+            paragraph.font.size = Pt(font_size)
+            paragraph.font.bold = text.startswith("Câu ") or text.startswith("Đáp án:")
+            if text.startswith("Đáp án:"):
+                paragraph.font.color.rgb = RGBColor(0x0B, 0x6B, 0x4F)
+
+    @staticmethod
+    def _fit_exercise_font_size(lines: List[str]) -> int:
+        total_chars = sum(len(str(item)) for item in lines)
+        if len(lines) >= 14 or total_chars > 950:
+            return 11
+        if len(lines) >= 11 or total_chars > 760:
+            return 12
+        return 13
 
     def _insert_picture(self, slide, idx: int, media_bytes: bytes) -> bool:
         placeholder = self._placeholder(slide, idx)
