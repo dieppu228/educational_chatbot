@@ -45,7 +45,7 @@ LESSON_PLAN_QUALITY_REVIEW_PROMPT = prompt_manager.load('lesson_plan_quality_rev
 QUESTION_GENERATION_TEMPLATE = create_prompt(
     name='question_generation',
     template=QUESTION_GENERATION_PROMPT,
-    required_vars=['query', 'context', 'num_questions'],
+    required_vars=['query', 'context', 'num_questions', 'difficulty'],
     version='1.1',
     description='Generate multiple choice questions from retrieved context',
 )
@@ -53,7 +53,7 @@ QUESTION_GENERATION_TEMPLATE = create_prompt(
 ESSAY_GENERATION_TEMPLATE = create_prompt(
     name='essay_generation',
     template=ESSAY_GENERATION_PROMPT,
-    required_vars=['query', 'context', 'num_questions'],
+    required_vars=['query', 'context', 'num_questions', 'difficulty'],
     version='1.0',
     description='Generate essay questions with sample answers and rubrics',
 )
@@ -61,7 +61,7 @@ ESSAY_GENERATION_TEMPLATE = create_prompt(
 FILL_BLANK_GENERATION_TEMPLATE = create_prompt(
     name='fill_blank_generation',
     template=FILL_BLANK_GENERATION_PROMPT,
-    required_vars=['query', 'context', 'num_questions'],
+    required_vars=['query', 'context', 'num_questions', 'difficulty'],
     version='1.0',
     description='Generate fill-in-the-blank questions',
 )
@@ -69,7 +69,7 @@ FILL_BLANK_GENERATION_TEMPLATE = create_prompt(
 TRUE_FALSE_GENERATION_TEMPLATE = create_prompt(
     name='true_false_generation',
     template=TRUE_FALSE_GENERATION_PROMPT,
-    required_vars=['query', 'context', 'num_questions'],
+    required_vars=['query', 'context', 'num_questions', 'difficulty'],
     version='1.0',
     description='Generate true/false questions',
 )

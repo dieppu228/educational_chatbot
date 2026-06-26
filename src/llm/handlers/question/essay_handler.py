@@ -11,13 +11,15 @@ class EssayHandler(BaseHandler):
         query: str, 
         context: str, 
         num_questions: int = 2,
+        difficulty: str = "medium",
         **kwargs
     ) -> EssayGenerationOutput:
         # 1. Build prompt
         prompt = ESSAY_GENERATION_TEMPLATE.format(
             query=query,
             context=context,
-            num_questions=num_questions
+            num_questions=num_questions,
+            difficulty=difficulty,
         )
         
         # 2. Call API
@@ -38,13 +40,15 @@ class EssayHandler(BaseHandler):
         query: str, 
         context: str, 
         num_questions: int = 2,
+        difficulty: str = "medium",
         **kwargs
     ) -> EssayGenerationOutput:
         # 1. Build prompt
         prompt = ESSAY_GENERATION_TEMPLATE.format(
             query=query,
             context=context,
-            num_questions=num_questions
+            num_questions=num_questions,
+            difficulty=difficulty,
         )
         
         # 2. Call API async

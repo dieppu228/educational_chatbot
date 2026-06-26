@@ -23,8 +23,14 @@ def test_explain_question_uses_stored_explanation_without_llm():
                     question_type="mcq",
                     content={
                         "question": "Dữ liệu là gì?",
+                        "options": {
+                            "A": "Phần mềm xử lí thông tin.",
+                            "B": "Các dạng biểu diễn của thông tin.",
+                            "C": "Thiết bị lưu trữ.",
+                            "D": "Tốc độ xử lí của CPU.",
+                        },
                         "correct_answer": "B",
-                        "explanation": "Vì dữ liệu là các dạng biểu diễn của thông tin.",
+                        "explanation": "Theo [c5], dữ liệu là các dạng biểu diễn của thông tin.",
                     },
                 )
             ],
@@ -36,8 +42,10 @@ def test_explain_question_uses_stored_explanation_without_llm():
     output = "".join(service.explain_question(ctx, "giải thích câu 1"))
 
     assert "Giải thích câu 1" in output
-    assert "Đáp án đúng: B" in output
-    assert "Vì dữ liệu là các dạng biểu diễn của thông tin." in output
+    assert "Câu hỏi: Dữ liệu là gì?" in output
+    assert "Đáp án đúng: B. Các dạng biểu diễn của thông tin." in output
+    assert "Giải thích: Dữ liệu là các dạng biểu diễn của thông tin." in output
+    assert "[c5]" not in output
     assert ctx.debug_steps[-1]["source"] == "stored_explanation"
 
 

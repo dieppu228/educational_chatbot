@@ -91,6 +91,13 @@ class QuizService:
             or 3
         )
         logger.info(f"Generate: type={task_type}, num={num_q}")
+        difficulty, difficulty_source = self._resolve_quiz_difficulty(ctx)
+        ctx.add_debug_step(
+            "QuizDifficulty",
+            difficulty=difficulty,
+            source=difficulty_source,
+            topic=session.topic or "Chung",
+        )
 
         yield f"Đang soạn {num_q} câu hỏi {task_type.upper()}..."
 
@@ -99,7 +106,12 @@ class QuizService:
         for attempt in range(max_retries):
             try:
                 t1 = time.time()
-                raw_questions = handler.handle(query, context_text, num_questions=num_q)
+                raw_questions = handler.handle(
+                    query,
+                    context_text,
+                    num_questions=num_q,
+                    difficulty=difficulty,
+                )
                 gen_time = time.time() - t1
                 logger.info(f"Handler.handle() -> {gen_time:.2f}s (attempt {attempt+1})")
 
@@ -124,7 +136,12 @@ class QuizService:
                             quality_review.revision_instruction or quality_review.summary
                         ),
                     )
-                    raw_questions = handler.handle(revised_query, context_text, num_questions=num_q)
+                    raw_questions = handler.handle(
+                        revised_query,
+                        context_text,
+                        num_questions=num_q,
+                        difficulty=difficulty,
+                    )
                     if raw_questions is None:
                         yield "Câu hỏi chưa đạt chất lượng sau reflection. Bạn thử hỏi cụ thể hơn nhé!"
                         continue
@@ -278,19 +295,21 @@ class QuizService:
             # Update QuestionRecord
             if result.question_index is not None and result.question_index < len(all_questions):
                 record = all_questions[result.question_index]
+                tracking_score, tracking_correct = self._normalize_attempt_for_tracking(
+                    record.question_type,
+                    result.score,
+                    result.is_correct,
+                )
                 record.record_attempt(
                     user_answer=result.user_answer,
-                    is_correct=result.is_correct or False,
+                    is_correct=tracking_correct,
                     score=result.score,
                 )
 
-                # Track to StudentProfile
-                # score: 0-10 or 0-1, StudentProfile auto-normalizes
-                score = result.score if result.score is not None else (1.0 if result.is_correct else 0.0)
                 self.student_tracker.record_attempt(
                     user_id=session.user_id,
                     topic=session.topic or "Chung",
-                    score=score,
+                    score=tracking_score,
                 )
 
             # Response
@@ -523,6 +542,13 @@ class QuizService:
             or 3
         )
         logger.info(f"Generate: type={task_type}, num={num_q}")
+        difficulty, difficulty_source = self._resolve_quiz_difficulty(ctx)
+        ctx.add_debug_step(
+            "QuizDifficulty",
+            difficulty=difficulty,
+            source=difficulty_source,
+            topic=session.topic or "Chung",
+        )
 
         yield f"Đang soạn {num_q} câu hỏi {task_type.upper()}..."
 
@@ -531,7 +557,12 @@ class QuizService:
         for attempt in range(max_retries):
             try:
                 t1 = time.time()
-                raw_questions = await handler.handle_async(query, context_text, num_questions=num_q)
+                raw_questions = await handler.handle_async(
+                    query,
+                    context_text,
+                    num_questions=num_q,
+                    difficulty=difficulty,
+                )
                 gen_time = time.time() - t1
                 logger.info(f"Handler.handle_async() -> {gen_time:.2f}s (attempt {attempt+1})")
 
@@ -571,6 +602,7 @@ class QuizService:
                         revised_query,
                         context_text,
                         num_questions=num_q,
+                        difficulty=difficulty,
                     )
                     if raw_questions is None:
                         yield "Câu hỏi chưa đạt chất lượng sau reflection. Bạn thử hỏi cụ thể hơn nhé!"
@@ -738,18 +770,21 @@ class QuizService:
             # Update QuestionRecord
             if result.question_index is not None and result.question_index < len(all_questions):
                 record = all_questions[result.question_index]
+                tracking_score, tracking_correct = self._normalize_attempt_for_tracking(
+                    record.question_type,
+                    result.score,
+                    result.is_correct,
+                )
                 record.record_attempt(
                     user_answer=result.user_answer,
-                    is_correct=result.is_correct or False,
+                    is_correct=tracking_correct,
                     score=result.score,
                 )
 
-                # Track to StudentProfile
-                score = result.score if result.score is not None else (1.0 if result.is_correct else 0.0)
                 self.student_tracker.record_attempt(
                     user_id=session.user_id,
                     topic=session.topic or "Chung",
-                    score=score,
+                    score=tracking_score,
                 )
 
             # Response
@@ -831,15 +866,20 @@ class QuizService:
                 continue
 
             is_correct = user_answer == correct_answer
+            tracking_score, tracking_correct = self._normalize_attempt_for_tracking(
+                record.question_type,
+                1.0 if is_correct else 0.0,
+                is_correct,
+            )
             record.record_attempt(
                 user_answer=user_answer,
-                is_correct=is_correct,
-                score=1.0 if is_correct else 0.0,
+                is_correct=tracking_correct,
+                score=tracking_score,
             )
             self.student_tracker.record_attempt(
                 user_id=session.user_id,
                 topic=session.topic or "Chung",
-                score=1.0 if is_correct else 0.0,
+                score=tracking_score,
             )
             graded.append((display_index, user_answer, correct_answer, is_correct))
 
@@ -895,6 +935,54 @@ class QuizService:
             correct=correct_count,
         )
         return msg
+
+    def _resolve_quiz_difficulty(self, ctx: RequestContext) -> tuple[str, str]:
+        explicit = self._extract_explicit_difficulty(ctx.query)
+        if explicit:
+            return explicit, "query"
+
+        session = ctx.session
+        user_id = session.user_id if session else ctx.user_id
+        topic = (session.topic if session else None) or "Chung"
+        profile = self.student_tracker.get_profile(user_id or "anonymous")
+        progress = profile.lesson_progress.get(topic)
+        if not progress or not progress.scores:
+            return "medium", "default"
+        if progress.avg_score < 0.65:
+            return "easy", "student_profile"
+        if progress.avg_score >= 0.85:
+            return "hard", "student_profile"
+        return "medium", "student_profile"
+
+    @staticmethod
+    def _extract_explicit_difficulty(query: str) -> Optional[str]:
+        text = (query or "").lower()
+        if re.search(r"\b(easy|basic)\b|dễ|cơ\s*bản|nhẹ", text):
+            return "easy"
+        if re.search(r"\b(hard|advanced)\b|khó|nâng\s*cao|thử\s*thách", text):
+            return "hard"
+        if re.search(r"\bmedium\b|trung\s*bình|vừa\s*sức|vừa", text):
+            return "medium"
+        return None
+
+    @staticmethod
+    def _normalize_attempt_for_tracking(
+        question_type: str,
+        score: Optional[float],
+        is_correct: Optional[bool],
+    ) -> tuple[float, bool]:
+        q_type = (question_type or "").lower()
+        if q_type in {"essay", "fill_blank"} and score is not None:
+            normalized = score / 10.0 if score > 1.0 else score
+            normalized = max(0.0, min(1.0, float(normalized)))
+            return normalized, normalized >= 0.3
+
+        correct = bool(is_correct)
+        if score is not None:
+            normalized = score / 10.0 if score > 1.0 else score
+            normalized = max(0.0, min(1.0, float(normalized)))
+            return normalized, correct
+        return (1.0 if correct else 0.0), correct
 
     @classmethod
     def _extract_direct_mcq_answers(
@@ -1186,14 +1274,38 @@ class QuizService:
             or content.get("answer")
             or content.get("correct")
         )
+        correct_answer_text = QuizService._format_correct_answer(content, correct_answer)
+        explanation = QuizService._clean_stored_explanation(explanation)
 
         lines = [f"**Giải thích câu {display_index}:**"]
         if question_text:
-            lines.append(str(question_text).strip())
-        if correct_answer:
-            lines.append(f"Đáp án đúng: {correct_answer}")
-        lines.append(explanation)
+            lines.append(f"Câu hỏi: {str(question_text).strip()}")
+        if correct_answer_text:
+            lines.append(f"Đáp án đúng: {correct_answer_text}")
+        lines.append(f"Giải thích: {explanation}")
         return "\n\n".join(lines)
+
+    @staticmethod
+    def _format_correct_answer(content: Dict, correct_answer) -> str:
+        if correct_answer in (None, ""):
+            return ""
+        answer = str(correct_answer).strip()
+        options = content.get("options") or {}
+        if isinstance(options, dict):
+            option_text = options.get(answer)
+            if option_text:
+                return f"{answer}. {str(option_text).strip()}"
+        return answer
+
+    @staticmethod
+    def _clean_stored_explanation(explanation: str) -> str:
+        text = str(explanation or "").strip()
+        text = re.sub(r"\b[Tt]heo\s+\[(?:c\d+\s*,?\s*)+\]\s*,?\s*", "", text)
+        text = re.sub(r"\[(?:c\d+\s*,?\s*)+\]", "", text)
+        text = re.sub(r"\s{2,}", " ", text).strip(" ,")
+        if text and text[0].islower():
+            text = text[0].upper() + text[1:]
+        return text
 
 
 __all__ = ["QuizService"]

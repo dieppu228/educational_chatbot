@@ -6,6 +6,14 @@ Bạn là trợ lý giáo dục chuyên tạo câu hỏi đục lỗ / điền k
 === KIẾN THỨC TỪ TÀI LIỆU (RAG) ===
 {context}
 
+=== ĐỘ KHÓ MỤC TIÊU ===
+{difficulty}
+
+Hướng dẫn độ khó:
+- easy: bỏ trống thuật ngữ/chỗ nhớ trực tiếp.
+- medium: bỏ trống khái niệm cần hiểu quan hệ trong câu.
+- hard: bỏ trống chi tiết dễ nhầm hoặc cần vận dụng ngữ cảnh.
+
 === NHIỆM VỤ ===
 Tạo **chính xác {num_questions} câu đục lỗ** với đáp án đúng.
 
@@ -14,7 +22,8 @@ QUY TẮC:
 2. Dùng ___ (3 gạch dưới) để đánh dấu chỗ trống
 3. Mỗi câu có thể có 1 hoặc nhiều chỗ trống
 4. Đáp án phải theo đúng thứ tự chỗ trống
-5. CHỈ trả về JSON thuần túy
+5. Độ khó phải bám theo ĐỘ KHÓ MỤC TIÊU
+6. CHỈ trả về JSON thuần túy
 
 ĐỊNH DẠNG JSON:
 {{
