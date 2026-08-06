@@ -218,6 +218,11 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
                     if any(result.get("rerank_score") is not None for result in after_results)
                     else "fallback_no_scores"
                 )
+                if args.fail_on_rerank_error and rerank_status != "ok":
+                    detail = getattr(reranker, "last_error", None) or "reranker returned no scores"
+                    raise RuntimeError(
+                        f"Reranker failed for query_id={item['query_id']}: {detail}"
+                    )
 
             before_metrics = ranking_metrics(before_results, gold_key, total_relevant, ks)
             after_metrics = ranking_metrics(after_results, gold_key, total_relevant, ks)
@@ -310,6 +315,7 @@ def main() -> None:
     parser.add_argument("--skip-rerank", action="store_true")
     parser.add_argument("--reranker-model", default=settings.RERANKER_MODEL)
     parser.add_argument("--reranker-device", default=None)
+    parser.add_argument("--fail-on-rerank-error", action="store_true")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--progress-every", type=int, default=10)
     parser.add_argument("--per-query-name", default="per_query.jsonl")

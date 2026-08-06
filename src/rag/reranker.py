@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 from typing import List, Dict, Tuple, Optional
 from sentence_transformers import CrossEncoder
@@ -5,6 +7,8 @@ from sentence_transformers import CrossEncoder
 import torch
 from src.utils.trace_decorator import trace_node
 from src.config.config import settings
+
+logger = logging.getLogger("chatbot")
 
 class Reranker:
     
@@ -14,6 +18,7 @@ class Reranker:
         self.batch_size = int(getattr(settings, "RERANKER_BATCH_SIZE", 8) or 8)
         self._model = None  # Lazy load
         self._load_failed = False
+        self.last_error: Optional[str] = None
     
     def _load_model(self):
         if self._load_failed:
@@ -25,8 +30,15 @@ class Reranker:
                     device=self.device,
                     trust_remote_code=True
                 )
-            except Exception:
+                self.last_error = None
+            except Exception as exc:
                 self._load_failed = True
+                self.last_error = f"{type(exc).__name__}: {exc}"
+                logger.exception(
+                    "Failed to load reranker | model=%s device=%s",
+                    self.model_name,
+                    self.device,
+                )
                 raise
     
     @staticmethod
@@ -57,9 +69,18 @@ class Reranker:
 
             # Sort giảm dần theo rerank_score
             results_sorted = sorted(results, key=lambda x: x["rerank_score"], reverse=True)
+            self.last_error = None
 
             return results_sorted[:top_n]
-        except Exception:
+        except Exception as exc:
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            logger.exception(
+                "Reranker failed; returning original order | model=%s device=%s results=%s top_n=%s",
+                self.model_name,
+                self.device,
+                len(results),
+                top_n,
+            )
             return results[:top_n]
 
     @trace_node("Reranker.rerank_multi_query")
@@ -95,8 +116,18 @@ class Reranker:
                 results[i]["rerank_score"] = float(score)
 
             results_sorted = sorted(results, key=lambda x: x["rerank_score"], reverse=True)
+            self.last_error = None
             return results_sorted[:top_n]
-        except Exception:
+        except Exception as exc:
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            logger.exception(
+                "Multi-query reranker failed; returning original order | model=%s device=%s queries=%s results=%s top_n=%s",
+                self.model_name,
+                self.device,
+                len(queries),
+                len(results),
+                top_n,
+            )
             return results[:top_n]
     
     @trace_node("Reranker.rerank_async")
