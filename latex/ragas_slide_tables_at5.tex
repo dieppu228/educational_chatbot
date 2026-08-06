@@ -1,0 +1,79 @@
+% !TeX root = DoAn.tex
+\documentclass[DoAn.tex]{subfiles}
+\begin{document}
+
+% Bảng ngắn cho slide RAGAS.
+% @5 nghĩa là RAGAS được chấm trên 5 ngữ cảnh đầu vào sau rerank.
+% Pipeline collect: hybrid retrieval top_k=25 -> reranker top_n=5 -> LLM sinh câu trả lời.
+
+\begin{table}[H]
+\centering
+\caption{Ý nghĩa các độ đo RAGAS sử dụng trong đánh giá phản hồi}
+\label{tab:ragas-metric-meaning-at5}
+\renewcommand{\arraystretch}{1.18}
+\resizebox{0.86\textwidth}{!}{%
+\begin{tabular}{|p{0.30\textwidth}|p{0.58\textwidth}|}
+\hline
+\textbf{Độ đo} & \textbf{Ý nghĩa} \\
+\hline
+Faithfulness & Mức độ câu trả lời bám vào ngữ cảnh được cung cấp, dùng để phát hiện thông tin bịa ngoài tài liệu. \\
+\hline
+Answer Relevancy & Mức độ câu trả lời đi đúng trọng tâm câu hỏi, không lan man hay thừa thông tin. \\
+\hline
+Context Precision@5 & Mức độ các phân đoạn giá trị được xếp ở vị trí ưu tiên trong 5 ngữ cảnh đầu vào sau rerank, đối chiếu với đáp án tham chiếu. \\
+\hline
+Context Recall@5 & Mức độ 5 ngữ cảnh đầu vào sau rerank bao phủ được thông tin cần thiết so với đáp án tham chiếu. \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Kết quả đánh giá chất lượng phản hồi bằng RAGAS trên 246 mẫu hỏi--đáp}
+\label{tab:ragas-score-at5}
+\renewcommand{\arraystretch}{1.18}
+\resizebox{0.70\textwidth}{!}{%
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Chỉ số đánh giá} & \textbf{Giá trị trung bình} & \textbf{Số mẫu hợp lệ} \\
+\hline
+Faithfulness & 0,9757 & 234/246 \\
+\hline
+Answer Relevancy & 0,8571 & 245/246 \\
+\hline
+Context Precision@5 & 0,8555 & 246/246 \\
+\hline
+Context Recall@5 & 0,9593 & 246/246 \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Thiết lập ngữ cảnh đầu vào cho đánh giá RAGAS}
+\label{tab:ragas-context-setup-at5}
+\renewcommand{\arraystretch}{1.18}
+\resizebox{0.82\textwidth}{!}{%
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Thành phần} & \textbf{Thiết lập} \\
+\hline
+Tập đánh giá & 246 mẫu hỏi--đáp có đáp án tham chiếu \\
+\hline
+Truy xuất ứng viên ban đầu & Hybrid retrieval, \texttt{top\_k=25} \\
+\hline
+Xếp hạng lại ngữ cảnh & Cross-encoder reranker, \texttt{top\_n=5} \\
+\hline
+Ngữ cảnh đưa vào RAGAS & 5 phân đoạn sau rerank cho mỗi mẫu \\
+\hline
+LLM sinh câu trả lời & \texttt{gemini-2.5-flash-lite}, \texttt{temperature=0.1} \\
+\hline
+LLM chấm RAGAS & \texttt{gemini-2.5-flash-lite}, \texttt{temperature=0} \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+\end{document}

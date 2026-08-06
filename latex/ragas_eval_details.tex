@@ -1,0 +1,95 @@
+% !TeX root = DoAn.tex
+\documentclass[DoAn.tex]{subfiles}
+\begin{document}
+
+% Chi tiết cấu hình đánh giá RAGAS.
+% Nguồn code:
+% - src/evaluation/data_collector.py
+% - src/evaluation/ragas_eval.py
+% - src/evaluation/report.py
+% Nguồn số liệu:
+% - data/eval/ragas/eval_results.json
+% - data/eval/ragas/eval_metrics.csv
+% - data/eval/ragas/eval_report.md
+
+\begin{table}[H]
+\centering
+\caption{Thiết lập đánh giá chất lượng phản hồi bằng RAGAS}
+\label{tab:ragas-eval-setup}
+\renewcommand{\arraystretch}{1.18}
+\resizebox{0.92\textwidth}{!}{%
+\begin{tabular}{|p{0.34\textwidth}|p{0.56\textwidth}|}
+\hline
+\textbf{Tham số} & \textbf{Giá trị sử dụng trong đánh giá} \\
+\hline
+Số mẫu cấu hình & 250 mẫu \\
+\hline
+Số mẫu đánh giá thực tế & 246 mẫu hỏi--đáp \\
+\hline
+Nguồn dữ liệu đánh giá & Các mẫu câu hỏi, ngữ cảnh truy xuất, câu trả lời sinh ra và đáp án tham chiếu lưu trong \texttt{data/eval/ragas/} \\
+\hline
+Mô hình sinh câu trả lời & \texttt{gemini-2.5-flash-lite}, nhiệt độ sinh \texttt{temperature=0.1} \\
+\hline
+Prompt sinh câu trả lời & Yêu cầu trả lời dựa trên tài liệu được cung cấp; nếu tài liệu không đủ thông tin thì phải nói rõ \\
+\hline
+Mô hình chấm RAGAS & \texttt{gemini-2.5-flash-lite}, \texttt{temperature=0} \\
+\hline
+Mô hình embedding cho RAGAS & \texttt{dangvantuan/vietnamese-document-embedding} \\
+\hline
+Truy xuất ngữ cảnh & Hybrid retrieval lấy \texttt{top\_k=25}, sau đó cross-encoder reranker giữ \texttt{top\_n=5} ngữ cảnh \\
+\hline
+Mô hình reranker & \texttt{AITeamVN/Vietnamese\_Reranker} \\
+\hline
+Cấu hình chạy RAGAS & \texttt{max\_workers=2}, \texttt{max\_retries=10}, \texttt{max\_wait=30s} \\
+\hline
+Các độ đo & Faithfulness, Answer Relevancy, LLM Context Precision with Reference, Context Recall \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Kết quả đánh giá RAGAS và số mẫu hợp lệ theo từng độ đo}
+\label{tab:ragas-eval-results-with-valid-count}
+\renewcommand{\arraystretch}{1.18}
+\resizebox{0.82\textwidth}{!}{%
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Chỉ số đánh giá} & \textbf{Giá trị trung bình} & \textbf{Số mẫu hợp lệ} & \textbf{Nhận xét ngắn} \\
+\hline
+Faithfulness & 0,9757 & 234/246 & Câu trả lời nhìn chung bám sát ngữ cảnh truy xuất \\
+\hline
+Answer Relevancy & 0,8571 & 245/246 & Câu trả lời đa số đi đúng trọng tâm câu hỏi \\
+\hline
+Context Precision@5 & 0,8555 & 246/246 & Các ngữ cảnh quan trọng thường được xếp ở vị trí ưu tiên trong 5 ngữ cảnh sau rerank \\
+\hline
+Context Recall@5 & 0,9593 & 246/246 & 5 ngữ cảnh sau rerank bao phủ tốt thông tin cần cho đáp án tham chiếu \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Một số trường hợp cụ thể dùng để diễn giải kết quả RAGAS}
+\label{tab:ragas-eval-cases}
+\renewcommand{\arraystretch}{1.18}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|p{0.36\textwidth}|p{0.18\textwidth}|c|p{0.34\textwidth}|}
+\hline
+\textbf{Câu hỏi minh họa} & \textbf{Độ đo nổi bật} & \textbf{Điểm} & \textbf{Diễn giải} \\
+\hline
+Làm thế nào để tìm kiếm thông tin trên Google? & Context Recall & 1,0000 & Ngữ cảnh chứa đủ các bước mở trình duyệt, truy cập Google, nhập từ khóa và đọc kết quả. Đây là trường hợp củng cố cho khả năng bao phủ thông tin của retriever. \\
+\hline
+Em hãy nêu một ví dụ minh họa về đóng góp của tin học đối với xã hội. & Context Recall & 0,0000 & Câu hỏi mở, đáp án tham chiếu có thể yêu cầu ví dụ cụ thể; ngữ cảnh truy xuất chưa bao phủ đúng ví dụ cần thiết nên điểm recall thấp. \\
+\hline
+Kể tên các trường hợp liên kết mà em đã gặp khi duyệt web hoặc khi đọc văn bản. & Context Precision / Recall & 0,0000 & Câu hỏi rộng và có thể trùng nhiều chủ đề về liên kết; ngữ cảnh dễ bị nhiễu nên cả độ chính xác lẫn độ bao phủ ngữ cảnh giảm. \\
+\hline
+Làm thế nào để tìm giá trị và chỉ số của phần tử lớn nhất và nhỏ nhất trong một dãy số A? & Answer Relevancy & 0,0000 & Trường hợp câu trả lời sinh ra không khớp tốt với trọng tâm câu hỏi theo đánh giá của RAGAS, cho thấy cần cải thiện truy xuất hoặc prompt cho câu hỏi lập trình cụ thể. \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+\end{document}

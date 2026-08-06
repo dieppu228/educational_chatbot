@@ -1,0 +1,72 @@
+% !TeX root = DoAn.tex
+\documentclass[DoAn.tex]{subfiles}
+\begin{document}
+
+% Bảng kết quả truy xuất sau khi chạy lại benchmark với:
+% ks = 1,5,10,15; retrieve_top_k = 25; search_pool = 50;
+% after_top_n = 15; reranker_device = cuda; count = 600.
+% Nguồn số liệu:
+% data/eval/retrieval/k1_5_10_15/with_rerank_cuda_strict/summary.json
+
+\begin{table}[H]
+\centering
+\caption{Kết quả đánh giá truy xuất trước và sau khi xếp hạng lại trên bộ 600 câu hỏi}
+\label{tab:retrieval-eval-k151015}
+\renewcommand{\arraystretch}{1.18}
+\resizebox{0.78\textwidth}{!}{%
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Chỉ số} & \textbf{Trước xếp hạng lại} & \textbf{Sau xếp hạng lại} & \textbf{$\Delta$} \\
+\hline
+Hit@1 & 0,3350 & 0,8183 & +0,4833 \\
+\hline
+Hit@5 & 0,8900 & 0,9750 & +0,0850 \\
+\hline
+Hit@10 & 0,9517 & 0,9833 & +0,0317 \\
+\hline
+Hit@15 & 0,9800 & 0,9867 & +0,0067 \\
+\hline
+MRR@10 & 0,5549 & 0,8856 & +0,3307 \\
+\hline
+nDCG@10 & 0,2475 & 0,4169 & +0,1693 \\
+\hline
+Precision@10 & 0,2087 & 0,3133 & +0,1047 \\
+\hline
+Thời gian (600 câu, giây) & 90,8 & 1892,7 & $\times$20,8 \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{So sánh Hit@1 và MRR@10 trước và sau khi xếp hạng lại theo từng nhóm sách và khối lớp}
+\label{tab:retrieval-eval-by-book-grade-k151015}
+\renewcommand{\arraystretch}{1.18}
+\resizebox{0.78\textwidth}{!}{%
+\begin{tabular}{|l|cc|cc|}
+\hline
+\multirow{2}{*}{\textbf{Nhóm}} &
+\multicolumn{2}{c|}{\textbf{Hit@1}} &
+\multicolumn{2}{c|}{\textbf{MRR@10}} \\
+\cline{2-5}
+& \textbf{Trước xếp hạng lại} & \textbf{Sau xếp hạng lại}
+& \textbf{Trước xếp hạng lại} & \textbf{Sau xếp hạng lại} \\
+\hline
+CD-10 & 0,3300 & 0,8000 & 0,5661 & 0,8817 \\
+\hline
+CD-11 & 0,4200 & 0,9100 & 0,6277 & 0,9464 \\
+\hline
+CD-12 & 0,3400 & 0,8000 & 0,5538 & 0,8598 \\
+\hline
+KNTT-10 & 0,3100 & 0,7900 & 0,5156 & 0,8690 \\
+\hline
+KNTT-11 & 0,3200 & 0,8200 & 0,5376 & 0,8821 \\
+\hline
+KNTT-12 & 0,2900 & 0,7900 & 0,5286 & 0,8745 \\
+\hline
+\end{tabular}%
+}
+\end{table}
+
+\end{document}
