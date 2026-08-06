@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -vE '\\\\.\\(md|pdf|png|jpg|jpeg|pem\\)$')",
+      "Bash(grep -iE '\\\\.\\(py|ts|tsx|js|jsx|json|toml|yaml|yml\\)$')"
+    ]
+  }
+}
