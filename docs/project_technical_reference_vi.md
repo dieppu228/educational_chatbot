@@ -506,59 +506,101 @@ Các node chính:
 
 `src/schemas/agent_protocol.py` định nghĩa contract giao tiếp nội bộ giữa supervisor và specialist agent.
 
-Luồng contract:
+Luồng contract chuẩn:
 
 ```text
 ContentSupervisor
-  -> AgentTask
-  -> SpecialistAgent.run_task()
+  -> build AgentTask
+  -> SpecialistAgent.run_task(task)
+  -> BaseAgent._run(task)
   -> AgentTaskResult
-  -> artifacts registry
+  -> post_tool_processor/direct node
+  -> ContentSupervisorState.agent_tasks / agent_results / artifacts
 ```
 
-`AgentTask` gồm:
+Contract này được gọi là **A2A-lite** vì nó dùng message envelope rõ ràng nhưng vẫn chạy in-process, chưa phải distributed agent runtime.
 
-- `task_id`
-- `from_agent`
-- `to_agent`
-- `task_type`
-- `objective`
-- `inputs`
-- `constraints`
-- `context_refs`
-- `expected_artifact`
-- `revision_instruction`
+#### 9.3.1. `AgentTask` — input contract từ supervisor sang specialist
 
-`AgentTaskResult` gồm:
+`AgentTask` là yêu cầu công việc mà supervisor giao cho một agent cụ thể. Các field:
 
-- `task_id`
-- `agent_id`
-- `status`: `success`, `partial`, `failed`, `blocked`
-- `task`
-- `artifact_type`
-- `artifact`
-- `confidence`
-- `warnings`
-- `used_tools`
-- `latency_ms`
-- `error_code`
-- `error_message`
+| Field | Vai trò |
+| --- | --- |
+| `task_id` | ID ổn định cho một tác vụ, thường là `{request_id}:{suffix}` như `abc:outline`, `abc:content`, `abc:quiz`. Dùng để dedup log và trace. |
+| `from_agent` | Nguồn giao việc, hiện là `content_supervisor`. |
+| `to_agent` | Agent nhận việc, ví dụ `pedagogy_planner_agent`, `content_drafting_agent`. |
+| `task_type` | Loại nghiệp vụ agent phải làm, ví dụ `plan_content_outline`, `draft_learning_content`, `research_media`. |
+| `objective` | Mô tả mục tiêu bằng ngôn ngữ tự nhiên để log/debug và có thể mở rộng cho planner. |
+| `inputs` | Payload nghiệp vụ chính: `context_map`, `outline_payload`, `chunk_map`, `topic`, `grade`, `book`, `task_type`, output đã merge... |
+| `constraints` | Ràng buộc thực thi: số câu hỏi, ngôn ngữ, media type, yêu cầu bám nguồn, rule chặn unsafe/ungrounded output. |
+| `context_refs` | Danh sách ID nguồn context agent được phép/được kỳ vọng dùng, ví dụ các key trong `chunk_map`. |
+| `expected_artifact` | Tên artifact mà agent phải trả, ví dụ `outline_payload`, `content_payload`, `media_payload`, `quiz_payload`, `quality_review`. |
+| `revision_instruction` | Chỉ dẫn sửa đổi khi quality reflection yêu cầu regenerate outline/content/quiz. |
 
-Ý nghĩa khi viết luận văn: đây không phải A2A distributed runtime đầy đủ, mà là A2A-lite in-process contract để làm rõ message envelope, artifact ownership và metadata thực thi giữa supervisor và sub-agent.
+Ý nghĩa: supervisor không truyền tham số rời rạc trực tiếp vào worker cũ, mà đóng gói thành task envelope. Nhờ vậy mỗi agent có thể được trace, retry, audit hoặc sau này chuyển sang external tool mà ít đổi contract.
+
+#### 9.3.2. `AgentTaskResult` — output contract từ specialist về supervisor
+
+`AgentTaskResult` là kết quả chuẩn hóa mà mọi specialist agent trả về. Các field:
+
+| Field | Vai trò |
+| --- | --- |
+| `task_id` | Khớp với task đầu vào để nối request/result. |
+| `agent_id` | Agent thực thi thật sự. |
+| `status` | Một trong `success`, `partial`, `failed`, `blocked`. |
+| `task` | Bản sao `AgentTask` dạng dict; `BaseAgent.run_task()` tự gắn nếu agent chưa set. |
+| `artifact_type` | Loại artifact được sinh ra; thường trùng `expected_artifact`. |
+| `artifact` | Payload nghiệp vụ chính: outline/content/media/quiz/review. |
+| `confidence` | Điểm tin cậy tương đối do adapter gán, dùng để debug/metadata, không phải metric học máy chính thức. |
+| `warnings` | Cảnh báo mềm, ví dụ outline bị user chỉnh qua HITL. |
+| `used_tools` | Danh sách năng lực đã dùng như `llm_generation`, `chunk_lookup`, `web_search`, `llm_review`. |
+| `latency_ms` | Thời gian chạy agent. Nếu agent không tự set, `BaseAgent` đo tự động. |
+| `error_code` | Mã lỗi chuẩn hóa như `INVALID_AGENT_INPUT`, `FORMAT_INVALID`, `QUALITY_AGENT_ERROR`. |
+| `error_message` | Thông điệp lỗi rút gọn, không lưu full prompt/context. |
+
+`is_agent_task_result()` nhận diện output mới bằng các key bắt buộc `task_id`, `agent_id`, `status`, `artifact`. Điều này giúp `post_tool_processor()` phân biệt format mới với payload legacy.
+
+#### 9.3.3. Error contract
+
+`BaseAgent.run_task()` là lớp bảo vệ chung:
+
+- Gọi `_run(task)` của specialist.
+- Tự đo `latency_ms` nếu result chưa có.
+- Tự gắn `task=task.to_dict()` nếu result chưa chứa task.
+- Bắt exception và trả `AgentTaskResult(status="failed")`, không để exception phá graph.
+
+Điều này làm contract giữa các agent ổn định: graph luôn nhận một result object có schema chuẩn, kể cả khi worker bên trong lỗi.
+
+#### 9.3.4. Artifact ownership
+
+Mỗi agent sở hữu đúng một artifact chính:
+
+| Artifact | Agent sở hữu | State field |
+| --- | --- | --- |
+| `outline_payload` | `PedagogyPlannerAgent` | `outline_payload` |
+| `content_payload` | `ContentDraftingAgent` | `content_payload` |
+| `media_payload` | `MediaResearchAgent` | `media_payload` |
+| `quiz_payload` | `ContentAssessmentAgent` | `quiz_payload` |
+| `quality_review` | `QualityReviewerAgent` | `quality_review` |
+| `merged_slides` | `SlideMerger` service | `merged_slides` |
+
+`merged_slides` không thuộc sở hữu agent nào vì merge là deterministic service, không phải specialist agent.
 
 ### 9.4. Specialist agents
 
 Các adapter nằm trong `src/llm/agents/`.
 
-| Agent | File | Vai trò |
-| --- | --- | --- |
-| `PedagogyPlannerAgent` | `slide_planner.py` | Tạo dàn ý, trình tự học tập, outline slide/section |
-| `ContentDraftingAgent` | `content_drafting.py` | Viết nội dung chi tiết từ outline và source chunks |
-| `MediaResearchAgent` | `media_research.py` | Gợi ý media/visual metadata |
-| `ContentAssessmentAgent` | `content_assessment.py` | Sinh assessment nhúng trong slide/giáo án |
-| `QualityReviewerAgent` | `quality.py` | Review factuality, coverage, pedagogy, format |
+| Agent | File | Input chính | Output/artifact | Tool/worker bên dưới |
+| --- | --- | --- | --- | --- |
+| `PedagogyPlannerAgent` | `slide_planner.py` | `context_map`, `topic`, `grade`, `book`, `task_type`, `revision_instruction` | `outline_payload` | `OutlineAgent` |
+| `ContentDraftingAgent` | `content_drafting.py` | `outline_payload.slides`, `chunk_map`, `task_type`, `revision_instruction` | `content_payload` | `ContentAgent` |
+| `MediaResearchAgent` | `media_research.py` | `topic`, `grade`, `book`, `outline_payload`, `content_payload` | `media_payload` | `MediaAgent` + optional MCP media search |
+| `ContentAssessmentAgent` | `content_assessment.py` | `topic`, `context_map` | `quiz_payload` | `QuizAgent` |
+| `QualityReviewerAgent` | `quality.py` | `task_type`, `query`, `context`, `output` | `quality_review` | `get_quality_reviewer(task_type)` |
 
 Các agent này wrap các worker cũ trong `src/llm/handlers/content/slide_agents/`. Vì vậy code vẫn giữ backward compatibility, nhưng kiến trúc bên ngoài đã rõ contract hơn.
+
+Lưu ý thuật ngữ: `AgentResult` trong `src/schemas/slide_schemas.py` là envelope legacy cho worker/merger cũ (`agent`, `status`, `payload`, `latency_ms`). `AgentTaskResult` trong `src/schemas/agent_protocol.py` mới là contract inter-agent hiện tại. Khi viết luận văn, nên gọi `AgentTaskResult` là A2A-lite result; không nên lẫn với `AgentResult`.
 
 ### 9.5. Tool adapters trong graph
 
@@ -575,7 +617,65 @@ Tên `generate_quiz` trong content graph có nghĩa là sinh embedded assessment
 
 `merge_results` là deterministic service, không phải agent. Nó dùng `SlideMerger` để ghép outline, content, media và quiz payload thành `MergedSlide`.
 
-### 9.6. ContentSupervisorState
+Các tool agent adapter hoạt động theo cùng một mẫu:
+
+```text
+Tool function
+  -> đọc ContentSupervisorState qua InjectedState
+  -> validate prerequisite
+  -> build AgentTask
+  -> Agent.run_task(task)
+  -> json.dumps(AgentTaskResult)
+  -> ToolMessage
+  -> post_tool_processor parse và cập nhật state
+```
+
+Prerequisite contract:
+
+| Tool | Điều kiện trước khi chạy | Nếu thiếu điều kiện |
+| --- | --- | --- |
+| `generate_outline` | Có `context_map` từ `preprocess_node` | Trả `AgentTaskResult(status="failed", error_code="INVALID_AGENT_INPUT")` |
+| `generate_content` | Có `outline_payload.slides` | Trả failed result, yêu cầu gọi `generate_outline` trước |
+| `generate_media` | Có thể chạy optional, dùng outline/content nếu có | Nếu agent fail thì degrade thành `partial` với media rỗng |
+| `generate_quiz` | Có `context_map`; chỉ là assessment nhúng | Nếu agent fail thì degrade thành `partial` với `quiz_items=[]` |
+| `merge_results` | Có `outline_payload` và `content_payload` | Trả legacy JSON `status="failed"` |
+| `check_quality` | Có `merged_slides` | Trả `blocked` quality result nếu chưa có output |
+
+Ngoài đường LLM supervisor gọi tool qua `ToolNode`, graph còn có các node deterministic/direct:
+
+- `quiz_direct_node`: tự sinh quiz cho `task_type="slide"` nếu đã có content mà chưa có quiz.
+- `media_direct_node`: tự gọi media agent nếu query có tín hiệu media/ảnh/gif/diagram.
+- `merge_direct_node`: tự merge khi đã có content mà chưa có deck.
+- `quality_direct_node`: tự review khi đã merge nhưng chưa có quality review.
+
+Vì vậy mô tả chính xác là: LLM supervisor điều phối chính, còn graph có guardrail deterministic để đảm bảo các bước bắt buộc/optional hợp lý không bị bỏ sót.
+
+### 9.6. Post-tool processing và registry artifact
+
+`post_tool_processor()` là điểm chuyển đổi từ ToolMessage sang graph state.
+
+Quy tắc xử lý:
+
+1. Duyệt các `ToolMessage` mới nhất từ cuối về đầu.
+2. Map `tool_name` sang state field bằng `TOOL_STATE_MAPPING`.
+3. Parse JSON từ tool output.
+4. Nếu output là `AgentTaskResult`:
+   - Append vào `agent_results` nếu cặp `(task_id, agent_id)` chưa tồn tại.
+   - Extract `task` và append vào `agent_tasks` nếu `task_id` chưa tồn tại.
+   - Lấy `artifact_type` hoặc fallback về state field.
+   - Nếu result không failed, hoặc failed nhưng vẫn có artifact, ghi vào `artifacts[artifact_type]` và state field tương ứng.
+5. Nếu output là legacy JSON không failed, ghi trực tiếp vào `artifacts[state_key]` và state field.
+
+State vì vậy có 4 lớp lưu trữ song song:
+
+| Lớp | Mục đích |
+| --- | --- |
+| Legacy state fields (`outline_payload`, `content_payload`,...) | Giữ compatibility với merger/service/display cũ. |
+| `agent_tasks` | Audit trail của task đã giao cho agent. |
+| `agent_results` | Audit trail của result, status, latency, tool usage, error code. |
+| `artifacts` | Registry artifact theo `artifact_type`, thuận tiện cho graph/debug và mở rộng sau này. |
+
+### 9.7. ContentSupervisorState
 
 `src/llm/graphs/state.py` mô tả state của graph.
 
@@ -587,6 +687,37 @@ Các nhóm field:
 - A2A-lite fields: `agent_tasks`, `agent_results`, `artifacts`.
 - Quality/reflection: `reflection_attempts`, `revision_instruction`, `quality_blocked`.
 - Output: `merged_slides`, `final_output`, `status`, `error_message`.
+
+### 9.8. Quality reflection contract
+
+`QualityReviewerAgent` trả `quality_review` với các field nghiệp vụ như `passed`, `score`, `reason_fail`, `issues`, `reflection_action`, `revision_instruction`, `requires_human_review`.
+
+`reflection_decision_node()` đọc `quality_review` và quyết định:
+
+| `reflection_action` | Hành vi |
+| --- | --- |
+| `approve` + `passed=True` | Kết thúc thành công. |
+| `revise_outline` | Xóa `outline_payload`, `content_payload`, `merged_slides`; tăng `reflection_attempts`; đưa `revision_instruction` về supervisor. |
+| `revise_content` | Xóa `content_payload`, `merged_slides`; regenerate content rồi merge/review lại. |
+| `revise_quiz` | Xóa `quiz_payload`, `merged_slides`; regenerate quiz rồi merge/review lại. |
+| `block` hoặc vượt quá `MAX_REFLECTION_ATTEMPTS` | Set `quality_blocked=True` hoặc `status="failed"` tùy verdict. |
+
+Giới hạn hiện tại: `MAX_REFLECTION_ATTEMPTS = 2`. Reflection không tạo agent mới; nó tạo lại task cho đúng specialist thông qua `revision_instruction`.
+
+### 9.9. Persistence contract trong `SlideService`
+
+Khi graph hoàn tất, `SlideService._process_completed_result()` chỉ lưu **summary** của `agent_results` vào `slide_state.slide_output`, gồm:
+
+- `task_id`
+- `agent_id`
+- `status`
+- `artifact_type`
+- `confidence`
+- `used_tools`
+- `latency_ms`
+- `error_code`
+
+Service không lưu full `task.inputs`, `context_map`, prompt hay raw context vào session output. Đây là chủ đích để metadata đủ debug nhưng không phình state và không lộ context dài.
 
 ## 10. MCP và Tool Layer
 
@@ -647,7 +778,7 @@ Specialist agents
 - `revise_quiz`: clear quiz/merged và regenerate.
 - `block` hoặc `ask_human`: dừng pipeline.
 
-Hiện `MAX_REFLECTION_ATTEMPTS = 1`, tức chỉ cho phép một vòng sửa tự động.
+Hiện `MAX_REFLECTION_ATTEMPTS = 2`, tức cho phép tối đa hai vòng sửa tự động trước khi dừng hoặc trả kết quả theo verdict của quality gate.
 
 ## 12. Session, memory và trace
 
