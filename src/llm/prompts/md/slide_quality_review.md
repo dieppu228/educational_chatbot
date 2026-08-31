@@ -10,6 +10,7 @@ Tập trung vào:
 4. Bám context SGK, không bịa ngoài context.
 5. Nếu có bài tập, câu hỏi phải rõ và đúng ngữ cảnh.
 6. Media chỉ là phần hỗ trợ: không bắt mọi slide phải có ảnh. Slide bài tập/tổng kết không cần ảnh nếu ảnh không giúp hiểu bài.
+7. Code, bảng và biểu đồ phải đúng schema, có nguồn và không chứa dữ liệu/số liệu ngoài context.
 
 NGUYÊN TẮC CHẤM:
 - Chấm theo tiêu chuẩn "bản nháp dùng được", không chấm như sản phẩm hoàn thiện cuối cùng.

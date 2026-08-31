@@ -18,6 +18,8 @@ QUY TẮC BẮT BUỘC:
 4. "slide_type" chỉ nhận: "title", "content", "exercise", "summary", "image"
 5. "key_points" là danh sách 2-4 ý chính, mỗi ý ngắn gọn
 6. Flow hợp lý: mở đầu → khái niệm → ví dụ → luyện tập → tổng kết
+7. Chọn "layout_hint" theo nội dung: auto|content|image|code|table|chart|process|comparison.
+   Chỉ chọn chart/table khi context thực sự có dữ liệu phù hợp; không bịa số liệu.
 
 ĐỊNH DẠNG JSON (CHỈ trả JSON thuần túy, KHÔNG markdown):
 {{
@@ -30,6 +32,7 @@ QUY TẮC BẮT BUỘC:
       "objective": "Mục tiêu bài học",
       "key_points": ["Mục tiêu 1", "Mục tiêu 2"],
       "source_chunk_ids": ["c1"]
+      ,"layout_hint": "auto"
     }},
     {{
       "slide_id": "s2",
@@ -38,6 +41,7 @@ QUY TẮC BẮT BUỘC:
       "objective": "Hiểu khái niệm X",
       "key_points": ["Ý chính 1", "Ý chính 2", "Ý chính 3"],
       "source_chunk_ids": ["c2", "c3"]
+      ,"layout_hint": "content"
     }}
   ]
 }}

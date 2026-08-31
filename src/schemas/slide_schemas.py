@@ -1,8 +1,8 @@
 
 import re
 from dataclasses import dataclass, field
-from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Dict, Any, Literal
+from pydantic import BaseModel, Field, TypeAdapter, field_validator, model_validator
+from typing import Annotated, List, Optional, Dict, Any, Literal, Union
 
 
 # ============================================================
@@ -145,6 +145,16 @@ class OutlineSlide(BaseModel):
     teaching_goal: Optional[str] = None
     knowledge_units: List[str] = Field(default_factory=list)
     activity_type: Optional[str] = None
+    layout_hint: Literal[
+        "auto",
+        "content",
+        "image",
+        "code",
+        "table",
+        "chart",
+        "process",
+        "comparison",
+    ] = "auto"
 
     @field_validator("key_points", "knowledge_units", mode="before")
     @classmethod
@@ -192,6 +202,132 @@ class ContentDetailItem(BaseModel):
     source_chunk_ids: List[str] = Field(default_factory=list)
 
 
+class BaseSlideBlock(BaseModel):
+    source_chunk_ids: List[str] = Field(default_factory=list)
+
+
+class BulletBlock(BaseSlideBlock):
+    type: Literal["bullets"] = "bullets"
+    items: List[str] = Field(default_factory=list)
+
+
+class ParagraphBlock(BaseSlideBlock):
+    type: Literal["paragraph"] = "paragraph"
+    text: str
+
+
+class CodeBlock(BaseSlideBlock):
+    type: Literal["code"] = "code"
+    code: str
+    language: str = "text"
+    caption: str = ""
+
+
+class TableBlock(BaseSlideBlock):
+    type: Literal["table"] = "table"
+    columns: List[str] = Field(..., min_length=1)
+    rows: List[List[str]] = Field(default_factory=list)
+    caption: str = ""
+
+    @model_validator(mode="after")
+    def validate_rectangular_rows(self):
+        expected = len(self.columns)
+        if any(len(row) != expected for row in self.rows):
+            raise ValueError("Mỗi hàng của table phải có cùng số ô với columns")
+        return self
+
+
+class ChartSeries(BaseModel):
+    name: str
+    values: List[float]
+
+
+class ChartBlock(BaseSlideBlock):
+    type: Literal["chart"] = "chart"
+    chart_type: Literal["column", "bar", "line", "pie", "doughnut"] = "column"
+    categories: List[str] = Field(..., min_length=1)
+    series: List[ChartSeries] = Field(..., min_length=1)
+    caption: str = ""
+
+    @model_validator(mode="after")
+    def validate_series_lengths(self):
+        expected = len(self.categories)
+        if any(len(series.values) != expected for series in self.series):
+            raise ValueError("Mỗi chart series phải có số value bằng số categories")
+        if self.chart_type in {"pie", "doughnut"} and len(self.series) != 1:
+            raise ValueError("Pie và doughnut chart chỉ hỗ trợ một series")
+        return self
+
+
+class ProcessBlock(BaseSlideBlock):
+    type: Literal["process"] = "process"
+    steps: List[str] = Field(..., min_length=2)
+
+
+class ComparisonBlock(BaseSlideBlock):
+    type: Literal["comparison"] = "comparison"
+    left_title: str
+    left_items: List[str] = Field(..., min_length=1)
+    right_title: str
+    right_items: List[str] = Field(..., min_length=1)
+
+
+class CalloutBlock(BaseSlideBlock):
+    type: Literal["callout"] = "callout"
+    text: str
+    tone: Literal["info", "tip", "warning"] = "info"
+
+
+SlideContentBlock = Annotated[
+    Union[
+        BulletBlock,
+        ParagraphBlock,
+        CodeBlock,
+        TableBlock,
+        ChartBlock,
+        ProcessBlock,
+        ComparisonBlock,
+        CalloutBlock,
+    ],
+    Field(discriminator="type"),
+]
+
+_SLIDE_BLOCK_ADAPTER = TypeAdapter(SlideContentBlock)
+
+
+def normalize_slide_blocks(
+    value: Any,
+    *,
+    fallback_bullets: Optional[List[str]] = None,
+    source_chunk_ids: Optional[List[str]] = None,
+) -> tuple[List[SlideContentBlock], List[str]]:
+    """Parse rich blocks and preserve the legacy bullets projection."""
+    fallback = [str(item) for item in (fallback_bullets or []) if str(item).strip()]
+    sources = [str(item) for item in (source_chunk_ids or [])]
+    raw_blocks = value if isinstance(value, list) else []
+    blocks: List[SlideContentBlock] = []
+    invalid_blocks = 0
+    for raw_block in raw_blocks:
+        try:
+            blocks.append(_SLIDE_BLOCK_ADAPTER.validate_python(raw_block))
+        except Exception:
+            invalid_blocks += 1
+
+    if fallback and not any(isinstance(block, BulletBlock) for block in blocks):
+        if not blocks or invalid_blocks:
+            blocks.append(BulletBlock(items=fallback, source_chunk_ids=sources))
+
+    legacy_bullets = fallback
+    if blocks:
+        first_bullets = next(
+            (block.items for block in blocks if isinstance(block, BulletBlock)),
+            None,
+        )
+        if first_bullets is not None:
+            legacy_bullets = list(first_bullets)
+    return blocks, legacy_bullets
+
+
 class ContentSlide(BaseModel):
     slide_id: str
     title: str
@@ -205,6 +341,7 @@ class ContentSlide(BaseModel):
     content_detail: List[ContentDetailItem] = Field(default_factory=list)
     assessment: List[str] = Field(default_factory=list)
     transition: Optional[str] = None
+    blocks: List[SlideContentBlock] = Field(default_factory=list)
 
 
 class ContentPayload(BaseModel):
@@ -237,6 +374,9 @@ class MergedSlide(BaseModel):
     slide_id: str
     slide_type: Literal["title", "content", "exercise", "summary", "image"]
     layout: Optional[str] = None
+    layout_hint: Literal[
+        "auto", "content", "image", "code", "table", "chart", "process", "comparison"
+    ] = "auto"
     title: str
     bullets: List[str] = Field(default_factory=list)
     notes: Optional[str] = None
@@ -250,6 +390,7 @@ class MergedSlide(BaseModel):
     content_detail: List[ContentDetailItem] = Field(default_factory=list)
     assessment: List[str] = Field(default_factory=list)
     transition: Optional[str] = None
+    blocks: List[SlideContentBlock] = Field(default_factory=list)
 
 
 # ============================================================

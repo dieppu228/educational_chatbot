@@ -10,7 +10,7 @@ from src.llm.prompts import (
     QUALITY_REVISION_INSTRUCTION_PROMPT,
     SLIDE_CONTENT_TEMPLATE,
 )
-from src.schemas.slide_schemas import OutlineSlide
+from src.schemas.slide_schemas import OutlineSlide, normalize_slide_blocks
 
 logger = logging.getLogger("chatbot.slide_agent.content")
 
@@ -142,6 +142,14 @@ class ContentAgent(BaseSlideAgent):
             bullets = bullets[:6]  # Max 6 bullets for slide output.
         result["bullets"] = bullets
         result["slide_id"] = slide_id  # Đảm bảo slide_id khớp
+        if not is_lesson_plan:
+            blocks, legacy_bullets = normalize_slide_blocks(
+                result.get("blocks"),
+                fallback_bullets=bullets,
+                source_chunk_ids=result.get("source_chunk_ids") or source_ids,
+            )
+            result["blocks"] = [block.model_dump() for block in blocks]
+            result["bullets"] = legacy_bullets[:6]
         if is_lesson_plan:
             result = self._normalize_lesson_plan_result(
                 result=result,
@@ -160,6 +168,13 @@ class ContentAgent(BaseSlideAgent):
             "notes": None,
             "source_chunk_ids": slide_data.get("source_chunk_ids", []),
         }
+        if not (slide_data.get("knowledge_units") or slide_data.get("duration_minutes")):
+            blocks, _ = normalize_slide_blocks(
+                [],
+                fallback_bullets=fallback["bullets"],
+                source_chunk_ids=fallback["source_chunk_ids"],
+            )
+            fallback["blocks"] = [block.model_dump() for block in blocks]
         if slide_data.get("knowledge_units") or slide_data.get("duration_minutes"):
             fallback.update({
                 "duration_minutes": slide_data.get("duration_minutes"),

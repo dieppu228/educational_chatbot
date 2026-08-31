@@ -8,7 +8,7 @@ from src.schemas.slide_schemas import (
     ContentPayload, ContentSlide,
     MediaPayload, MediaItem,
     QuizPayload, SlideQuizItem,
-    ContentDetailItem, MergedSlide,
+    ContentDetailItem, MergedSlide, normalize_slide_blocks,
 )
 
 logger = logging.getLogger("chatbot.slide_merger")
@@ -112,6 +112,7 @@ class SlideMerger:
             slide_id=outline_slide.slide_id,
             slide_type=outline_slide.slide_type,
             title=outline_slide.title,
+            layout_hint=outline_slide.layout_hint,
             bullets=outline_slide.key_points,  # fallback
             source_chunk_ids=outline_slide.source_chunk_ids,
             duration_minutes=outline_slide.duration_minutes,
@@ -139,10 +140,25 @@ class SlideMerger:
             )
             slide.assessment = content_data.get("assessment", []) or []
             slide.transition = content_data.get("transition")
+            blocks, legacy_bullets = normalize_slide_blocks(
+                content_data.get("blocks"),
+                fallback_bullets=slide.bullets,
+                source_chunk_ids=content_data.get("source_chunk_ids") or slide.source_chunk_ids,
+            )
+            slide.blocks = blocks
+            slide.bullets = legacy_bullets
             # Merge source_chunk_ids
-            content_sources = content_data.get("source_chunk_ids", [])
+            block_sources = [
+                source
+                for block in blocks
+                for source in block.source_chunk_ids
+            ]
+            content_sources = [
+                *content_data.get("source_chunk_ids", []),
+                *block_sources,
+            ]
             if content_sources:
-                merged_sources = list(set(slide.source_chunk_ids + content_sources))
+                merged_sources = list(dict.fromkeys(slide.source_chunk_ids + content_sources))
                 slide.source_chunk_ids = merged_sources
 
         # Gắn media
@@ -212,7 +228,11 @@ class SlideMerger:
     @staticmethod
     def _media_key(item: MediaItem) -> Optional[str]:
         if not item.url:
-            return None
+            identity = "|".join(
+                str(value or "").strip().lower()
+                for value in (item.for_slide_id, item.query, item.caption)
+            ).strip("|")
+            return identity or None
         return item.url.strip()
 
     @staticmethod
@@ -223,6 +243,15 @@ class SlideMerger:
             return "exercise"
         if slide.slide_type == "summary":
             return "section"
+        rich_type = next(
+            (
+                block.type for block in slide.blocks
+                if block.type in {"code", "table", "chart", "process", "comparison"}
+            ),
+            None,
+        )
+        if rich_type:
+            return rich_type
         if slide.media:
             return "content_media"
         return "content"
@@ -245,8 +274,13 @@ class SlideQualityGate:
         for slide in slides:
             if not slide.title:
                 issues.append(f"STRUCTURAL: Slide {slide.slide_id} thiếu title")
-            if not slide.bullets and not slide.content_detail and slide.slide_type not in ("title", "image"):
-                issues.append(f"STRUCTURAL: Slide {slide.slide_id} thiếu bullets")
+            if (
+                not slide.bullets
+                and not slide.blocks
+                and not slide.content_detail
+                and slide.slide_type not in ("title", "image")
+            ):
+                issues.append(f"STRUCTURAL: Slide {slide.slide_id} thiếu nội dung")
 
         # 2. Coverage
         types = {s.slide_type for s in slides}
@@ -258,7 +292,9 @@ class SlideQualityGate:
         # 3. Grounding
         ungrounded = [
             s.slide_id for s in slides
-            if not s.source_chunk_ids and s.slide_type not in ("exercise",)
+            if not s.source_chunk_ids
+            and not any(block.source_chunk_ids for block in s.blocks)
+            and s.slide_type not in ("exercise",)
         ]
         if ungrounded:
             issues.append(f"GROUNDING: Slides thiếu source_chunk_ids: {ungrounded}")
