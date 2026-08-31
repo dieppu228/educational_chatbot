@@ -466,27 +466,30 @@ def test_slide_merger_does_not_reuse_legacy_inline_media_url():
     assert slides[1].media == []
 
 
-def test_slide_export_embeds_downloaded_image(monkeypatch):
+def test_slide_export_embeds_downloaded_image(monkeypatch, tmp_path):
     png = base64.b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
     )
-    service = SlideExportService()
+    service = SlideExportService(export_dir=tmp_path)
     monkeypatch.setattr(service, "_download_media", lambda url: png)
-    presentation = Presentation()
-    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
-
-    service._add_media_slot(
-        slide,
-        {
+    meta = service.export_pptx(
+        "Bài kiểm thử media",
+        [{
+            "slide_id": "s1",
+            "slide_type": "content",
+            "title": "Ảnh minh hoạ",
+            "bullets": ["Nội dung"],
             "media": [
                 {
                     "url": "https://example.edu/image.png",
                     "caption": "Ảnh minh họa",
                 }
-            ]
-        },
+            ],
+        }],
     )
 
+    presentation = Presentation(str(tmp_path / meta["file_id"]))
+    slide = presentation.slides[0]
     assert any(shape.shape_type == MSO_SHAPE_TYPE.PICTURE for shape in slide.shapes)
 
 

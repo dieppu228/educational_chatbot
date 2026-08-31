@@ -63,6 +63,60 @@ def test_merger_sets_layout_field_for_content_with_media():
     assert slides[0].layout == "content_media"
 
 
+def test_merger_preserves_rich_blocks_sources_and_url_less_media():
+    slides = SlideMerger().merge(
+        outline_result=AgentResult(
+            agent="outline",
+            status="success",
+            payload={
+                "lesson_title": "Mạng máy tính",
+                "slides": [{
+                    "slide_id": "s1",
+                    "slide_type": "content",
+                    "title": "Mô hình mạng",
+                    "layout_hint": "chart",
+                    "key_points": ["Dữ liệu"],
+                    "source_chunk_ids": ["c1"],
+                }],
+            },
+        ),
+        content_result=AgentResult(
+            agent="content",
+            status="success",
+            payload={"slides": [{
+                "slide_id": "s1",
+                "title": "Mô hình mạng",
+                "blocks": [{
+                    "type": "chart",
+                    "categories": ["LAN", "WAN"],
+                    "series": [{"name": "Số lượng", "values": [3, 1]}],
+                    "source_chunk_ids": ["c2"],
+                }],
+            }]},
+        ),
+        media_result=AgentResult(
+            agent="media",
+            status="success",
+            payload={
+                "hero_media": [],
+                "inline_media": [{
+                    "url": None,
+                    "caption": "Sơ đồ LAN và WAN",
+                    "query": "mô hình mạng",
+                    "for_slide_id": "s1",
+                }],
+            },
+        ),
+        quiz_result=AgentResult(agent="quiz", status="failed", payload={}),
+    )
+
+    assert slides[0].layout_hint == "chart"
+    assert slides[0].layout == "chart"
+    assert slides[0].blocks[0].type == "chart"
+    assert slides[0].source_chunk_ids == ["c1", "c2"]
+    assert slides[0].media[0].url is None
+
+
 def _png(width: int, height: int) -> bytes:
     buffer = BytesIO()
     Image.new("RGB", (width, height), color=(24, 124, 98)).save(buffer, format="PNG")
@@ -103,7 +157,7 @@ def test_export_uses_named_layout(tmp_path):
     )
 
     deck = Presentation(str(tmp_path / meta["file_id"]))
-    assert deck.slides[0].slide_layout.name == "Title and Content"
+    assert deck.slides[0].slide_layout.name == "EDU_CONTENT"
 
 
 def test_export_picks_media_layout_by_image_aspect_and_inserts_picture(monkeypatch, tmp_path):
@@ -135,13 +189,13 @@ def test_export_picks_media_layout_by_image_aspect_and_inserts_picture(monkeypat
     )
 
     deck = Presentation(str(tmp_path / meta["file_id"]))
-    assert deck.slides[0].slide_layout.name == "Content with Caption"
-    assert deck.slides[1].slide_layout.name == "Picture with Caption"
+    assert deck.slides[0].slide_layout.name == "EDU_CONTENT_MEDIA"
+    assert deck.slides[1].slide_layout.name == "EDU_CONTENT_MEDIA"
     assert _has_rendered_picture(deck.slides[0])
     assert _has_rendered_picture(deck.slides[1])
 
 
-def test_export_exercise_slide_includes_answer_without_explanation(tmp_path):
+def test_export_exercise_hides_answer_and_puts_it_in_notes_and_answer_key(tmp_path):
     service = SlideExportService(export_dir=tmp_path)
 
     meta = service.export_pptx(
@@ -172,11 +226,17 @@ def test_export_exercise_slide_includes_answer_without_explanation(tmp_path):
     text = _slide_text(deck.slides[0])
     assert "Câu 1. Thiết bị nào dùng để kết nối các mạng?" in text
     assert "A. Router" in text
-    assert "Đáp án: A" in text
+    assert "Đáp án: A" not in text
     assert "Router định tuyến gói tin giữa các mạng." not in text
+    notes = deck.slides[0].notes_slide.notes_text_frame.text
+    assert "Câu 1: A" in notes
+    assert "Router định tuyến gói tin giữa các mạng." in notes
+    answer_key = _slide_text(deck.slides[1])
+    assert "Câu 1: A" in answer_key
+    assert "Router định tuyến gói tin giữa các mạng." in answer_key
 
 
-def test_export_splits_exercise_questions_when_answers_are_shown(tmp_path):
+def test_export_splits_exercise_questions_and_appends_answer_key(tmp_path):
     service = SlideExportService(export_dir=tmp_path)
     questions = [
         {
@@ -201,7 +261,7 @@ def test_export_splits_exercise_questions_when_answers_are_shown(tmp_path):
     )
 
     deck = Presentation(str(tmp_path / meta["file_id"]))
-    assert len(deck.slides) == 2
+    assert len(deck.slides) == 3
     first_text = _slide_text(deck.slides[0])
     second_text = _slide_text(deck.slides[1])
     assert "Bài tập luyện tập (1/2)" in first_text
@@ -209,4 +269,9 @@ def test_export_splits_exercise_questions_when_answers_are_shown(tmp_path):
     assert "Câu hỏi kiểm thử số 3?" not in first_text
     assert "Bài tập luyện tập (2/2)" in second_text
     assert "Câu hỏi kiểm thử số 3?" in second_text
-    assert "Đáp án: A" in second_text
+    assert "Đáp án: A" not in second_text
+    answer_text = _slide_text(deck.slides[2])
+    assert "Câu 1: A" in answer_text
+    assert "Câu 4: A" in answer_text
+    assert meta["source_slide_count"] == 1
+    assert meta["exported_slide_count"] == 3
