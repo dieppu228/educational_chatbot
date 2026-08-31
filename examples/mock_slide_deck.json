@@ -1,0 +1,124 @@
+{
+  "lesson_title": "Demo PPTX offline - Mạng máy tính",
+  "slides": [
+    {
+      "slide_id": "s1",
+      "slide_type": "title",
+      "title": "Mạng máy tính",
+      "bullets": ["Fixture offline", "Không gọi LLM hoặc retrieval runtime"]
+    },
+    {
+      "slide_id": "s2",
+      "slide_type": "content",
+      "title": "Khái niệm cơ bản",
+      "blocks": [
+        {
+          "type": "bullets",
+          "items": ["Mạng kết nối nhiều thiết bị", "Thiết bị trao đổi dữ liệu qua giao thức"],
+          "source_chunk_ids": ["mock-c1"]
+        }
+      ],
+      "media": [
+        {
+          "url": "mock://network-diagram",
+          "caption": "Sơ đồ mạng minh hoạ; dùng --media-map để chèn ảnh local"
+        }
+      ]
+    },
+    {
+      "slide_id": "s3",
+      "slide_type": "content",
+      "title": "Ví dụ mã nguồn",
+      "blocks": [
+        {
+          "type": "code",
+          "language": "python",
+          "caption": "Duyệt qua danh sách thiết bị",
+          "code": "devices = [\"router\", \"switch\", \"computer\"]\nfor device in devices:\n    print(device)",
+          "source_chunk_ids": ["mock-c2"]
+        }
+      ]
+    },
+    {
+      "slide_id": "s4",
+      "slide_type": "content",
+      "title": "Bảng thiết bị",
+      "blocks": [
+        {
+          "type": "table",
+          "columns": ["Thiết bị", "Vai trò"],
+          "rows": [["Router", "Định tuyến"], ["Switch", "Kết nối trong LAN"]],
+          "caption": "Một số thiết bị mạng phổ biến",
+          "source_chunk_ids": ["mock-c3"]
+        }
+      ]
+    },
+    {
+      "slide_id": "s5",
+      "slide_type": "content",
+      "title": "Số thiết bị theo phòng",
+      "blocks": [
+        {
+          "type": "chart",
+          "chart_type": "column",
+          "categories": ["Phòng A", "Phòng B", "Phòng C"],
+          "series": [{"name": "Thiết bị", "values": [12, 18, 9]}],
+          "caption": "Dữ liệu giả lập phục vụ kiểm thử",
+          "source_chunk_ids": ["mock-c4"]
+        }
+      ]
+    },
+    {
+      "slide_id": "s6",
+      "slide_type": "content",
+      "title": "Quy trình truyền dữ liệu",
+      "blocks": [
+        {
+          "type": "process",
+          "steps": ["Tạo dữ liệu", "Đóng gói", "Truyền", "Nhận", "Giải mã"],
+          "source_chunk_ids": ["mock-c5"]
+        }
+      ]
+    },
+    {
+      "slide_id": "s7",
+      "slide_type": "content",
+      "title": "So sánh LAN và WAN",
+      "blocks": [
+        {
+          "type": "comparison",
+          "left_title": "LAN",
+          "left_items": ["Phạm vi nhỏ", "Tốc độ thường cao"],
+          "right_title": "WAN",
+          "right_items": ["Phạm vi rộng", "Kết nối nhiều khu vực"],
+          "source_chunk_ids": ["mock-c6"]
+        }
+      ]
+    },
+    {
+      "slide_id": "s8",
+      "slide_type": "exercise",
+      "title": "Luyện tập",
+      "questions": [
+        {
+          "question": "Thiết bị nào định tuyến gói tin giữa các mạng?",
+          "options": {"A": "Router", "B": "Bàn phím", "C": "Màn hình", "D": "Máy in"},
+          "correct_answer": "A",
+          "explanation": "Router có nhiệm vụ chuyển tiếp gói tin giữa các mạng."
+        }
+      ]
+    },
+    {
+      "slide_id": "s9",
+      "slide_type": "summary",
+      "title": "Tổng kết",
+      "blocks": [
+        {
+          "type": "bullets",
+          "items": ["Mạng giúp thiết bị trao đổi dữ liệu", "Router và switch đảm nhiệm các vai trò khác nhau"],
+          "source_chunk_ids": ["mock-c7"]
+        }
+      ]
+    }
+  ]
+}

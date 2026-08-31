@@ -225,6 +225,42 @@ cp .env.example .env
 
 At minimum, set `GENAI_API_KEY`. Set `TAVILY_API_KEY` when web/media search is enabled. Process environment variables override values from `.env`; explicit constructor arguments override both.
 
+### Generate a mock PPTX without the application runtime
+
+The PowerPoint exporter can run independently from the API, LLM, LangGraph,
+Qdrant, embeddings, and textbook data. Install only the lightweight export
+dependencies into a dedicated environment; activating that environment is not
+required:
+
+```bash
+python -m venv .venv-slide
+.venv-slide/bin/python -m pip install -r requirements-slide-export.txt
+.venv-slide/bin/python scripts/generate_mock_pptx.py
+```
+
+The default command reads `examples/mock_slide_deck.json`, disables network
+media, and writes the PPTX under `app/data/mock_exports`. Use another payload or
+output folder with:
+
+```bash
+.venv-slide/bin/python scripts/generate_mock_pptx.py \
+  --input path/to/deck.json \
+  --output-dir path/to/exports
+```
+
+The input contract is a JSON object containing `lesson_title` and `slides`. To
+embed local images, place their fake URLs in the slide payload and provide a
+JSON media map such as `{"mock://diagram": "./diagram.png"}`:
+
+```bash
+.venv-slide/bin/python scripts/generate_mock_pptx.py \
+  --input path/to/deck.json \
+  --media-map path/to/media-map.json
+```
+
+HTTP/HTTPS downloads remain disabled unless `--allow-network-media` is supplied.
+No `GENAI_API_KEY` or running backend service is needed for this workflow.
+
 ### Start the API + frontend
 
 Build the React frontend after installing or changing frontend dependencies:
