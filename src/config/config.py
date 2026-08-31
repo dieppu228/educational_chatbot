@@ -69,7 +69,8 @@ class Settings(BaseSettings):
     EMBEDDINGS_META_FILE: str = "embeddings.meta.json"
     SESSION_STORAGE_DIR: str = "data/sessions"
     FRONTEND_DIST_DIR: str = "app/frontend/dist"
-    SLIDE_TEMPLATE_PATH: str = "app/templates/default_slide_template.pptx"
+    SLIDE_TEMPLATE_PATH: str = "app/templates/academic_vi_slide_template.pptx"
+    SLIDE_TEMPLATE_MANIFEST_PATH: str = "app/templates/academic_vi_slide_template.json"
     SLIDE_EXPORT_DIR: str = "app/data/exports"
     SLIDE_DOWNLOAD_BASE_URL: str = "/api/exports"
 

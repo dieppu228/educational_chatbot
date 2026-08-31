@@ -1,0 +1,20 @@
+{
+  "template_id": "legacy_default",
+  "version": "1.0",
+  "aspect_ratio": "16:9",
+  "theme": {"font": "Arial", "code_font": "Courier New"},
+  "layouts": {
+    "EDU_TITLE": {"name": "Title Slide", "roles": {"title": {"idx": 0, "types": ["CENTER_TITLE"]}, "subtitle": {"idx": 1, "types": ["SUBTITLE"]}}},
+    "EDU_SECTION": {"name": "Section Header", "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["BODY"]}}},
+    "EDU_CONTENT": {"name": "Title and Content", "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}},
+    "EDU_CONTENT_MEDIA": {"name": "Two Content", "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}, "media": {"idx": 2, "types": ["OBJECT"]}}},
+    "EDU_CODE": {"name": "Title and Content", "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}},
+    "EDU_TABLE": {"name": "Title and Content", "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}},
+    "EDU_CHART": {"name": "Title and Content", "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}},
+    "EDU_PROCESS": {"name": "Title and Content", "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}},
+    "EDU_COMPARISON": {"name": "Comparison", "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "left_header": {"idx": 1, "types": ["BODY"]}, "left_body": {"idx": 2, "types": ["OBJECT"]}, "right_header": {"idx": 3, "types": ["BODY"]}, "right_body": {"idx": 4, "types": ["OBJECT"]}}},
+    "EDU_EXERCISE": {"name": "Title and Content", "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}},
+    "EDU_ANSWER_KEY": {"name": "Title and Content", "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}},
+    "EDU_SUMMARY": {"name": "Section Header", "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["BODY"]}}}
+  }
+}

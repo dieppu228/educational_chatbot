@@ -1,0 +1,71 @@
+{
+  "template_id": "academic_vi",
+  "version": "1.0",
+  "aspect_ratio": "16:9",
+  "theme": {
+    "font": "Arial",
+    "code_font": "Courier New",
+    "navy": "17324D",
+    "teal": "0F766E",
+    "mint": "DDF4F1",
+    "amber": "F59E0B",
+    "background": "F7FAFC",
+    "text": "1F2937"
+  },
+  "layouts": {
+    "EDU_TITLE": {
+      "name": "EDU_TITLE",
+      "roles": {"title": {"idx": 0, "types": ["CENTER_TITLE"]}, "subtitle": {"idx": 1, "types": ["SUBTITLE"]}}
+    },
+    "EDU_SECTION": {
+      "name": "EDU_SECTION",
+      "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["BODY"]}}
+    },
+    "EDU_CONTENT": {
+      "name": "EDU_CONTENT",
+      "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}
+    },
+    "EDU_CONTENT_MEDIA": {
+      "name": "EDU_CONTENT_MEDIA",
+      "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}, "media": {"idx": 2, "types": ["OBJECT"]}}
+    },
+    "EDU_CODE": {
+      "name": "EDU_CODE",
+      "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}
+    },
+    "EDU_TABLE": {
+      "name": "EDU_TABLE",
+      "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}
+    },
+    "EDU_CHART": {
+      "name": "EDU_CHART",
+      "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}
+    },
+    "EDU_PROCESS": {
+      "name": "EDU_PROCESS",
+      "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}
+    },
+    "EDU_COMPARISON": {
+      "name": "EDU_COMPARISON",
+      "roles": {
+        "title": {"idx": 0, "types": ["TITLE"]},
+        "left_header": {"idx": 1, "types": ["BODY"]},
+        "left_body": {"idx": 2, "types": ["OBJECT"]},
+        "right_header": {"idx": 3, "types": ["BODY"]},
+        "right_body": {"idx": 4, "types": ["OBJECT"]}
+      }
+    },
+    "EDU_EXERCISE": {
+      "name": "EDU_EXERCISE",
+      "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}
+    },
+    "EDU_ANSWER_KEY": {
+      "name": "EDU_ANSWER_KEY",
+      "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["OBJECT"]}}
+    },
+    "EDU_SUMMARY": {
+      "name": "EDU_SUMMARY",
+      "roles": {"title": {"idx": 0, "types": ["TITLE"]}, "body": {"idx": 1, "types": ["BODY"]}}
+    }
+  }
+}
